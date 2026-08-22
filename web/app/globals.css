@@ -179,6 +179,115 @@
   }
 }
 
+/* terminal panel, values from site/index.html */
+.term {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  overflow: hidden;
+}
+.term-bar {
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+}
+.term-dots {
+  display: flex;
+  gap: 6px;
+}
+.term-dots i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--wd-faint);
+  display: block;
+}
+.term-title {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.term-hint {
+  font-size: 12px;
+  color: var(--wd-faint);
+}
+.term-body {
+  padding: 20px 22px 26px;
+  min-height: 340px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.row-sel {
+  background: var(--wd-sel);
+  border-radius: 3px;
+}
+.cursor {
+  display: inline-block;
+  width: 7px;
+  height: 15px;
+  background: var(--foreground);
+  vertical-align: -2px;
+  animation: blink 1s steps(1) infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cursor {
+    animation: none;
+  }
+}
+
+/* invisible-chrome input so pickers and the chat keep the terminal look */
+.term-input {
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  padding: 0;
+  flex: 1;
+  min-width: 0;
+  caret-color: var(--foreground);
+}
+
+/* the chat panel tracks the visual viewport so the input stays above
+   software keyboards; --vvh is set from a visualViewport listener */
+.chat-body {
+  display: flex;
+  flex-direction: column;
+  height: min(calc(var(--vvh, 100dvh) - 190px), 620px);
+  min-height: 280px;
+}
+.chat-log {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 560px) {
+  .term-body {
+    min-height: 300px;
+    font-size: 12px;
+  }
+}
+@media (pointer: coarse) {
+  .term-input {
+    font-size: 16px; /* below 16px ios zooms the page on focus */
+  }
+  .picker-row {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

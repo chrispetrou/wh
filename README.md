@@ -118,6 +118,41 @@ shared/  explain spec: prompt template, diff preprocessing rules,
          and golden fixtures both implementations must reproduce
 ```
 
+## web
+
+The web app (`web/`) answers questions about any GitHub repo: sign in,
+pick a repo, then in a terminal-flavored chat:
+
+```
+explain the last 5 commits
+what changed in pr #42
+diff main..release
+```
+
+Answers use the same explain spec as the CLI (`shared/prompts/`), on your
+own LLM key: pasted once, stored only in your browser, sent per request,
+never stored or logged server-side. Notes:
+
+- Sign-in requests the `repo` scope so private repos appear in the
+  picker. GitHub has no read-only scope for private repos; wd only ever
+  reads (commits, diffs, pull requests).
+- `base..head` uses GitHub's three-dot compare: changes on head since it
+  diverged from base.
+
+To run it yourself (Node 20+):
+
+```
+cd web
+cp .env.example .env.local   # register a github oauth app, fill in
+npm install
+npm test                     # golden fixtures + grammar
+npm run dev
+```
+
+The OAuth app callback must be `$APP_URL/api/auth/callback`. The shared
+spec is embedded at build time by `scripts/sync-shared.mjs`; edit
+`shared/prompts/`, never the generated file.
+
 ## building
 
 ```
