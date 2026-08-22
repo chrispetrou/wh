@@ -2,7 +2,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-/// `.env` and `.env.*` — not `.envrc`, not `.environment`.
+/// `.env` and `.env.*`, not `.envrc`, not `.environment`.
 pub fn is_env_file(name: &str) -> bool {
     name == ".env" || (name.len() > 5 && name.starts_with(".env."))
 }

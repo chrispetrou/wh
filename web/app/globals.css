@@ -4,7 +4,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* wd theme — values from site/index.html, the design source of truth.
+/* wd theme: values from site/index.html, the design source of truth.
    monospace everything, hairline borders, flat, no shadows. */
 
 @theme inline {
@@ -182,7 +182,7 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    box-shadow: none !important; /* flat surfaces, no shadows — brand rule */
+    box-shadow: none !important; /* flat surfaces, no shadows (brand rule) */
   }
   body {
     @apply bg-background text-foreground;

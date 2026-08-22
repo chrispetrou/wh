@@ -1,20 +1,30 @@
 use crate::{git, output, WdError};
 use std::env;
+use std::path::{Path, PathBuf};
 
-struct Row {
-    name: String,
-    status: String,
-    extra: String,
+pub struct Row {
+    pub name: String,
+    pub status: String,
+    pub extra: String,
+    pub path: PathBuf,
 }
 
 pub fn run() -> Result<(), WdError> {
     let cwd = env::current_dir()?;
-    let wts = git::worktrees(&cwd)?;
+    let rows = collect_rows(&cwd)?;
+    for line in render(&rows, output::color()) {
+        println!("{line}");
+    }
+    Ok(())
+}
 
+/// Worktree rows with status columns, main first then alphabetical.
+/// Shared by `wd ls` and the `wd switch` picker.
+pub fn collect_rows(cwd: &Path) -> Result<Vec<Row>, WdError> {
+    let wts = git::worktrees(cwd)?;
     let mut list: Vec<&git::Worktree> = wts.iter().filter(|w| !w.is_bare).collect();
     list.sort_by_key(|w| (!w.is_main, name_of(w)));
-
-    let rows: Vec<Row> = list
+    Ok(list
         .iter()
         .map(|w| {
             let (status, extra) = status_words(w);
@@ -22,14 +32,10 @@ pub fn run() -> Result<(), WdError> {
                 name: name_of(w),
                 status,
                 extra,
+                path: w.path.clone(),
             }
         })
-        .collect();
-
-    for line in render(&rows, output::color()) {
-        println!("{line}");
-    }
-    Ok(())
+        .collect())
 }
 
 fn name_of(w: &git::Worktree) -> String {
@@ -62,7 +68,7 @@ fn status_words(w: &git::Worktree) -> (String, String) {
     }
 }
 
-fn render(rows: &[Row], colored: bool) -> Vec<String> {
+pub fn render(rows: &[Row], colored: bool) -> Vec<String> {
     let w1 = rows.iter().map(|r| r.name.len()).max().unwrap_or(0) + 2;
     let w2 = rows.iter().map(|r| r.status.len()).max().unwrap_or(0) + 2;
     rows.iter()
@@ -91,6 +97,7 @@ mod tests {
             name: name.into(),
             status: status.into(),
             extra: extra.into(),
+            path: PathBuf::new(),
         }
     }
 

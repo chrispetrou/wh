@@ -15,6 +15,17 @@ pub fn success(msg: &str) {
     }
 }
 
+/// Success line on stderr, for commands whose stdout is machine-read
+/// (e.g. the `wd switch` path captured by the shell wrapper).
+pub fn success_to_stderr(msg: &str) {
+    let colored = std::io::stderr().is_terminal() && env::var_os("NO_COLOR").is_none();
+    if colored {
+        eprintln!("\x1b[32m→\x1b[0m {msg}");
+    } else {
+        eprintln!("→ {msg}");
+    }
+}
+
 /// Muted informational line.
 pub fn info(msg: &str) {
     println!("{}", muted(msg));

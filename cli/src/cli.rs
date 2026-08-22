@@ -25,6 +25,16 @@ pub enum Cmd {
     },
     /// list worktrees with status
     Ls,
+    /// pick a worktree and print its path (cd via the shell wrapper)
+    Switch {
+        /// filter; a unique match prints straight away, no picker
+        query: Option<String>,
+    },
+    /// print the shell wrapper that makes `wd switch` cd for you
+    Init {
+        /// zsh, bash, or fish
+        shell: String,
+    },
     /// remove worktrees whose branches are merged
     Rm {
         /// branch or directory of a specific worktree to remove

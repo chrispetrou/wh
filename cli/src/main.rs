@@ -41,6 +41,8 @@ fn main() {
     let res = match &args.cmd {
         cli::Cmd::New { branch, from } => commands::new::run(branch, from.as_deref()),
         cli::Cmd::Ls => commands::ls::run(),
+        cli::Cmd::Switch { query } => commands::switch::run(query.as_deref()),
+        cli::Cmd::Init { shell } => commands::init::run(shell),
         cli::Cmd::Rm {
             name,
             dry_run,

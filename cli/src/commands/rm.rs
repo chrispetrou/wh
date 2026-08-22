@@ -15,7 +15,7 @@ pub fn run(name: Option<&str>, dry_run: bool, yes: bool, force: bool) -> Result<
 }
 
 /// The ref merges are judged against: origin's HEAD when known, else local
-/// main/master. Squash merges are invisible to ancestor checks — the escape
+/// main/master. Squash merges are invisible to ancestor checks; the escape
 /// hatch is `wd rm <name> --force`.
 fn default_ref(cwd: &Path) -> Result<String, WdError> {
     if let Ok(r) = git::run(
