@@ -2,8 +2,10 @@ mod cli;
 mod commands;
 mod envfiles;
 mod git;
+mod llm;
 mod naming;
 mod output;
+mod preprocess;
 
 use clap::Parser;
 use std::fmt;
@@ -43,6 +45,7 @@ fn main() {
         cli::Cmd::Ls => commands::ls::run(),
         cli::Cmd::Switch { query } => commands::switch::run(query.as_deref()),
         cli::Cmd::Init { shell } => commands::init::run(shell),
+        cli::Cmd::Explain { range, dry_run } => commands::explain::run(range.as_deref(), *dry_run),
         cli::Cmd::Rm {
             name,
             dry_run,

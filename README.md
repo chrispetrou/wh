@@ -78,7 +78,35 @@ eval "$(wd init zsh)"     # .zshrc or .bashrc
 wd init fish | source     # config.fish
 ```
 
-Coming: `wd explain` (plain-English diff summaries on your own LLM key).
+```
+$ wd explain HEAD~3..
+reading 3 commits · 14 files · +212 −87
+summary
+Moves session handling from cookies to signed JWTs.
+...
+watch out
+logout() no longer clears server state ...
+```
+
+`wd explain [range]` reads a diff range (default `HEAD~1..`; a bare ref
+means `<ref>..HEAD`) and streams a plain-English summary with a
+"watch out" section. Lockfiles, vendored paths, and binaries are
+excluded, and large diffs are truncated (see `shared/prompts/`).
+`--dry-run` prints the preprocessed payload instead of asking the model.
+
+Explanations run on your own key. Configuration is environment only:
+
+```
+ANTHROPIC_API_KEY   used if set (model: claude-opus-5)
+OPENAI_API_KEY      used if no anthropic key (model: gpt-5-mini)
+                    neither set: local ollama (model: llama3.2)
+WD_PROVIDER         force one of: anthropic, openai, ollama
+WD_MODEL            override the model for any provider
+WD_OLLAMA_URL       default http://localhost:11434
+```
+
+Nothing is sent anywhere unless you run `wd explain`. There is no
+telemetry.
 
 ## layout
 

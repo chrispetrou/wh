@@ -35,6 +35,15 @@ pub enum Cmd {
         /// zsh, bash, or fish
         shell: String,
     },
+    /// explain a diff range in plain english (BYO llm key)
+    Explain {
+        /// range like main..dev or HEAD~3.. (default HEAD~1..); a bare
+        /// ref means <ref>..HEAD
+        range: Option<String>,
+        /// print the preprocessed payload instead of querying the model
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// remove worktrees whose branches are merged
     Rm {
         /// branch or directory of a specific worktree to remove
