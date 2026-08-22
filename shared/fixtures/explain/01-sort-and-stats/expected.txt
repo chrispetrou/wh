@@ -1,0 +1,22 @@
+commits: 2
+- 1a2b3c4 add more lines
+- 5d6e7f8 rework a
+files: 2 (+3 -1)
+---
+diff --git a/a.txt b/a.txt
+index 3333333..4444444 100644
+--- a/a.txt
++++ b/a.txt
+@@ -1,2 +1,3 @@
+ keep
+-old
++new
++more
+diff --git a/z.txt b/z.txt
+index 1111111..2222222 100644
+--- a/z.txt
++++ b/z.txt
+@@ -1,2 +1,3 @@
+ line one
++line two
+ line three

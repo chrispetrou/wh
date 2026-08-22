@@ -1,0 +1,15 @@
+diff --git a/src/long.txt b/src/long.txt
+index 1234567..89abcde 100644
+--- a/src/long.txt
++++ b/src/long.txt
+@@ -1,4 +1,10 @@
+ c1
++n1
++n2
++n3
++n4
++n5
++n6
+ c2
+ c3
+ c4

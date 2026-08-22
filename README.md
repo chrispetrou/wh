@@ -86,7 +86,8 @@ Coming: `wd explain` (plain-English diff summaries on your own LLM key).
 cli/     rust cli: the wd binary
 web/     next.js app: repo q&a on the web (in progress)
 site/    landing page
-shared/  prompt templates + diff conventions shared by cli and web
+shared/  explain spec: prompt template, diff preprocessing rules,
+         and golden fixtures both implementations must reproduce
 ```
 
 ## building

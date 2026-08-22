@@ -1,0 +1,23 @@
+# explain exclusion rules: kind<TAB>matcher<TAB>value
+# matchers: name (basename equals), segment (any path segment equals),
+# suffix (path ends with). see preprocess.md.
+lockfile	name	Cargo.lock
+lockfile	name	package-lock.json
+lockfile	name	yarn.lock
+lockfile	name	pnpm-lock.yaml
+lockfile	name	bun.lock
+lockfile	name	bun.lockb
+lockfile	name	composer.lock
+lockfile	name	Gemfile.lock
+lockfile	name	poetry.lock
+lockfile	name	uv.lock
+lockfile	name	go.sum
+lockfile	name	flake.lock
+vendored	segment	node_modules
+vendored	segment	vendor
+vendored	segment	third_party
+vendored	segment	.yarn
+minified	suffix	.min.js
+minified	suffix	.min.css
+minified	suffix	.bundle.js
+generated	suffix	.map

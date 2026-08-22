@@ -1,18 +1,25 @@
 # shared/prompts
 
-Explain prompt templates and diff-preprocessing conventions, shared by the
-CLI (`cli/`, Rust) and the web app (`web/`, TypeScript).
+The explain spec, shared by the CLI (`cli/`, Rust) and the web app (`web/`,
+TypeScript). The rule: **spec once here, implement twice.** Both
+implementations must produce the same payloads and the same output shape.
 
-The rule: **spec once here, implement twice.** Both implementations must
-produce the same sections in the same order: a `summary` followed by a
-`watch out` section, as shown in the landing demo (`site/index.html`).
+## files
 
-Planned contents (explain milestone):
+- `explain.md`: the prompt template. Two parts, split on the `[system]` and
+  `[user]` marker lines; `{{payload}}` in the user part is replaced with the
+  preprocessed payload. The output contract is a `summary` section followed
+  by a `watch out` section, as shown in the landing demo (`site/index.html`).
+- `preprocess.md`: the deterministic diff-to-payload transformation
+  (section splitting, exclusion, sorting, size caps, payload layout).
+- `exclude.txt`: machine-readable exclusion rules (lockfiles, vendored
+  paths, minified and generated files). Both implementations parse this
+  file, so the list can never drift between them. The CLI embeds it at
+  compile time; the web app imports it.
 
-- `explain.md`: the system/user prompt template with placeholders for the
-  diff, commit messages, and file stats.
-- `preprocess.md`: diff-preprocessing conventions: file ordering, lockfile
-  and vendored-path exclusion, per-file and total size caps, truncation
-  markers.
+## golden fixtures
 
-Nothing here is consumed at build time yet.
+`../fixtures/explain/*/` holds golden cases: `input.diff`,
+`input.commits`, `input.numstat`, optional `params.txt` (cap overrides),
+and `expected.txt`. An implementation is correct when it reproduces every
+`expected.txt` byte for byte. Add a fixture whenever the spec grows a rule.

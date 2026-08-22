@@ -1,0 +1,14 @@
+commits: 1
+- 9f8e7d6 bump deps
+files: 3 (+11 -2)
+excluded:
+- assets/logo.png (binary)
+- package-lock.json (lockfile)
+---
+diff --git a/src/app.js b/src/app.js
+index eeeeeee..fffffff 100644
+--- a/src/app.js
++++ b/src/app.js
+@@ -1,1 +1,2 @@
+ export const x = 1;
++export const y = 2;
