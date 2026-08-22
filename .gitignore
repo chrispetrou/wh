@@ -1,0 +1,14 @@
+# rust
+cli/target/
+
+# node
+web/node_modules/
+web/.next/
+web/out/
+
+# env
+.env*
+!.env.example
+
+# os
+.DS_Store
