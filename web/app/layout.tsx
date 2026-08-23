@@ -18,8 +18,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className="antialiased">{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body className="antialiased">
+        <script
+          // apply the stored theme before paint so there is no flash
+          dangerouslySetInnerHTML={{
+            __html:
+              'try{var t=localStorage.getItem("wd_theme");if(t==="dark"||t==="light")document.documentElement.classList.add(t)}catch(e){}',
+          }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

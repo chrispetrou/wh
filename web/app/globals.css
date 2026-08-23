@@ -258,18 +258,39 @@
   caret-color: var(--foreground);
 }
 
-/* the chat panel tracks the visual viewport so the input stays above
-   software keyboards; --vvh is set from a visualViewport listener */
-.chat-body {
+/* full-height panel body: the page stays put, the content scrolls.
+   tracks the visual viewport (--vvh) so inputs stay above soft keyboards */
+.term-fill {
+  /* 240px covers everything around the panel: header, margins, the
+     term bar, and the body padding, so the page itself never scrolls */
   display: flex;
   flex-direction: column;
-  height: min(calc(var(--vvh, 100dvh) - 190px), 620px);
-  min-height: 280px;
+  height: min(calc(var(--vvh, 100dvh) - 240px), 620px);
+  min-height: 240px;
 }
-.chat-log {
+.term-scroll {
   flex: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+
+/* bordered paste field (setup screen): still flat, hairline, monospace */
+.field-input {
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 4px 10px;
+  font: inherit;
+  color: var(--foreground);
+  outline: none;
+  flex: 1;
+  min-width: 0;
+}
+.field-input:focus {
+  border-color: var(--muted-foreground);
+}
+.field-input::placeholder {
+  color: var(--wd-faint);
 }
 
 @media (max-width: 560px) {

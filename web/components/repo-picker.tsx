@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { RepoItem } from "@/lib/github";
 
@@ -20,11 +20,20 @@ export function RepoPicker({ repos }: { repos: RepoItem[] }) {
   const [query, setQuery] = useState("");
   const [sel, setSel] = useState(0);
 
+  const rowsRef = useRef<HTMLDivElement>(null);
+
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
     return repos.filter((r) => r.fullName.toLowerCase().includes(q));
   }, [repos, query]);
   const selected = Math.min(sel, Math.max(filtered.length - 1, 0));
+
+  // keep the keyboard selection visible inside the scrolling list
+  useEffect(() => {
+    rowsRef.current
+      ?.querySelector(".row-sel")
+      ?.scrollIntoView({ block: "nearest" });
+  }, [selected]);
 
   const open = (r: RepoItem) => router.push(`/repos/${r.owner}/${r.name}`);
 
@@ -42,7 +51,7 @@ export function RepoPicker({ repos }: { repos: RepoItem[] }) {
   };
 
   return (
-    <div>
+    <div className="term-fill">
       <div className="flex items-baseline gap-2">
         <span className="text-muted-foreground">? select repo</span>
         <input
@@ -60,7 +69,7 @@ export function RepoPicker({ repos }: { repos: RepoItem[] }) {
           aria-label="filter repositories"
         />
       </div>
-      <div className="mt-2">
+      <div ref={rowsRef} className="term-scroll mt-2">
         {filtered.length === 0 ? (
           <div className="text-muted-foreground">  no match</div>
         ) : (

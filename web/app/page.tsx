@@ -46,10 +46,11 @@ function SetupBlock({ origin }: { origin: string }) {
           <input
             name="client_id"
             required
+            placeholder="Ov23li..."
             autoCapitalize="none"
             autoCorrect="off"
             spellCheck={false}
-            className="term-input border-b border-border pb-0.5 focus:border-foreground"
+            className="field-input"
           />
         </label>
         <label className="flex items-baseline gap-3">
@@ -58,7 +59,8 @@ function SetupBlock({ origin }: { origin: string }) {
             name="client_secret"
             type="password"
             required
-            className="term-input border-b border-border pb-0.5 focus:border-foreground"
+            placeholder="paste the generated secret"
+            className="field-input"
           />
         </label>
         <button

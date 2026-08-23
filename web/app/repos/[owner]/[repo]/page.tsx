@@ -15,7 +15,7 @@ export default async function ChatPage({
 
   return (
     <div className="mx-auto max-w-[880px] px-6 pb-10">
-      <SiteHeader login={session.login} />
+      <SiteHeader login={session.login} section={`${owner}/${repo}`} />
       <div className="mt-12 max-[560px]:mt-8">
         <Term title={`${owner}/${repo}`} hint="chat">
           <TerminalChat owner={owner} repo={repo} />

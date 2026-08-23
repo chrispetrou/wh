@@ -217,8 +217,8 @@ export function TerminalChat({ owner, repo }: { owner: string; repo: string }) {
   };
 
   return (
-    <div className="chat-body">
-      <div ref={logRef} className="chat-log">
+    <div className="term-fill">
+      <div ref={logRef} className="term-scroll">
         {lines.map((l, i) => (
           <div key={i} className={CLS[l.cls]}>
             {l.text}
