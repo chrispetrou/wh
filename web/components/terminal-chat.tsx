@@ -290,8 +290,15 @@ export function TerminalChat({
     () => chatStore.streaming(storeKey),
     () => false
   );
+  const ctxLen = useSyncExternalStore(
+    (cb) => chatStore.subscribe(storeKey, cb),
+    () => chatStore.context(storeKey)?.length ?? 0,
+    () => 0
+  );
   const [input, setInput] = useState("");
   const [hasKey, setHasKey] = useState(true); // corrected on mount
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const partialRef = useRef("");
@@ -927,6 +934,14 @@ export function TerminalChat({
           </div>
         </div>
       ) : null}
+      <div
+        className="pt-1.5 text-wd-faint"
+        data-tip="the model runs on your key; /model changes it"
+      >
+        {/* localStorage reads must wait for mount or hydration breaks */}
+        {mounted ? providerInfo() : " "}
+        {mounted && ctxLen ? " · follow-ups on" : ""}
+      </div>
     </div>
   );
 }

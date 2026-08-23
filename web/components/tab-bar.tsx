@@ -84,7 +84,7 @@ export function TabBar() {
 
   return (
     <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border px-4 py-1.5 text-[12px]">
-      {tabs.map((t) => (
+      {tabs.map((t, i) => (
         <span
           key={t}
           className={`flex shrink-0 items-center gap-2 rounded-[3px] px-2 py-0.5 ${
@@ -93,12 +93,13 @@ export function TabBar() {
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <Link href={`/repos/${t}`} title={t}>
+          <Link href={`/repos/${t}`} data-tip={i < 9 ? `${t} · ctrl+${i + 1}` : t}>
             {label(t)}
           </Link>
           <button
             type="button"
             aria-label={`close ${t}`}
+            data-tip="close tab"
             onClick={() => close(t)}
             className="cursor-pointer text-wd-faint hover:text-foreground"
           >
@@ -108,7 +109,7 @@ export function TabBar() {
       ))}
       <Link
         href="/repos"
-        title="new tab (ctrl+t)"
+        data-tip="new tab · ctrl+t"
         className="shrink-0 px-2 py-0.5 text-wd-faint hover:text-foreground"
       >
         +

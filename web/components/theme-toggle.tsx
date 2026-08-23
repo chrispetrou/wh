@@ -49,7 +49,7 @@ export function ThemeToggle() {
       type="button"
       onClick={cycle}
       className="cursor-pointer hover:text-foreground"
-      title="cycle theme"
+      data-tip="cycle theme: auto, light, dark (also /theme)"
     >
       theme {theme}
     </button>

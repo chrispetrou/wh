@@ -285,6 +285,30 @@
   color: var(--wd-faint);
 }
 
+/* shortcut popovers: hairline, flat, muted, no shadow (brand) */
+.tip {
+  position: fixed;
+  background: var(--popover);
+  color: var(--muted-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.tip.on {
+  opacity: 1;
+}
+@media (pointer: coarse) {
+  .tip {
+    display: none; /* no hover on touch; /help documents the keys */
+  }
+}
+
 /* keyboard users get a visible hairline focus ring; the chat and picker
    inputs keep the caret as their affordance */
 a:focus-visible,

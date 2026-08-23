@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Glyph } from "./glyph";
 import { TabBar } from "./tab-bar";
 import { ThemeToggle } from "./theme-toggle";
+import { TipLayer } from "./tip-layer";
 import { ViewportVar } from "./viewport-var";
 
 // full-bleed app surface: slim top bar, content fills the viewport.
@@ -19,8 +20,13 @@ export function AppShell({
   return (
     <div className="app-shell">
       <ViewportVar />
+      <TipLayer />
       <header className="flex shrink-0 items-center gap-2.5 border-b border-border px-6 py-3">
-        <Link href="/repos" className="flex items-center gap-2.5 font-semibold">
+        <Link
+          href="/repos"
+          data-tip="back to repos · cmd+k"
+          className="flex items-center gap-2.5 font-semibold"
+        >
           <Glyph /> <span>wd</span>
         </Link>
         <span className="font-normal text-wd-faint">/</span>
@@ -33,7 +39,11 @@ export function AppShell({
             <>
               <span className="hidden max-w-32 truncate sm:inline">{login}</span>
               <form action="/api/auth/logout" method="post">
-                <button type="submit" className="cursor-pointer hover:text-foreground">
+                <button
+                  type="submit"
+                  data-tip="sign out (also /logout in the chat)"
+                  className="cursor-pointer hover:text-foreground"
+                >
                   logout
                 </button>
               </form>
