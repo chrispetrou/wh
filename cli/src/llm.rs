@@ -64,15 +64,16 @@ pub fn prompt(payload: &str) -> (String, String) {
     let mut user = String::new();
     let mut target: Option<&mut String> = None;
     for line in template.lines() {
-        match line {
-            "[system]" => target = Some(&mut system),
-            "[user]" => target = Some(&mut user),
-            _ => {
-                if let Some(t) = target.as_deref_mut() {
-                    t.push_str(line);
-                    t.push('\n');
-                }
-            }
+        // any [section] line switches sections; unknown ones are skipped
+        if line.starts_with('[') && line.ends_with(']') {
+            target = match line {
+                "[system]" => Some(&mut system),
+                "[user]" => Some(&mut user),
+                _ => None,
+            };
+        } else if let Some(t) = target.as_deref_mut() {
+            t.push_str(line);
+            t.push('\n');
         }
     }
     (

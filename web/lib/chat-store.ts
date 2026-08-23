@@ -8,13 +8,23 @@ export interface ChatLine {
   prefix?: string;
 }
 
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 interface Entry {
   lines: ChatLine[];
   streaming: boolean;
   startedAt: number;
   loaded: boolean;
   abort?: AbortController;
+  // follow-up context: alternating user/assistant, [0] is the payload
+  context?: ChatMessage[];
 }
+
+const MAX_CONTEXT_MESSAGES = 26;
+const MAX_CONTEXT_CHARS = 400_000;
 
 const LIMIT = 200;
 const entries = new Map<string, Entry>();
@@ -106,5 +116,36 @@ export const chatStore = {
   },
   abort(key: string) {
     entry(key).abort?.abort();
+  },
+  context(key: string): ChatMessage[] | undefined {
+    return entry(key).context;
+  },
+  setContext(key: string, firstUser: string, firstAnswer: string) {
+    entry(key).context = [
+      { role: "user", content: firstUser },
+      { role: "assistant", content: firstAnswer },
+    ];
+    emit(key);
+  },
+  clearContext(key: string) {
+    entry(key).context = undefined;
+    emit(key);
+  },
+  appendExchange(key: string, question: string, answer: string) {
+    const e = entry(key);
+    if (!e.context) return;
+    let next = [
+      ...e.context,
+      { role: "user" as const, content: question },
+      { role: "assistant" as const, content: answer },
+    ];
+    // trim middle pairs first; the payload pair at [0..1] must survive
+    const size = () => next.reduce((n, m) => n + m.content.length, 0);
+    while (next.length > MAX_CONTEXT_MESSAGES || size() > MAX_CONTEXT_CHARS) {
+      if (next.length <= 4) break;
+      next = [...next.slice(0, 2), ...next.slice(4)];
+    }
+    e.context = next;
+    emit(key);
   },
 };

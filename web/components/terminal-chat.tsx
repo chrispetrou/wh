@@ -56,11 +56,24 @@ function renderText(text: string) {
 const KEY_STORE = "wd_key";
 const RECENT_STORE = "wd_recent";
 
+interface ExplainMeta {
+  commits: number;
+  files: number;
+  additions: number;
+  deletions: number;
+  truncated: boolean;
+  title: string | null;
+  note: string | null;
+  context?: string;
+  followup?: boolean;
+}
+
 const HELP = [
   "repo commands:",
   "  explain the last N commits",
   "  what changed in pr #N",
   "  diff base..head",
+  "  after an explain, plain words are follow-up questions",
   "slash commands:",
   "  /repos            switch repo",
   "  /key <value>      set the llm key (/key clear removes it)",
@@ -385,11 +398,17 @@ export function TerminalChat({
     }
   };
 
-  const run = async (command: string, raw = false) => {
+  // one streaming pipeline for commands, /show, and follow-up turns
+  const stream = async (
+    body: object,
+    opts: { raw?: boolean; onMeta?: (meta: ExplainMeta) => void }
+  ): Promise<string | null> => {
     chatStore.abort(storeKey);
     const abort = new AbortController();
-    streamModeRef.current = raw ? "diff" : "text";
+    streamModeRef.current = opts.raw ? "diff" : "text";
     chatStore.setStreaming(storeKey, true, abort);
+    let full = "";
+    let ok = false;
     try {
       const res = await fetch("/api/explain", {
         method: "POST",
@@ -398,18 +417,18 @@ export function TerminalChat({
           "x-wd-provider-key": readKey(),
           "x-wd-model": pref("wd_model"),
         },
-        body: JSON.stringify({ owner, repo, input: command, raw }),
+        body: JSON.stringify(body),
         signal: abort.signal,
       });
       if (!res.ok || !res.body) {
-        const body = (await res.json().catch(() => null)) as {
+        const err = (await res.json().catch(() => null)) as {
           error?: string;
         } | null;
-        muted([`error: ${body?.error ?? `request failed (${res.status})`}`]);
-        if (res.status === 401 && body?.error?.includes("sign in")) {
+        muted([`error: ${err?.error ?? `request failed (${res.status})`}`]);
+        if (res.status === 401 && err?.error?.includes("sign in")) {
           window.location.href = "/api/auth/reset";
         }
-        return;
+        return null;
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -422,32 +441,18 @@ export function TerminalChat({
         if (!metaDone) {
           const nl = buf.indexOf("\n");
           if (nl < 0) continue;
-          const meta = JSON.parse(buf.slice(0, nl)) as {
-            commits: number;
-            files: number;
-            additions: number;
-            deletions: number;
-            truncated: boolean;
-            title: string | null;
-            note: string | null;
-          };
+          opts.onMeta?.(JSON.parse(buf.slice(0, nl)) as ExplainMeta);
           buf = buf.slice(nl + 1);
           metaDone = true;
-          const rows = [
-            `reading ${meta.commits} ${meta.commits === 1 ? "commit" : "commits"} · ${meta.files} ${meta.files === 1 ? "file" : "files"} · +${meta.additions} −${meta.deletions}`,
-          ];
-          if (meta.title) rows.push(`pr: ${meta.title}`);
-          if (meta.note) rows.push(meta.note);
-          if (meta.truncated) rows.push("comparison truncated by github");
-          muted(rows);
-          if (meta.files === 0) muted(["no changes in range"]);
         }
         if (buf) {
+          full += buf;
           appendChunk(buf);
           buf = "";
         }
       }
       flushPartial();
+      ok = true;
     } catch (e) {
       if ((e as Error).name !== "AbortError") {
         muted(["error: connection interrupted"]);
@@ -456,6 +461,46 @@ export function TerminalChat({
       streamModeRef.current = "text";
       chatStore.setStreaming(storeKey, false);
     }
+    return ok ? full : null;
+  };
+
+  const run = async (command: string, raw = false) => {
+    if (!raw) chatStore.clearContext(storeKey); // a new command, a new context
+    let context = "";
+    const full = await stream(
+      { owner, repo, input: command, raw },
+      {
+        raw,
+        onMeta: (meta) => {
+          context = meta.context ?? "";
+          const rows = [
+            `reading ${meta.commits} ${meta.commits === 1 ? "commit" : "commits"} · ${meta.files} ${meta.files === 1 ? "file" : "files"} · +${meta.additions} −${meta.deletions}`,
+          ];
+          if (meta.title) rows.push(`pr: ${meta.title}`);
+          if (meta.note) rows.push(meta.note);
+          if (meta.truncated) rows.push("comparison truncated by github");
+          muted(rows);
+          if (meta.files === 0) muted(["no changes in range"]);
+        },
+      }
+    );
+    if (!raw && context && full?.trim()) {
+      chatStore.setContext(storeKey, context, full.trim());
+      if (!pref("wd_fu_hint")) {
+        setPref("wd_fu_hint", "seen");
+        muted(["(ask follow-ups in plain words, or run another command)"]);
+      }
+    }
+  };
+
+  const runFollowup = async (question: string) => {
+    const history = chatStore.context(storeKey);
+    if (!history) return;
+    const full = await stream(
+      { owner, repo, followup: { history, question } },
+      {}
+    );
+    if (full?.trim()) chatStore.appendExchange(storeKey, question, full.trim());
   };
 
   const saveKey = (value: string, echoText: string) => {
@@ -487,6 +532,7 @@ export function TerminalChat({
         break;
       case "clear":
         chatStore.setAll(storeKey, []);
+        chatStore.clearContext(storeKey);
         break;
       case "key":
         if (!arg) {
@@ -545,15 +591,18 @@ export function TerminalChat({
             : ["not signed in"]
         );
         break;
-      case "info":
+      case "info": {
         echo(raw);
+        const ctx = chatStore.context(storeKey);
         muted([
           `repo      ${owner}/${repo}`,
           `provider  ${providerInfo()}`,
           `theme     ${currentTheme()}`,
           `font      ${pref("wd_font") || "default"} · ${pref("wd_fontsize") || "13"}px · ligatures ${pref("wd_lig") === "off" ? "off" : "on"}`,
+          `context   ${ctx ? `active (${ctx.length} messages), follow-ups on` : "none, run a command first"}`,
         ]);
         break;
+      }
       case "font":
         echo(raw);
         if (FONTS.includes(arg.toLowerCase())) {
@@ -659,6 +708,13 @@ export function TerminalChat({
     if (!parseCommand(raw)) {
       if (/^wd\s/i.test(raw)) {
         muted(["the worktree commands (new, ls, switch, rm) live in the cli: /wd"]);
+        muted([commandHint]);
+        return;
+      }
+      // plain words after an explain are a follow-up question
+      if (chatStore.context(storeKey)) {
+        void runFollowup(raw);
+        return;
       }
       muted([commandHint]);
       return;

@@ -1,19 +1,31 @@
-// splits shared/prompts/explain.md into its [system]/[user] parts and
-// substitutes {{payload}}; port of cli/src/llm.rs::prompt.
+// splits shared/prompts/explain.md into its [section] parts and
+// substitutes {{payload}}; twin of cli/src/llm.rs::prompt. any
+// [section] line switches sections, unknown ones are skipped.
 import { explainTemplate } from "./shared.gen";
 
-export function prompt(payload: string): { system: string; user: string } {
-  let system = "";
-  let user = "";
-  let target: "system" | "user" | null = null;
+function sections(): Record<string, string> {
+  const out: Record<string, string> = {};
+  let target: string | null = null;
   for (const line of explainTemplate.split("\n")) {
-    if (line === "[system]") target = "system";
-    else if (line === "[user]") target = "user";
-    else if (target === "system") system += line + "\n";
-    else if (target === "user") user += line + "\n";
+    if (line.startsWith("[") && line.endsWith("]")) {
+      target = line.slice(1, -1);
+      out[target] = out[target] ?? "";
+    } else if (target !== null) {
+      out[target] += line + "\n";
+    }
   }
+  return out;
+}
+
+export function prompt(payload: string): {
+  system: string;
+  user: string;
+  followup: string;
+} {
+  const s = sections();
   return {
-    system: system.trim(),
-    user: user.trim().replace("{{payload}}", payload),
+    system: (s.system ?? "").trim(),
+    user: (s.user ?? "").trim().replace("{{payload}}", payload),
+    followup: (s.followup ?? "").trim(),
   };
 }

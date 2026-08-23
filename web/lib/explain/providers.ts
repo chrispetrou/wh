@@ -63,6 +63,72 @@ export function buildRequest(
   };
 }
 
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+// follow-up turn: prior history plus the new question. the first user
+// message (the diff payload) gets an anthropic cache breakpoint so
+// repeated follow-ups reuse the cached prefix.
+export function buildFollowupRequest(
+  provider: ProviderName,
+  key: string,
+  system: string,
+  history: ChatMessage[],
+  question: string,
+  model?: string
+): ProviderRequest {
+  const chosen = model || DEFAULT_MODELS[provider];
+  if (provider === "anthropic") {
+    const messages = history.map((m, i) =>
+      i === 0
+        ? {
+            role: m.role,
+            content: [
+              {
+                type: "text",
+                text: m.content,
+                cache_control: { type: "ephemeral" },
+              },
+            ],
+          }
+        : { role: m.role, content: m.content }
+    );
+    return {
+      url: `${process.env.WD_ANTHROPIC_URL ?? "https://api.anthropic.com"}/v1/messages`,
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: chosen,
+        max_tokens: 4096,
+        stream: true,
+        system,
+        messages: [...messages, { role: "user", content: question }],
+      }),
+    };
+  }
+  return {
+    url: `${process.env.WD_OPENAI_URL ?? "https://api.openai.com"}/v1/chat/completions`,
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      model: chosen,
+      stream: true,
+      messages: [
+        { role: "system", content: system },
+        ...history,
+        { role: "user", content: question },
+      ],
+    }),
+  };
+}
+
 interface AnthropicEvent {
   type?: string;
   delta?: { text?: string };
