@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
+import { chatStore } from "@/lib/chat-store";
 import { commandHint, parseCommand } from "@/lib/commands";
 import { applyTheme, currentTheme, type Theme } from "./theme-toggle";
 
@@ -54,7 +55,6 @@ function renderText(text: string) {
 
 const KEY_STORE = "wd_key";
 const RECENT_STORE = "wd_recent";
-const LOG_LIMIT = 200;
 
 const HELP = [
   "repo commands:",
@@ -78,7 +78,8 @@ const HELP = [
   "  /clear            clear the screen",
   "  /logout           sign out",
   "keys: tab completes, up/down history, ctrl+r searches it,",
-  "esc stops, cmd+k (or ctrl+k) jumps to the repo picker.",
+  "esc stops, cmd+k (or ctrl+k) jumps to the repo picker,",
+  "ctrl+t opens a new tab, ctrl+1..9 switches tabs.",
 ];
 
 const WD_HELP = [
@@ -264,13 +265,22 @@ export function TerminalChat({
   login?: string;
 }) {
   const router = useRouter();
-  const [lines, setLines] = useState<Line[]>([]);
+  const storeKey = `${owner}/${repo}`;
+  // chat state lives in the store so streams keep flowing on other tabs
+  const lines = useSyncExternalStore(
+    (cb) => chatStore.subscribe(storeKey, cb),
+    () => chatStore.lines(storeKey) as Line[],
+    () => chatStore.emptyLines() as Line[]
+  );
+  const busy = useSyncExternalStore(
+    (cb) => chatStore.subscribe(storeKey, cb),
+    () => chatStore.streaming(storeKey),
+    () => false
+  );
   const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
   const [hasKey, setHasKey] = useState(true); // corrected on mount
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
   const partialRef = useRef("");
   const initRef = useRef(false);
   const historyRef = useRef<string[]>([]);
@@ -281,13 +291,11 @@ export function TerminalChat({
   const streamModeRef = useRef<"text" | "diff">("text");
   const prompt = `${owner}/${repo} $`;
 
-  const push = (rows: Line[]) => setLines((prev) => [...prev, ...rows]);
+  const push = (rows: Line[]) => chatStore.push(storeKey, rows);
   const muted = (texts: string[]) =>
     push(texts.map((text) => ({ text, cls: "o" as Cls })));
   const echo = (text: string) =>
     push([{ prefix: prompt, text, cls: text.startsWith("/") ? "x" : "c" }]);
-
-  const logStore = `wd_log:${owner}/${repo}`;
 
   useEffect(() => {
     if (initRef.current) return; // strict mode re-runs mount effects
@@ -297,22 +305,13 @@ export function TerminalChat({
     // remember this repo for the picker's recent-first ordering
     try {
       const recent: string[] = JSON.parse(localStorage.getItem(RECENT_STORE) ?? "[]");
-      const name = `${owner}/${repo}`;
-      const next = [name, ...recent.filter((r) => r !== name)].slice(0, 5);
+      const next = [storeKey, ...recent.filter((r) => r !== storeKey)].slice(0, 5);
       localStorage.setItem(RECENT_STORE, JSON.stringify(next));
     } catch {
       // ignore
     }
-    // restore this repo's log from the session, if any
-    try {
-      const stored = JSON.parse(sessionStorage.getItem(logStore) ?? "[]") as Line[];
-      if (Array.isArray(stored) && stored.length) {
-        setLines(stored);
-        return;
-      }
-    } catch {
-      // ignore
-    }
+    // a restored or still-live log means no boot lines
+    if (chatStore.lines(storeKey).length) return;
     push([{ text: `▜ wd · ${owner}/${repo}`, cls: "o" }]);
     if (!present) {
       muted([
@@ -325,18 +324,18 @@ export function TerminalChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // persist the log so a refresh or repo switch does not wipe it
+  // elapsed ticker for the streaming cursor
   useEffect(() => {
-    try {
-      if (lines.length) {
-        sessionStorage.setItem(logStore, JSON.stringify(lines.slice(-LOG_LIMIT)));
-      } else {
-        sessionStorage.removeItem(logStore);
-      }
-    } catch {
-      // ignore
+    if (!busy) {
+      setElapsed(0);
+      return;
     }
-  }, [lines, logStore]);
+    const iv = setInterval(
+      () => setElapsed(Date.now() - chatStore.startedAt(storeKey)),
+      100
+    );
+    return () => clearInterval(iv);
+  }, [busy, storeKey]);
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
@@ -387,14 +386,10 @@ export function TerminalChat({
   };
 
   const run = async (command: string, raw = false) => {
-    abortRef.current?.abort();
+    chatStore.abort(storeKey);
     const abort = new AbortController();
-    abortRef.current = abort;
     streamModeRef.current = raw ? "diff" : "text";
-    setBusy(true);
-    setElapsed(0);
-    const t0 = Date.now();
-    const ticker = setInterval(() => setElapsed(Date.now() - t0), 100);
+    chatStore.setStreaming(storeKey, true, abort);
     try {
       const res = await fetch("/api/explain", {
         method: "POST",
@@ -458,9 +453,8 @@ export function TerminalChat({
         muted(["error: connection interrupted"]);
       }
     } finally {
-      clearInterval(ticker);
       streamModeRef.current = "text";
-      setBusy(false);
+      chatStore.setStreaming(storeKey, false);
     }
   };
 
@@ -492,12 +486,7 @@ export function TerminalChat({
         router.push("/repos");
         break;
       case "clear":
-        setLines([]);
-        try {
-          sessionStorage.removeItem(logStore);
-        } catch {
-          // ignore
-        }
+        chatStore.setAll(storeKey, []);
         break;
       case "key":
         if (!arg) {
@@ -630,7 +619,7 @@ export function TerminalChat({
         break;
       case "stop":
         echo(raw);
-        if (busy) abortRef.current?.abort();
+        if (busy) chatStore.abort(storeKey);
         else muted(["nothing running."]);
         break;
       case "logout":
@@ -792,7 +781,7 @@ export function TerminalChat({
       setHistPos(next);
       setInput(next < 0 ? "" : historyRef.current[next]);
     } else if (e.key === "Escape") {
-      abortRef.current?.abort();
+      chatStore.abort(storeKey);
     }
   };
 

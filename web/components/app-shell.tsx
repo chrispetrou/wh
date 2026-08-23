@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Glyph } from "./glyph";
+import { TabBar } from "./tab-bar";
 import { ThemeToggle } from "./theme-toggle";
 import { ViewportVar } from "./viewport-var";
 
@@ -40,6 +41,7 @@ export function AppShell({
           ) : null}
         </div>
       </header>
+      <TabBar />
       <main className="app-main flex min-h-0 flex-1 flex-col px-6 py-4">
         {children}
       </main>

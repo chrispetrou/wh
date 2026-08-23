@@ -148,6 +148,11 @@ options: `/help`, `/repos`, `/key`, `/model`, `/theme`, `/font`
 closes; up/down recalls history, ctrl+r searches it, esc stops a running
 explain, and cmd+k jumps back to the repo picker.
 
+Repos open as tabs: a quiet tab bar under the header lets you work on
+several repos at once, each with its own history. A streaming explain
+keeps going while you are on another tab. ctrl+t opens a new tab via
+the picker, ctrl+1..9 switches, × closes.
+
 Notes:
 
 - Sign-in requests the `repo` scope so private repos appear in the
