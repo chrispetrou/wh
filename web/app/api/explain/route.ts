@@ -29,12 +29,12 @@ export async function POST(req: NextRequest) {
   if (!session.token) return err(401, "sign in required");
 
   const key = req.headers.get("x-wd-provider-key") ?? "";
-  if (!key) return err(401, "paste an api key first");
 
-  const { owner, repo, input } = (await req.json()) as {
+  const { owner, repo, input, raw } = (await req.json()) as {
     owner?: string;
     repo?: string;
     input?: string;
+    raw?: boolean;
   };
   if (!owner || !repo || !input) return err(400, "bad request");
   const command = parseCommand(input);
@@ -75,6 +75,15 @@ export async function POST(req: NextRequest) {
   }
 
   const payload = preprocess(data.diff, data.commits, data.numstat, defaultCaps, defaultRules());
+
+  // raw mode (/show): the preprocessed payload itself, no model call
+  if (raw) {
+    return new NextResponse(meta + payload, {
+      headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+    });
+  }
+
+  if (!key) return err(401, "paste an api key first");
   const { system, user } = prompt(payload);
   const provider = detectProvider(key);
   const request = buildRequest(provider, key, system, user);

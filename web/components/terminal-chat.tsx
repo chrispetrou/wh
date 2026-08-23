@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { commandHint, parseCommand } from "@/lib/commands";
 import { applyTheme, currentTheme, type Theme } from "./theme-toggle";
 
-type Cls = "p" | "c" | "o" | "g" | "a" | "x" | "";
+type Cls = "p" | "c" | "o" | "g" | "a" | "x" | "r" | "";
 
 interface Line {
   text: string;
@@ -20,6 +20,7 @@ const CLS: Record<Cls, string> = {
   g: "text-wd-green",
   a: "text-wd-amber",
   x: "text-wd-accent",
+  r: "text-destructive",
   "": "",
 };
 
@@ -69,9 +70,25 @@ const HELP = [
   "  /font <f>         default, fira, jetbrains, or plex",
   "  /fontsize <n>     11 to 18, or default",
   "  /ligatures <t>    on or off",
+  "  /show             the raw payload of the last command",
+  "  /export           save this transcript as a text file",
+  "  /wd               about the wd cli",
   "  /stop             stop a running explain (esc works too)",
   "  /clear            clear the screen",
   "  /logout           sign out",
+  "keys: tab completes, up/down history, ctrl+r searches it,",
+  "esc stops, cmd+k (or ctrl+k) jumps to the repo picker.",
+];
+
+const WD_HELP = [
+  "wd is also a cli: one tiny binary, no telemetry.",
+  "  wd new <branch>     worktree in a sibling dir, copies .env*",
+  "  wd ls               worktrees with dirty and ahead/behind status",
+  "  wd switch [query]   picker that cd's via a shell wrapper",
+  "  wd rm [name]        prune worktrees whose branches are merged",
+  "  wd explain [range]  this, in your terminal, on the same key",
+  "  wd init zsh         the shell wrapper for switch",
+  "source: github.com/chrispetrou/wd",
 ];
 
 const SLASH_CMDS = [
@@ -84,6 +101,9 @@ const SLASH_CMDS = [
   "/font",
   "/fontsize",
   "/ligatures",
+  "/show",
+  "/export",
+  "/wd",
   "/stop",
   "/clear",
   "/logout",
@@ -183,6 +203,10 @@ export function TerminalChat({
   const initRef = useRef(false);
   const historyRef = useRef<string[]>([]);
   const [histPos, setHistPos] = useState(-1);
+  const [search, setSearch] = useState<{ q: string; idx: number } | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const lastCmdRef = useRef("");
+  const streamModeRef = useRef<"text" | "diff">("text");
   const prompt = `${owner}/${repo} $`;
 
   const push = (rows: Line[]) => setLines((prev) => [...prev, ...rows]);
@@ -217,7 +241,7 @@ export function TerminalChat({
     } catch {
       // ignore
     }
-    muted([`wd · ${owner}/${repo}`]);
+    push([{ text: `▜ wd · ${owner}/${repo}`, cls: "o" }]);
     if (!present) {
       muted([
         "paste an anthropic or openai api key to enable explanations.",
@@ -246,8 +270,30 @@ export function TerminalChat({
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [lines]);
 
+  // cmd+k / ctrl+k jumps back to the repo picker
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        router.push("/repos");
+      }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [router]);
+
   const classify = (text: string): Line => {
     const t = text.trimEnd();
+    if (streamModeRef.current === "diff") {
+      if (t.startsWith("diff --git")) return { text, cls: "c" };
+      if (t.startsWith("- ")) return { text, cls: "o" }; // payload commit list
+      if (t.startsWith("+++") || t.startsWith("---")) return { text, cls: "o" };
+      if (t.startsWith("@@")) return { text, cls: "x" };
+      if (t.startsWith("+")) return { text, cls: "g" };
+      if (t.startsWith("-")) return { text, cls: "r" };
+      if (t.startsWith("...")) return { text, cls: "o" };
+      return { text, cls: "" };
+    }
     if (t === "summary" || t === "watch out") return { text, cls: "a" };
     if (t.startsWith("[wd:error] "))
       return { text: `error: ${t.slice(11)}`, cls: "o" };
@@ -268,11 +314,15 @@ export function TerminalChat({
     }
   };
 
-  const run = async (command: string) => {
+  const run = async (command: string, raw = false) => {
     abortRef.current?.abort();
     const abort = new AbortController();
     abortRef.current = abort;
+    streamModeRef.current = raw ? "diff" : "text";
     setBusy(true);
+    setElapsed(0);
+    const t0 = Date.now();
+    const ticker = setInterval(() => setElapsed(Date.now() - t0), 100);
     try {
       const res = await fetch("/api/explain", {
         method: "POST",
@@ -280,7 +330,7 @@ export function TerminalChat({
           "content-type": "application/json",
           "x-wd-provider-key": readKey(),
         },
-        body: JSON.stringify({ owner, repo, input: command }),
+        body: JSON.stringify({ owner, repo, input: command, raw }),
         signal: abort.signal,
       });
       if (!res.ok || !res.body) {
@@ -335,6 +385,8 @@ export function TerminalChat({
         muted(["error: connection interrupted"]);
       }
     } finally {
+      clearInterval(ticker);
+      streamModeRef.current = "text";
       setBusy(false);
     }
   };
@@ -442,6 +494,33 @@ export function TerminalChat({
           muted(["usage: /ligatures on|off"]);
         }
         break;
+      case "show":
+        echo(raw);
+        if (!lastCmdRef.current) {
+          muted(["nothing to show yet, run a repo command first."]);
+        } else {
+          muted([`payload for: ${lastCmdRef.current}`]);
+          void run(lastCmdRef.current, true);
+        }
+        break;
+      case "export": {
+        echo(raw);
+        const text = lines
+          .map((l) => (l.prefix ? `${l.prefix} ` : "") + l.text)
+          .join("\n");
+        const blob = new Blob([text + "\n"], { type: "text/plain" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `wd-${owner}-${repo}.txt`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        muted(["transcript saved."]);
+        break;
+      }
+      case "wd":
+        echo(raw);
+        muted(WD_HELP);
+        break;
       case "stop":
         echo(raw);
         if (busy) abortRef.current?.abort();
@@ -485,7 +564,17 @@ export function TerminalChat({
       muted([commandHint]);
       return;
     }
+    lastCmdRef.current = raw;
     void run(raw);
+  };
+
+  // ctrl+r reverse history search
+  const searchMatch = (q: string, from: number): number => {
+    const h = historyRef.current;
+    for (let i = from; i < h.length; i++) {
+      if (h[i].includes(q)) return i;
+    }
+    return -1;
   };
 
   // slash autocomplete: matches while typing a bare /command
@@ -497,6 +586,29 @@ export function TerminalChat({
     slashMatches.length > 0 && !(slashMatches.length === 1 && slashMatches[0] === input);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
+    if (search) {
+      e.preventDefault();
+      if (e.key === "Escape") {
+        setSearch(null);
+      } else if (e.key === "Enter") {
+        const i = searchMatch(search.q, search.idx);
+        if (i >= 0) setInput(historyRef.current[i]);
+        setSearch(null);
+      } else if (e.key === "r" && e.ctrlKey) {
+        const i = searchMatch(search.q, search.idx);
+        setSearch({ q: search.q, idx: i >= 0 ? i + 1 : 0 });
+      } else if (e.key === "Backspace") {
+        setSearch({ q: search.q.slice(0, -1), idx: 0 });
+      } else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey) {
+        setSearch({ q: search.q + e.key, idx: 0 });
+      }
+      return;
+    }
+    if (e.ctrlKey && e.key === "r") {
+      e.preventDefault();
+      setSearch({ q: "", idx: 0 });
+      return;
+    }
     if (e.key === "Tab" && slashMatches.length > 0) {
       e.preventDefault();
       const target =
@@ -541,7 +653,12 @@ export function TerminalChat({
             <span className={CLS[l.cls]}>{renderText(l.text)}</span>
           </div>
         ))}
-        {busy ? <span className="cursor" /> : null}
+        {busy ? (
+          <div>
+            <span className="cursor" />
+            <span className="text-wd-faint"> {(elapsed / 1000).toFixed(1)}s</span>
+          </div>
+        ) : null}
       </div>
       <div className="flex items-baseline gap-2 pt-2">
         <span className="shrink-0 text-muted-foreground">{prompt}</span>
@@ -560,7 +677,15 @@ export function TerminalChat({
           aria-label="command input"
         />
       </div>
-      {showMatches ? (
+      {search ? (
+        <div className="pt-1 text-muted-foreground">
+          (reverse-i-search) &apos;{search.q}&apos;:{" "}
+          {(() => {
+            const i = searchMatch(search.q, search.idx);
+            return i >= 0 ? historyRef.current[i] : "";
+          })()}
+        </div>
+      ) : showMatches ? (
         <div className="pt-1 text-wd-faint">{slashMatches.join("  ")}</div>
       ) : null}
     </div>
