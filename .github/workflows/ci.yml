@@ -1,0 +1,60 @@
+name: ci
+
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+
+jobs:
+  cli:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cli
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      - run: cargo build --release
+      - name: size gate (binary must stay under 3.2MiB)
+        run: |
+          size=$(stat -c%s target/release/wd)
+          echo "binary: $size bytes ($(echo "scale=2; $size/1048576" | bc)MiB)"
+          test "$size" -lt 3355443
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+  brand:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: no em dashes outside the locked landing mock
+        run: |
+          if grep -rn $'—' --include='*.md' --include='*.rs' --include='*.ts' \
+             --include='*.tsx' --include='*.css' --include='*.toml' --include='*.mjs' \
+             . | grep -v 'site/index.html' | grep -v node_modules; then
+            echo "em dashes found (brand rule: use commas, colons, or parens)"
+            exit 1
+          fi
+          echo "clean"
