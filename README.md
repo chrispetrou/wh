@@ -2,10 +2,6 @@
 
 Tiny git companion. Worktrees, minus the ceremony. Diffs, in plain English.
 
-```
-$ curl -fsSL https://wd.sh/setup.sh | bash
-```
-
 **wd** is a single-binary git companion with two jobs: managing worktrees so
 branch-switching never touches your working state, and explaining diffs in
 plain English so review starts with understanding, not archaeology.
@@ -15,6 +11,28 @@ Anthropic, OpenAI, or a local model via Ollama. Everything else needs nothing
 but git.
 
 Written in Rust. One binary, no runtime.
+
+## install
+
+From a clone (or straight from git):
+
+```
+cargo install --path cli
+# or, without cloning:
+cargo install --git https://github.com/chrispetrou/wd wd
+```
+
+That puts `wd` on your PATH via `~/.cargo/bin`. Then add the shell wrapper
+so `wd switch` can actually change directory:
+
+```
+echo 'eval "$(wd init zsh)"' >> ~/.zshrc     # bash: ~/.bashrc
+wd init fish | source                        # fish: add to config.fish
+```
+
+Needs git 2.31+ and, for `wd explain`, curl (both ship with macOS and
+virtually every Linux). A `curl | bash` installer with prebuilt binaries
+comes with the first release.
 
 ## commands
 
@@ -42,19 +60,6 @@ spike/wasm    clean     ·  behind 12
 upstream.
 
 ```
-$ wd rm
-would remove ../repo.feat-auth (feat/auth)
-remove 1 worktree? [y/N]
-```
-
-`wd rm` prunes worktrees whose branches are merged into the default branch
-(and deletes the branches). It never touches dirty worktrees, the main
-worktree, or the one you're standing in. `--dry-run` previews, `--yes` skips
-the prompt, `wd rm <branch> --force` removes a specific worktree even if
-dirty or unmerged (the escape hatch for squash-merged branches, which plain
-ancestor detection can't see).
-
-```
 $ wd switch
 ? select worktree au▏
 › feat/auth    clean
@@ -62,21 +67,9 @@ $ wd switch
 ```
 
 `wd switch` opens a picker over your worktrees: type to filter, arrows (or
-ctrl-p/ctrl-n) to move, enter to select, esc to cancel. It prints the chosen
-path, so with the shell wrapper below it becomes a real `cd`.
-`wd switch <query>` skips the picker when the match is unique.
-
-```
-$ wd init zsh
-```
-
-`wd init zsh|bash|fish` prints a small `wd()` wrapper that makes
-`wd switch` change directory in your shell. Add one line to your rc file:
-
-```
-eval "$(wd init zsh)"     # .zshrc or .bashrc
-wd init fish | source     # config.fish
-```
+ctrl-p/ctrl-n) to move, enter to select, esc to cancel. With the shell
+wrapper installed it is a real `cd`. `wd switch <query>` skips the picker
+when the match is unique.
 
 ```
 $ wd explain HEAD~3..
@@ -94,7 +87,22 @@ means `<ref>..HEAD`) and streams a plain-English summary with a
 excluded, and large diffs are truncated (see `shared/prompts/`).
 `--dry-run` prints the preprocessed payload instead of asking the model.
 
-Explanations run on your own key. Configuration is environment only:
+```
+$ wd rm
+would remove ../repo.feat-auth (feat/auth)
+remove 1 worktree? [y/N]
+```
+
+`wd rm` prunes worktrees whose branches are merged into the default branch
+(and deletes the branches). It never touches dirty worktrees, the main
+worktree, or the one you're standing in. `--dry-run` previews, `--yes` skips
+the prompt, `wd rm <branch> --force` removes a specific worktree even if
+dirty or unmerged (the escape hatch for squash-merged branches, which plain
+ancestor detection can't see).
+
+## configuration (explain)
+
+Environment only, no config files:
 
 ```
 ANTHROPIC_API_KEY   used if set (model: claude-opus-5)
@@ -108,11 +116,60 @@ WD_OLLAMA_URL       default http://localhost:11434
 Nothing is sent anywhere unless you run `wd explain`. There is no
 telemetry.
 
+## web
+
+The web app (`web/`) is wd explain for any GitHub repo, in the browser:
+sign in with GitHub, pick a repo, and ask in a full-page terminal:
+
+```
+explain the last 5 commits
+what changed in pr #42
+diff main..release
+```
+
+It uses the same explain spec as the CLI (`shared/prompts/`), on your own
+LLM key: pasted once into the terminal, stored only in your browser, sent
+per request, never stored or logged server-side.
+
+The terminal also speaks slash commands: `/help`, `/repos`, `/key`,
+`/theme auto|light|dark`, `/font default|fira|jetbrains|plex`,
+`/fontsize`, `/ligatures`, `/show` (the raw diff payload, pager-colored),
+`/export` (save the transcript), `/account`, `/info`, `/wd`, `/stop`,
+`/clear`, `/logout`. Tab completes, up/down recalls history, ctrl+r
+searches it, esc stops a running explain, cmd+k jumps to the repo picker.
+
+Notes:
+
+- Sign-in requests the `repo` scope so private repos appear in the
+  picker. GitHub has no read-only scope for private repos; wd only ever
+  reads (commits, diffs, pull requests).
+- `base..head` uses GitHub's three-dot compare: changes on head since it
+  diverged from base.
+
+To run it yourself (Node 20+):
+
+```
+cd web
+npm install
+npm run dev
+```
+
+Then open http://localhost:3000: the first run shows a one-time setup
+screen that links to a prefilled GitHub OAuth-app form and saves the
+pasted client id and secret to `web/.env.local` for you. The setup
+screen only appears on localhost while unconfigured; deployed instances
+are configured through the environment instead (see `.env.example`, the
+callback must be `$APP_URL/api/auth/callback`).
+
+`npm test` runs the golden fixtures + grammar suites. The shared spec is
+embedded at build time by `scripts/sync-shared.mjs`; edit
+`shared/prompts/`, never the generated file.
+
 ## layout
 
 ```
 cli/     rust cli: the wd binary
-web/     next.js app: repo q&a on the web (in progress)
+web/     next.js app: wd explain for any github repo
 site/    landing page
 shared/  explain spec: prompt template, diff preprocessing rules,
          and golden fixtures both implementations must reproduce
@@ -123,6 +180,7 @@ shared/  explain spec: prompt template, diff preprocessing rules,
 ```
 cd cli && cargo build --release   # binary at target/release/wd
 cd cli && cargo test
+cd web && npm test && npm run build
 ```
 
 MIT license.

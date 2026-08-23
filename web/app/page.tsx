@@ -1,41 +1,123 @@
-import Link from "next/link";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { SiteHeader } from "@/components/site-header";
+import { getSession } from "@/lib/session";
+import { isLocalHost, oauthConfigured } from "@/lib/setup";
 
-// the logo glyph is the clip-path square from site/index.html
-function Glyph() {
+const ERRORS: Record<string, string> = {
+  auth: "sign-in failed, try again.",
+  session: "session expired, sign in again.",
+  config: "github oauth is not configured on this server.",
+  setup: "that did not look like a client id and secret, try again.",
+};
+
+function SetupBlock({ origin }: { origin: string }) {
+  const params = new URLSearchParams({
+    "oauth_application[name]": "wd (dev)",
+    "oauth_application[url]": origin,
+    "oauth_application[callback_url]": `${origin}/api/auth/callback`,
+  });
+  const newAppUrl = `https://github.com/settings/applications/new?${params}`;
   return (
-    <span
-      aria-hidden
-      className="inline-block size-3.5 bg-foreground"
-      style={{
-        clipPath: "polygon(0 0, 100% 0, 100% 100%, 35% 100%, 35% 35%, 0 35%)",
-      }}
-    />
+    <div className="mt-8 max-w-[560px]">
+      <p className="text-muted-foreground">
+        one-time setup: wd needs a github oauth app to sign people in.
+      </p>
+      <p className="mt-4">
+        1.{" "}
+        <a
+          href={newAppUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="border-b border-border pb-0.5 font-semibold hover:border-foreground"
+        >
+          create the oauth app <span className="text-wd-green">→</span>
+        </a>{" "}
+        <span className="text-muted-foreground">
+          (the form comes prefilled, just register it)
+        </span>
+      </p>
+      <p className="mt-2 text-muted-foreground">
+        2. generate a client secret on the app page, paste both here:
+      </p>
+      <form action="/api/setup" method="post" className="mt-4 flex flex-col gap-3">
+        <label className="flex items-baseline gap-3">
+          <span className="w-28 shrink-0 text-muted-foreground">client id</span>
+          <input
+            name="client_id"
+            required
+            placeholder="Ov23li..."
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            className="field-input"
+          />
+        </label>
+        <label className="flex items-baseline gap-3">
+          <span className="w-28 shrink-0 text-muted-foreground">client secret</span>
+          <input
+            name="client_secret"
+            type="password"
+            required
+            placeholder="paste the generated secret"
+            className="field-input"
+          />
+        </label>
+        <button
+          type="submit"
+          className="mt-2 w-fit cursor-pointer border-b border-border pb-0.5 font-semibold hover:border-foreground"
+        >
+          save and sign in <span className="text-wd-green">→</span>
+        </button>
+      </form>
+      <p className="mt-4 text-muted-foreground">
+        saved to web/.env.local on this machine, nowhere else.
+      </p>
+    </div>
   );
 }
 
-export default function Home() {
-  return (
-    <div className="mx-auto max-w-[880px] px-6">
-      <header className="pt-7">
-        <div className="flex items-center gap-7">
-          <Link href="/" className="flex items-center gap-2.5 font-semibold">
-            <Glyph /> <span>wd</span>{" "}
-            <span className="font-normal text-wd-faint">/</span>
-          </Link>
-          <nav className="flex gap-5 text-muted-foreground">
-            <Link href="/" className="hover:text-foreground">
-              try
-            </Link>
-          </nav>
-        </div>
-      </header>
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const session = await getSession().catch(() => null);
+  if (session?.token) redirect("/repos");
+  const { error } = await searchParams;
+  const host = (await headers()).get("host");
+  const needsSetup = !oauthConfigured();
 
-      <section className="pt-[88px]">
-        <p>Ask questions about any repo. Coming soon.</p>
+  return (
+    <div className="mx-auto max-w-[880px] px-6 pb-10">
+      <SiteHeader />
+      <section className="pt-[88px] max-[560px]:pt-14">
+        <p>Ask questions about any repo. Explained in plain english.</p>
         <p className="mt-4 text-muted-foreground">
-          github sign-in, a repo picker, and a terminal-flavored chat that
-          explains commits, PRs, and diffs in plain english.
+          pick a repo, then: explain the last 5 commits, what changed in pr
+          #42, diff main..release. answers run on your own llm key.
         </p>
+        {error && ERRORS[error] ? (
+          <p className="mt-4 text-muted-foreground">{ERRORS[error]}</p>
+        ) : null}
+        {needsSetup ? (
+          isLocalHost(host) ? (
+            <SetupBlock origin={`http://${host}`} />
+          ) : (
+            <p className="mt-4 text-muted-foreground">
+              github oauth is not configured on this server.
+            </p>
+          )
+        ) : (
+          <p className="mt-7">
+            <a
+              href="/api/auth/login"
+              className="border-b border-border pb-0.5 font-semibold hover:border-foreground"
+            >
+              sign in with github <span className="text-wd-green">→</span>
+            </a>
+          </p>
+        )}
       </section>
     </div>
   );
