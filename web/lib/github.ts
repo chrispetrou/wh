@@ -119,6 +119,11 @@ export async function compareRange(
   base: string,
   head: string
 ): Promise<ExplainInput> {
+  if (!head) {
+    // open range (base..): compare against the default branch tip
+    const info = await gh(token, `/repos/${owner}/${repo}`);
+    head = ((await info.json()) as { default_branch: string }).default_branch;
+  }
   const path = `/repos/${owner}/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`;
   const [diffRes, jsonRes] = await Promise.all([
     gh(token, path, "application/vnd.github.diff"),

@@ -39,11 +39,28 @@ describe("parseCommand", () => {
     });
   });
 
+  it("accepts cli-style input", () => {
+    expect(parseCommand("wd explain HEAD~3..")).toEqual({ kind: "last", n: 3 });
+    expect(parseCommand("HEAD~5..HEAD")).toEqual({ kind: "last", n: 5 });
+    expect(parseCommand("wd explain")).toEqual({ kind: "last", n: 1 });
+    expect(parseCommand("explain")).toEqual({ kind: "last", n: 1 });
+    expect(parseCommand("last 4")).toEqual({ kind: "last", n: 4 });
+    expect(parseCommand("wd explain main..dev")).toEqual({
+      kind: "range",
+      base: "main",
+      head: "dev",
+    });
+    // open head means the default branch tip (resolved server-side)
+    expect(parseCommand("main..")).toEqual({ kind: "range", base: "main", head: "" });
+    expect(parseCommand("v1.2..HEAD")).toEqual({ kind: "range", base: "v1.2", head: "" });
+  });
+
   it("rejects everything else", () => {
     expect(parseCommand("")).toBeNull();
     expect(parseCommand("hello")).toBeNull();
     expect(parseCommand("explain everything")).toBeNull();
     expect(parseCommand("last commits")).toBeNull();
-    expect(parseCommand("main..")).toBeNull();
+    expect(parseCommand("wd ls")).toBeNull();
+    expect(parseCommand("..main")).toBeNull();
   });
 });

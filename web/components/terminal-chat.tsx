@@ -561,6 +561,9 @@ export function TerminalChat({
     historyRef.current.unshift(raw);
     echo(raw);
     if (!parseCommand(raw)) {
+      if (/^wd\s/i.test(raw)) {
+        muted(["the worktree commands (new, ls, switch, rm) live in the cli: /wd"]);
+      }
       muted([commandHint]);
       return;
     }
