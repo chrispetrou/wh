@@ -403,7 +403,7 @@ export function TerminalChat({
   const slash = (raw: string) => {
     const [cmd, ...rest] = raw.slice(1).split(" ");
     const arg = rest.join(" ").trim();
-    switch (cmd) {
+    switch (cmd.toLowerCase()) {
       case "help":
         echo(raw);
         muted(HELP);
@@ -435,9 +435,10 @@ export function TerminalChat({
         break;
       case "theme": {
         echo(raw);
-        if (arg === "auto" || arg === "light" || arg === "dark") {
-          applyTheme(arg as Theme);
-          muted([`theme set to ${arg}`]);
+        const t = arg.toLowerCase();
+        if (t === "auto" || t === "light" || t === "dark") {
+          applyTheme(t as Theme);
+          muted([`theme set to ${t}`]);
         } else {
           muted([`theme is ${currentTheme()}. usage: /theme auto|light|dark`]);
         }
@@ -462,9 +463,9 @@ export function TerminalChat({
         break;
       case "font":
         echo(raw);
-        if (FONTS.includes(arg)) {
-          applyFont(arg);
-          muted([`font set to ${arg}`]);
+        if (FONTS.includes(arg.toLowerCase())) {
+          applyFont(arg.toLowerCase());
+          muted([`font set to ${arg.toLowerCase()}`]);
         } else {
           muted([
             `font is ${pref("wd_font") || "default"}. usage: /font ${FONTS.join("|")}`,
@@ -485,15 +486,17 @@ export function TerminalChat({
         }
         break;
       }
-      case "ligatures":
+      case "ligatures": {
         echo(raw);
-        if (arg === "on" || arg === "off") {
-          applyLigatures(arg === "on");
-          muted([`ligatures ${arg} (visible with fira or jetbrains)`]);
+        const lig = arg.toLowerCase();
+        if (lig === "on" || lig === "off") {
+          applyLigatures(lig === "on");
+          muted([`ligatures ${lig} (visible with fira or jetbrains)`]);
         } else {
           muted(["usage: /ligatures on|off"]);
         }
         break;
+      }
       case "show":
         echo(raw);
         if (!lastCmdRef.current) {

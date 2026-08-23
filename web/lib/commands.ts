@@ -1,13 +1,19 @@
-// deterministic chat grammar: three shapes, nothing fuzzy. the llm is
-// only used to summarize, never to guess intent.
+// deterministic chat grammar: three intents, a small synonym surface,
+// nothing fuzzy. the llm is only used to summarize, never to guess
+// intent.
 
 export type Command =
   | { kind: "last"; n: number }
   | { kind: "pr"; num: number }
   | { kind: "range"; base: string; head: string };
 
-const LAST = /^(?:explain\s+(?:the\s+)?)?last\s+(\d{1,3})(?:\s+commits?)?$/i;
-const PR = /^(?:what\s+changed\s+in\s+)?pr\s*#?\s*(\d{1,6})$/i;
+// leading verbs people naturally type before any of the three shapes
+const VERB = /^(?:(?:explain|summarize|show)(?:\s+me)?|what\s+changed\s+in)\s+/i;
+// "last N commits", "last commit", "the last 5", ...
+const LAST = /^(?:the\s+)?last(?:\s+(\d{1,3}))?(\s+commits?)?$/i;
+// "pr 42", "pull request #42", "#42"
+const PR = /^(?:the\s+)?(?:pr|pull\s+request)\s*#?\s*(\d{1,6})$/i;
+const HASH = /^#(\d{1,6})$/;
 // lazy match splits at the first run of 2+ dots; git forbids ".." inside
 // refnames, so dotted branch names like v1.2 parse correctly. the head
 // side may be empty (cli-style open ranges like HEAD~3..)
@@ -20,17 +26,25 @@ function clampN(s: string): number {
 export function parseCommand(raw: string): Command | null {
   let input = raw.trim().replace(/\s+/g, " ");
   if (!input) return null;
-  // cli muscle memory: "wd explain HEAD~3.." works here too
-  input = input.replace(/^wd\s+/i, "");
+  // cli muscle memory ("wd explain HEAD~3..") and trailing question marks
+  input = input.replace(/^wd\s+/i, "").replace(/\s*\?+$/, "");
   if (/^explain$/i.test(input)) return { kind: "last", n: 1 }; // cli default
 
-  const last = LAST.exec(input);
-  if (last) return { kind: "last", n: clampN(last[1]) };
+  const phrase = input.replace(VERB, "");
 
-  const pr = PR.exec(input);
+  // a number, or the singular "last commit"; bare plural is too ambiguous
+  const last = LAST.exec(phrase);
+  if (last) {
+    const n = last[1] ? clampN(last[1]) : /^\s+commit$/i.test(last[2] ?? "") ? 1 : 0;
+    if (n) return { kind: "last", n };
+  }
+
+  const pr = PR.exec(phrase) ?? HASH.exec(phrase);
   if (pr) return { kind: "pr", num: parseInt(pr[1], 10) };
 
-  const rangeInput = input.replace(/^(?:diff|explain)\s+/i, "");
+  const rangeInput = input
+    .replace(/^(?:diff|compare|explain|summarize|show)\s+/i, "")
+    .replace(/\s+and\s+(?:summarize|explain)(?:\s+it)?$/i, "");
   const range = RANGE.exec(rangeInput);
   if (range) {
     const base = range[1];

@@ -10,6 +10,11 @@ describe("parseCommand", () => {
     expect(parseCommand("last 1 commit")).toEqual({ kind: "last", n: 1 });
     expect(parseCommand("LAST 12 COMMITS")).toEqual({ kind: "last", n: 12 });
     expect(parseCommand("last 999 commits")).toEqual({ kind: "last", n: 250 });
+    expect(parseCommand("summarize the last 5 commits")).toEqual({ kind: "last", n: 5 });
+    expect(parseCommand("show me the last 3 commits")).toEqual({ kind: "last", n: 3 });
+    expect(parseCommand("what changed in the last 5 commits")).toEqual({ kind: "last", n: 5 });
+    expect(parseCommand("explain the last commit")).toEqual({ kind: "last", n: 1 });
+    expect(parseCommand("last commit")).toEqual({ kind: "last", n: 1 });
   });
 
   it("parses pr shapes", () => {
@@ -19,6 +24,10 @@ describe("parseCommand", () => {
     });
     expect(parseCommand("pr 42")).toEqual({ kind: "pr", num: 42 });
     expect(parseCommand("PR#7")).toEqual({ kind: "pr", num: 7 });
+    expect(parseCommand("explain pr 42")).toEqual({ kind: "pr", num: 42 });
+    expect(parseCommand("pull request 42")).toEqual({ kind: "pr", num: 42 });
+    expect(parseCommand("#42")).toEqual({ kind: "pr", num: 42 });
+    expect(parseCommand("what changed in pr #42?")).toEqual({ kind: "pr", num: 42 });
   });
 
   it("parses ranges, including dotted branch names", () => {
@@ -36,6 +45,16 @@ describe("parseCommand", () => {
       kind: "range",
       base: "v1.2",
       head: "main",
+    });
+    expect(parseCommand("diff main..release and summarize")).toEqual({
+      kind: "range",
+      base: "main",
+      head: "release",
+    });
+    expect(parseCommand("compare main..dev")).toEqual({
+      kind: "range",
+      base: "main",
+      head: "dev",
     });
   });
 
