@@ -148,10 +148,20 @@ options: `/help`, `/repos`, `/key`, `/model`, `/theme`, `/font`
 closes; up/down recalls history, ctrl+r searches it, esc stops a running
 explain, and cmd+k jumps back to the repo picker.
 
+After an explain, plain words are follow-up questions: "why is that
+risky?", "which files touch auth?". Answers stay grounded in the same
+diff; a new command or /clear starts fresh. The conversation lives in
+your browser only and is resent per turn (with a prompt-cache
+breakpoint on the diff for anthropic keys, so follow-ups stay cheap).
+
 Repos open as tabs: a quiet tab bar under the header lets you work on
 several repos at once, each with its own history. A streaming explain
 keeps going while you are on another tab. ctrl+t opens a new tab via
 the picker, ctrl+1..9 switches, × closes.
+
+Hover any control for its purpose and shortcut, and a faint status
+line under the prompt shows the provider and model in use, plus
+whether follow-ups are armed.
 
 Notes:
 
