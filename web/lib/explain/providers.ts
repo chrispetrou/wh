@@ -7,6 +7,14 @@ export function detectProvider(key: string): ProviderName {
   return key.startsWith("sk-ant-") ? "anthropic" : "openai";
 }
 
+export const DEFAULT_MODELS: Record<ProviderName, string> = {
+  anthropic: "claude-opus-5",
+  openai: "gpt-5-mini",
+};
+
+// model ids as accepted by providers; also guards the request body
+export const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
+
 export interface ProviderRequest {
   url: string;
   headers: HeadersInit;
@@ -17,8 +25,10 @@ export function buildRequest(
   provider: ProviderName,
   key: string,
   system: string,
-  user: string
+  user: string,
+  model?: string
 ): ProviderRequest {
+  const chosen = model || DEFAULT_MODELS[provider];
   if (provider === "anthropic") {
     return {
       url: `${process.env.WD_ANTHROPIC_URL ?? "https://api.anthropic.com"}/v1/messages`,
@@ -28,7 +38,7 @@ export function buildRequest(
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-opus-5",
+        model: chosen,
         max_tokens: 4096,
         stream: true,
         system,
@@ -43,7 +53,7 @@ export function buildRequest(
       authorization: `Bearer ${key}`,
     },
     body: JSON.stringify({
-      model: "gpt-5-mini",
+      model: chosen,
       stream: true,
       messages: [
         { role: "system", content: system },

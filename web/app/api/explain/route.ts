@@ -9,7 +9,7 @@ import {
 } from "@/lib/github";
 import { defaultCaps, defaultRules, preprocess, stats } from "@/lib/explain/preprocess";
 import { prompt } from "@/lib/explain/prompt";
-import { buildRequest, detectProvider, sseToText } from "@/lib/explain/providers";
+import { buildRequest, detectProvider, MODEL_RE, sseToText } from "@/lib/explain/providers";
 import { getSession } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -84,9 +84,11 @@ export async function POST(req: NextRequest) {
   }
 
   if (!key) return err(401, "paste an api key first");
+  const model = req.headers.get("x-wd-model") ?? "";
+  if (model && !MODEL_RE.test(model)) return err(400, "invalid model name");
   const { system, user } = prompt(payload);
   const provider = detectProvider(key);
-  const request = buildRequest(provider, key, system, user);
+  const request = buildRequest(provider, key, system, user, model || undefined);
 
   const upstream = await fetch(request.url, {
     method: "POST",

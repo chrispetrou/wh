@@ -132,7 +132,9 @@ LLM key: pasted once into the terminal, stored only in your browser, sent
 per request, never stored or logged server-side.
 
 The terminal also speaks slash commands: `/help`, `/repos`, `/key`,
-`/theme auto|light|dark`, `/font default|fira|jetbrains|plex`,
+`/model` (pick any model id; the default is claude-opus-5 or
+gpt-5-mini by key type), `/theme auto|light|dark`,
+`/font default|fira|jetbrains|plex`,
 `/fontsize`, `/ligatures`, `/show` (the raw diff payload, pager-colored),
 `/export` (save the transcript), `/account`, `/info`, `/wd`, `/stop`,
 `/clear`, `/logout`. Tab completes, up/down recalls history, ctrl+r

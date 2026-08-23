@@ -64,6 +64,7 @@ const HELP = [
   "slash commands:",
   "  /repos            switch repo",
   "  /key <value>      set the llm key (/key clear removes it)",
+  "  /model <name>     pick the model (/model default resets)",
   "  /theme <t>        auto, light, or dark",
   "  /account          who is signed in",
   "  /info             repo, provider, theme, font",
@@ -95,6 +96,7 @@ const SLASH_CMDS = [
   "/help",
   "/repos",
   "/key",
+  "/model",
   "/theme",
   "/account",
   "/info",
@@ -174,12 +176,19 @@ function writeKey(v: string) {
   }
 }
 
+const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
+const MODEL_SUGGESTIONS = [
+  "anthropic: claude-opus-5 (default), claude-sonnet-5, claude-haiku-4-5",
+  "openai: gpt-5-mini (default), gpt-5",
+];
+
 function providerInfo(): string {
   const key = readKey();
   if (!key) return "no key set";
-  return key.startsWith("sk-ant-")
-    ? "anthropic · claude-opus-5"
-    : "openai · gpt-5-mini";
+  const provider = key.startsWith("sk-ant-") ? "anthropic" : "openai";
+  const fallback = provider === "anthropic" ? "claude-opus-5" : "gpt-5-mini";
+  const override = pref("wd_model");
+  return `${provider} · ${override || fallback}${override ? " (custom)" : ""}`;
 }
 
 export function TerminalChat({
@@ -329,6 +338,7 @@ export function TerminalChat({
         headers: {
           "content-type": "application/json",
           "x-wd-provider-key": readKey(),
+          "x-wd-model": pref("wd_model"),
         },
         body: JSON.stringify({ owner, repo, input: command, raw }),
         signal: abort.signal,
@@ -433,6 +443,22 @@ export function TerminalChat({
           saveKey(arg, "/key sk-***");
         }
         break;
+      case "model": {
+        echo(raw);
+        const m = arg.trim();
+        if (!m) {
+          muted([`model: ${providerInfo()}`, "usage: /model <name> or /model default", ...MODEL_SUGGESTIONS]);
+        } else if (m.toLowerCase() === "default") {
+          setPref("wd_model", "");
+          muted([`model reset to the provider default (${providerInfo()})`]);
+        } else if (MODEL_RE.test(m)) {
+          setPref("wd_model", m);
+          muted([`model set to ${m}`, "it is sent per request, like the key."]);
+        } else {
+          muted(["that does not look like a model id."]);
+        }
+        break;
+      }
       case "theme": {
         echo(raw);
         const t = arg.toLowerCase();
