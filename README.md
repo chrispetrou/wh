@@ -143,14 +143,19 @@ To run it yourself (Node 20+):
 
 ```
 cd web
-cp .env.example .env.local   # register a github oauth app, fill in
 npm install
-npm test                     # golden fixtures + grammar
 npm run dev
 ```
 
-The OAuth app callback must be `$APP_URL/api/auth/callback`. The shared
-spec is embedded at build time by `scripts/sync-shared.mjs`; edit
+Then open http://localhost:3000: the first run shows a one-time setup
+screen that links to a prefilled GitHub OAuth-app form and saves the
+pasted client id and secret to `web/.env.local` for you. The setup
+screen only appears on localhost while unconfigured; deployed instances
+are configured through the environment instead (see `.env.example`, the
+callback must be `$APP_URL/api/auth/callback`).
+
+`npm test` runs the golden fixtures + grammar suites. The shared spec is
+embedded at build time by `scripts/sync-shared.mjs`; edit
 `shared/prompts/`, never the generated file.
 
 ## building

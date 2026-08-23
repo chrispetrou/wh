@@ -3,6 +3,9 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 export async function GET() {
+  if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
+    return NextResponse.redirect(new URL("/?error=config", process.env.APP_URL));
+  }
   const state = randomBytes(16).toString("hex");
   const jar = await cookies();
   jar.set("wd_oauth_state", state, {
