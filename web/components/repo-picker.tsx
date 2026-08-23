@@ -21,11 +21,30 @@ export function RepoPicker({ repos }: { repos: RepoItem[] }) {
   const [sel, setSel] = useState(0);
 
   const rowsRef = useRef<HTMLDivElement>(null);
+  const [ordered, setOrdered] = useState(repos);
+
+  // recently opened repos float to the top (stable for the rest)
+  useEffect(() => {
+    try {
+      const recent: string[] = JSON.parse(localStorage.getItem("wd_recent") ?? "[]");
+      if (!recent.length) return;
+      const rank = new Map(recent.map((name, i) => [name, i]));
+      setOrdered(
+        [...repos].sort(
+          (a, b) =>
+            (rank.get(a.fullName) ?? Number.MAX_SAFE_INTEGER) -
+            (rank.get(b.fullName) ?? Number.MAX_SAFE_INTEGER)
+        )
+      );
+    } catch {
+      // ignore
+    }
+  }, [repos]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
-    return repos.filter((r) => r.fullName.toLowerCase().includes(q));
-  }, [repos, query]);
+    return ordered.filter((r) => r.fullName.toLowerCase().includes(q));
+  }, [ordered, query]);
   const selected = Math.min(sel, Math.max(filtered.length - 1, 0));
 
   // keep the keyboard selection visible inside the scrolling list

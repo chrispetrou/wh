@@ -22,6 +22,8 @@ const CLS: Record<Cls, string> = {
 };
 
 const KEY_STORE = "wd_key";
+const RECENT_STORE = "wd_recent";
+const LOG_LIMIT = 200;
 
 const HELP = [
   "repo commands:",
@@ -34,9 +36,30 @@ const HELP = [
   "  /theme <t>        auto, light, or dark",
   "  /account          who is signed in",
   "  /info             repo, provider, theme",
+  "  /stop             stop a running explain (esc works too)",
   "  /clear            clear the screen",
   "  /logout           sign out",
 ];
+
+const SLASH_CMDS = [
+  "/help",
+  "/repos",
+  "/key",
+  "/theme",
+  "/account",
+  "/info",
+  "/stop",
+  "/clear",
+  "/logout",
+];
+
+function commonPrefix(items: string[]): string {
+  let p = items[0] ?? "";
+  for (const s of items) {
+    while (!s.startsWith(p)) p = p.slice(0, -1);
+  }
+  return p;
+}
 
 function readKey(): string {
   try {
@@ -91,11 +114,32 @@ export function TerminalChat({
     push(texts.map((text) => ({ text, cls: "o" as Cls })));
   const echo = (text: string) => push([{ text: `${prompt} ${text}`, cls: "p" }]);
 
+  const logStore = `wd_log:${owner}/${repo}`;
+
   useEffect(() => {
     if (initRef.current) return; // strict mode re-runs mount effects
     initRef.current = true;
     const present = readKey() !== "";
     setHasKey(present);
+    // remember this repo for the picker's recent-first ordering
+    try {
+      const recent: string[] = JSON.parse(localStorage.getItem(RECENT_STORE) ?? "[]");
+      const name = `${owner}/${repo}`;
+      const next = [name, ...recent.filter((r) => r !== name)].slice(0, 5);
+      localStorage.setItem(RECENT_STORE, JSON.stringify(next));
+    } catch {
+      // ignore
+    }
+    // restore this repo's log from the session, if any
+    try {
+      const stored = JSON.parse(sessionStorage.getItem(logStore) ?? "[]") as Line[];
+      if (Array.isArray(stored) && stored.length) {
+        setLines(stored);
+        return;
+      }
+    } catch {
+      // ignore
+    }
     if (!present) {
       muted([
         "paste an anthropic or openai api key to enable explanations.",
@@ -106,6 +150,19 @@ export function TerminalChat({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // persist the log so a refresh or repo switch does not wipe it
+  useEffect(() => {
+    try {
+      if (lines.length) {
+        sessionStorage.setItem(logStore, JSON.stringify(lines.slice(-LOG_LIMIT)));
+      } else {
+        sessionStorage.removeItem(logStore);
+      }
+    } catch {
+      // ignore
+    }
+  }, [lines, logStore]);
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
@@ -227,6 +284,11 @@ export function TerminalChat({
         break;
       case "clear":
         setLines([]);
+        try {
+          sessionStorage.removeItem(logStore);
+        } catch {
+          // ignore
+        }
         break;
       case "key":
         if (!arg) {
@@ -266,6 +328,11 @@ export function TerminalChat({
           `provider  ${providerInfo()}`,
           `theme     ${currentTheme()}`,
         ]);
+        break;
+      case "stop":
+        echo(raw);
+        if (busy) abortRef.current?.abort();
+        else muted(["nothing running."]);
         break;
       case "logout":
         echo(raw);
@@ -308,7 +375,22 @@ export function TerminalChat({
     void run(raw);
   };
 
+  // slash autocomplete: matches while typing a bare /command
+  const slashMatches =
+    input.startsWith("/") && !input.includes(" ")
+      ? SLASH_CMDS.filter((c) => c.startsWith(input))
+      : [];
+  const showMatches =
+    slashMatches.length > 0 && !(slashMatches.length === 1 && slashMatches[0] === input);
+
   const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Tab" && slashMatches.length > 0) {
+      e.preventDefault();
+      const target =
+        slashMatches.length === 1 ? slashMatches[0] : commonPrefix(slashMatches);
+      if (target.length > input.length) setInput(target);
+      return;
+    }
     if (e.key === "Enter") {
       e.preventDefault();
       submit();
@@ -361,6 +443,9 @@ export function TerminalChat({
           aria-label="command input"
         />
       </div>
+      {showMatches ? (
+        <div className="pt-1 text-wd-faint">{slashMatches.join("  ")}</div>
+      ) : null}
     </div>
   );
 }

@@ -250,6 +250,18 @@
   color: var(--wd-faint);
 }
 
+/* keyboard users get a visible hairline focus ring; the chat and picker
+   inputs keep the caret as their affordance */
+a:focus-visible,
+button:focus-visible,
+.field-input:focus-visible {
+  outline: 1px solid var(--muted-foreground);
+  outline-offset: 2px;
+}
+.term-input:focus-visible {
+  outline: none;
+}
+
 @media (max-width: 560px) {
   .app-main {
     font-size: 12px;
