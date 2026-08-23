@@ -127,18 +127,26 @@ what changed in pr #42
 diff main..release
 ```
 
+Phrasing is flexible: `summarize`, `show me`, and `what changed in` work
+as leading verbs, `pull request 42` and bare `#42` name a PR, and
+cli-style input like `wd explain HEAD~3..` or open ranges (`main..`)
+works exactly as it does in the terminal.
+
 It uses the same explain spec as the CLI (`shared/prompts/`), on your own
 LLM key: pasted once into the terminal, stored only in your browser, sent
-per request, never stored or logged server-side.
+per request, never stored or logged server-side. `/model` picks the model
+the same way (any id accepted, stored in your browser, sent per request);
+its suggestions follow your key's provider, defaulting to claude-opus-5
+for anthropic keys and gpt-5-mini for openai keys.
 
-The terminal also speaks slash commands: `/help`, `/repos`, `/key`,
-`/model` (pick any model id; the default is claude-opus-5 or
-gpt-5-mini by key type), `/theme auto|light|dark`,
-`/font default|fira|jetbrains|plex`,
-`/fontsize`, `/ligatures`, `/show` (the raw diff payload, pager-colored),
-`/export` (save the transcript), `/account`, `/info`, `/wd`, `/stop`,
-`/clear`, `/logout`. Tab completes, up/down recalls history, ctrl+r
-searches it, esc stops a running explain, cmd+k jumps to the repo picker.
+Typing `/` opens a completion menu of every slash command with its
+options: `/help`, `/repos`, `/key`, `/model`, `/theme`, `/font`
+(fira, jetbrains, plex, or the system default), `/fontsize`,
+`/ligatures`, `/show` (the raw diff payload, pager-colored), `/export`
+(save the transcript), `/account`, `/info`, `/wd`, `/stop`, `/clear`,
+`/logout`. Arrows navigate the menu, tab completes, enter uses, esc
+closes; up/down recalls history, ctrl+r searches it, esc stops a running
+explain, and cmd+k jumps back to the repo picker.
 
 Notes:
 
