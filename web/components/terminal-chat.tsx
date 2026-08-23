@@ -94,29 +94,31 @@ const WD_HELP = [
 
 const FONTS = ["default", "fira", "jetbrains", "plex"];
 
+const ANTHROPIC_MODELS = ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"];
+const OPENAI_MODELS = ["gpt-5-mini", "gpt-5"];
+
+// suggestions follow the stored key's provider; no key shows both
+function modelArgs(): string[] {
+  const key = readKey();
+  if (!key) return ["default", ...ANTHROPIC_MODELS, ...OPENAI_MODELS];
+  return [
+    "default",
+    ...(key.startsWith("sk-ant-") ? ANTHROPIC_MODELS : OPENAI_MODELS),
+  ];
+}
+
 // the completion menu: commands, their descriptions, and their options
 interface CmdSpec {
   name: string;
   desc: string;
-  args?: string[];
+  args?: string[] | (() => string[]);
 }
 
 const COMMANDS: CmdSpec[] = [
   { name: "/help", desc: "all commands and keys" },
   { name: "/repos", desc: "switch repo" },
   { name: "/key", desc: "set the llm key", args: ["clear"] },
-  {
-    name: "/model",
-    desc: "pick the model",
-    args: [
-      "default",
-      "claude-opus-5",
-      "claude-sonnet-5",
-      "claude-haiku-4-5",
-      "gpt-5-mini",
-      "gpt-5",
-    ],
-  },
+  { name: "/model", desc: "pick the model", args: modelArgs },
   { name: "/theme", desc: "light or dark", args: ["auto", "light", "dark"] },
   { name: "/font", desc: "terminal font", args: FONTS },
   {
@@ -151,8 +153,9 @@ function menuFor(input: string): Menu | null {
   }
   const spec = COMMANDS.find((c) => c.name === input.slice(0, sp).toLowerCase());
   if (!spec?.args) return null;
+  const args = typeof spec.args === "function" ? spec.args() : spec.args;
   const partial = input.slice(sp + 1).toLowerCase();
-  const rows = spec.args.filter((a) => a.startsWith(partial));
+  const rows = args.filter((a) => a.startsWith(partial));
   if (rows.length === 1 && rows[0] === partial) return null; // fully typed
   return rows.length ? { stage: "arg", rows, spec } : null;
 }
@@ -213,10 +216,34 @@ function writeKey(v: string) {
 }
 
 const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
-const MODEL_SUGGESTIONS = [
-  "anthropic: claude-opus-5 (default), claude-sonnet-5, claude-haiku-4-5",
-  "openai: gpt-5-mini (default), gpt-5",
-];
+
+function modelSuggestionLines(): string[] {
+  const key = readKey();
+  if (!key) {
+    return [
+      "anthropic keys: claude-opus-5 (default), claude-sonnet-5, claude-haiku-4-5",
+      "openai keys: gpt-5-mini (default), gpt-5",
+    ];
+  }
+  return key.startsWith("sk-ant-")
+    ? ["your key is anthropic: claude-opus-5 (default), claude-sonnet-5, claude-haiku-4-5"]
+    : ["your key is openai: gpt-5-mini (default), gpt-5"];
+}
+
+// heuristic guard: a model from the other provider's family will be
+// rejected upstream, better to say so at set time
+function modelMismatch(m: string): string | null {
+  const key = readKey();
+  if (!key) return null;
+  const anthropicKey = key.startsWith("sk-ant-");
+  if (anthropicKey && m.toLowerCase().startsWith("gpt")) {
+    return "note: that looks like an openai model, but your key is anthropic.";
+  }
+  if (!anthropicKey && m.toLowerCase().startsWith("claude")) {
+    return "note: that looks like an anthropic model, but your key is openai.";
+  }
+  return null;
+}
 
 function providerInfo(): string {
   const key = readKey();
@@ -444,6 +471,12 @@ export function TerminalChat({
       { text: `${prompt} ${echoText}`, cls: "p" },
       { text: "→ key saved locally", cls: "g" },
     ]);
+    const override = pref("wd_model");
+    if (override && modelMismatch(override)) {
+      muted([
+        `your saved model (${override}) does not match this key; /model default resets it.`,
+      ]);
+    }
   };
 
   const slash = (raw: string) => {
@@ -483,13 +516,22 @@ export function TerminalChat({
         echo(raw);
         const m = arg.trim();
         if (!m) {
-          muted([`model: ${providerInfo()}`, "usage: /model <name> or /model default", ...MODEL_SUGGESTIONS]);
+          muted([
+            `model: ${providerInfo()}`,
+            "usage: /model <name> or /model default",
+            ...modelSuggestionLines(),
+          ]);
         } else if (m.toLowerCase() === "default") {
           setPref("wd_model", "");
           muted([`model reset to the provider default (${providerInfo()})`]);
         } else if (MODEL_RE.test(m)) {
           setPref("wd_model", m);
-          muted([`model set to ${m}`, "it is sent per request, like the key."]);
+          const warn = modelMismatch(m);
+          muted([
+            `model set to ${m}`,
+            "it is sent per request, like the key.",
+            ...(warn ? [warn] : []),
+          ]);
         } else {
           muted(["that does not look like a model id."]);
         }
