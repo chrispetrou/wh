@@ -1,8 +1,17 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { SiteHeader } from "@/components/site-header";
-import { Term } from "@/components/term";
+import { AppShell } from "@/components/app-shell";
 import { TerminalChat } from "@/components/terminal-chat";
 import { getSession } from "@/lib/session";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ owner: string; repo: string }>;
+}): Promise<Metadata> {
+  const { owner, repo } = await params;
+  return { title: `${owner}/${repo} · wd` };
+}
 
 export default async function ChatPage({
   params,
@@ -14,13 +23,8 @@ export default async function ChatPage({
   const { owner, repo } = await params;
 
   return (
-    <div className="mx-auto max-w-[880px] px-6 pb-10">
-      <SiteHeader login={session.login} section={`${owner}/${repo}`} />
-      <div className="mt-12 max-[560px]:mt-8">
-        <Term title={`${owner}/${repo}`} hint="chat">
-          <TerminalChat owner={owner} repo={repo} />
-        </Term>
-      </div>
-    </div>
+    <AppShell login={session.login} section={`${owner}/${repo}`}>
+      <TerminalChat owner={owner} repo={repo} login={session.login} />
+    </AppShell>
   );
 }

@@ -50,11 +50,19 @@ export function RepoPicker({ repos }: { repos: RepoItem[] }) {
     }
   };
 
+  const inputRef = useRef<HTMLInputElement>(null);
+
   return (
-    <div className="term-fill">
+    <div
+      className="flex min-h-0 flex-1 flex-col"
+      onClick={() => {
+        if (!window.getSelection()?.toString()) inputRef.current?.focus();
+      }}
+    >
       <div className="flex items-baseline gap-2">
         <span className="text-muted-foreground">? select repo</span>
         <input
+          ref={inputRef}
           className="term-input"
           value={query}
           onChange={(e) => {

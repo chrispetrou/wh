@@ -1,9 +1,11 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { AppShell } from "@/components/app-shell";
 import { RepoPicker } from "@/components/repo-picker";
-import { SiteHeader } from "@/components/site-header";
-import { Term } from "@/components/term";
 import { GithubError, listRepos } from "@/lib/github";
 import { getSession } from "@/lib/session";
+
+export const metadata: Metadata = { title: "repos · wd" };
 
 export default async function ReposPage() {
   const session = await getSession();
@@ -18,13 +20,8 @@ export default async function ReposPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[880px] px-6 pb-10">
-      <SiteHeader login={session.login} section="repos" />
-      <div className="mt-12 max-[560px]:mt-8">
-        <Term title="wd" hint="repos">
-          <RepoPicker repos={repos} />
-        </Term>
-      </div>
-    </div>
+    <AppShell login={session.login} section="repos">
+      <RepoPicker repos={repos} />
+    </AppShell>
   );
 }

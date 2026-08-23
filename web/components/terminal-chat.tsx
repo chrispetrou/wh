@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { commandHint, parseCommand } from "@/lib/commands";
+import { applyTheme, currentTheme, type Theme } from "./theme-toggle";
 
 type Cls = "p" | "c" | "o" | "g" | "a" | "";
 
@@ -21,6 +23,21 @@ const CLS: Record<Cls, string> = {
 
 const KEY_STORE = "wd_key";
 
+const HELP = [
+  "repo commands:",
+  "  explain the last N commits",
+  "  what changed in pr #N",
+  "  diff base..head",
+  "slash commands:",
+  "  /repos            switch repo",
+  "  /key <value>      set the llm key (/key clear removes it)",
+  "  /theme <t>        auto, light, or dark",
+  "  /account          who is signed in",
+  "  /info             repo, provider, theme",
+  "  /clear            clear the screen",
+  "  /logout           sign out",
+];
+
 function readKey(): string {
   try {
     return localStorage.getItem(KEY_STORE) ?? "";
@@ -38,19 +55,41 @@ function writeKey(v: string) {
   }
 }
 
-export function TerminalChat({ owner, repo }: { owner: string; repo: string }) {
+function providerInfo(): string {
+  const key = readKey();
+  if (!key) return "no key set";
+  return key.startsWith("sk-ant-")
+    ? "anthropic · claude-opus-5"
+    : "openai · gpt-5-mini";
+}
+
+export function TerminalChat({
+  owner,
+  repo,
+  login,
+}: {
+  owner: string;
+  repo: string;
+  login?: string;
+}) {
+  const router = useRouter();
   const [lines, setLines] = useState<Line[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [hasKey, setHasKey] = useState(true); // corrected on mount
   const logRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const partialRef = useRef("");
   const initRef = useRef(false);
+  const historyRef = useRef<string[]>([]);
+  const [histPos, setHistPos] = useState(-1);
   const prompt = `${owner}/${repo} $`;
 
   const push = (rows: Line[]) => setLines((prev) => [...prev, ...rows]);
-  const muted = (texts: string[]) => push(texts.map((text) => ({ text, cls: "o" as Cls })));
+  const muted = (texts: string[]) =>
+    push(texts.map((text) => ({ text, cls: "o" as Cls })));
+  const echo = (text: string) => push([{ text: `${prompt} ${text}`, cls: "p" }]);
 
   useEffect(() => {
     if (initRef.current) return; // strict mode re-runs mount effects
@@ -66,17 +105,6 @@ export function TerminalChat({ owner, repo }: { owner: string; repo: string }) {
       muted([commandHint]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // track the visual viewport so the input stays above soft keyboards
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () =>
-      document.documentElement.style.setProperty("--vvh", `${vv.height}px`);
-    update();
-    vv.addEventListener("resize", update);
-    return () => vv.removeEventListener("resize", update);
   }, []);
 
   useEffect(() => {
@@ -176,39 +204,103 @@ export function TerminalChat({ owner, repo }: { owner: string; repo: string }) {
     }
   };
 
+  const saveKey = (value: string, echoText: string) => {
+    writeKey(value);
+    setHasKey(true);
+    push([
+      { text: `${prompt} ${echoText}`, cls: "p" },
+      { text: "→ key saved locally", cls: "g" },
+    ]);
+  };
+
+  const slash = (raw: string) => {
+    const [cmd, ...rest] = raw.slice(1).split(" ");
+    const arg = rest.join(" ").trim();
+    switch (cmd) {
+      case "help":
+        echo(raw);
+        muted(HELP);
+        break;
+      case "repos":
+        echo(raw);
+        router.push("/repos");
+        break;
+      case "clear":
+        setLines([]);
+        break;
+      case "key":
+        if (!arg) {
+          echo(raw);
+          muted([hasKey ? `key set (${providerInfo()})` : "no key set", "usage: /key <value> or /key clear"]);
+        } else if (arg === "clear") {
+          writeKey("");
+          setHasKey(false);
+          echo(raw);
+          muted(["key removed from this browser."]);
+        } else {
+          saveKey(arg, "/key sk-***");
+        }
+        break;
+      case "theme": {
+        echo(raw);
+        if (arg === "auto" || arg === "light" || arg === "dark") {
+          applyTheme(arg as Theme);
+          muted([`theme set to ${arg}`]);
+        } else {
+          muted([`theme is ${currentTheme()}. usage: /theme auto|light|dark`]);
+        }
+        break;
+      }
+      case "account":
+        echo(raw);
+        muted(
+          login
+            ? [`signed in as ${login}`, `github.com/${login}`]
+            : ["not signed in"]
+        );
+        break;
+      case "info":
+        echo(raw);
+        muted([
+          `repo      ${owner}/${repo}`,
+          `provider  ${providerInfo()}`,
+          `theme     ${currentTheme()}`,
+        ]);
+        break;
+      case "logout":
+        echo(raw);
+        muted(["signing out..."]);
+        void fetch("/api/auth/logout", { method: "POST" }).finally(() => {
+          window.location.href = "/";
+        });
+        break;
+      default:
+        echo(raw);
+        muted([`unknown command: /${cmd}. try /help`]);
+    }
+  };
+
   const submit = () => {
     const raw = input.trim();
     if (!raw) return;
     setInput("");
+    setHistPos(-1);
 
-    if (raw === "key clear") {
-      writeKey("");
-      setHasKey(false);
-      push([{ text: `${prompt} key clear`, cls: "p" }]);
-      muted(["key removed from this browser."]);
+    if (raw.startsWith("/")) {
+      if (!raw.startsWith("/key ")) historyRef.current.unshift(raw);
+      slash(raw);
       return;
     }
-    if (raw.startsWith("key ")) {
-      writeKey(raw.slice(4).trim());
-      setHasKey(true);
-      push([
-        { text: `${prompt} key sk-***`, cls: "p" },
-        { text: "→ key saved locally", cls: "g" },
-      ]);
-      return;
-    }
+
     if (!hasKey) {
-      writeKey(raw);
-      setHasKey(true);
-      push([
-        { text: `${prompt} sk-***`, cls: "p" },
-        { text: "→ key saved locally", cls: "g" },
-      ]);
+      // gated: whatever was typed is the key; never store or echo it
+      saveKey(raw, "sk-***");
       muted([commandHint]);
       return;
     }
 
-    push([{ text: `${prompt} ${raw}`, cls: "p" }]);
+    historyRef.current.unshift(raw);
+    echo(raw);
     if (!parseCommand(raw)) {
       muted([commandHint]);
       return;
@@ -216,9 +308,36 @@ export function TerminalChat({ owner, repo }: { owner: string; repo: string }) {
     void run(raw);
   };
 
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      submit();
+    } else if (e.key === "ArrowUp") {
+      const h = historyRef.current;
+      if (h.length === 0) return;
+      e.preventDefault();
+      const next = Math.min(histPos + 1, h.length - 1);
+      setHistPos(next);
+      setInput(h[next]);
+    } else if (e.key === "ArrowDown") {
+      if (histPos < 0) return;
+      e.preventDefault();
+      const next = histPos - 1;
+      setHistPos(next);
+      setInput(next < 0 ? "" : historyRef.current[next]);
+    } else if (e.key === "Escape") {
+      abortRef.current?.abort();
+    }
+  };
+
+  const focusInput = () => {
+    // a real terminal focuses on click, but never steal a text selection
+    if (!window.getSelection()?.toString()) inputRef.current?.focus();
+  };
+
   return (
-    <div className="term-fill">
-      <div ref={logRef} className="term-scroll">
+    <div className="flex min-h-0 flex-1 flex-col" onClick={focusInput}>
+      <div ref={logRef} role="log" aria-live="polite" className="term-scroll">
         {lines.map((l, i) => (
           <div key={i} className={CLS[l.cls]}>
             {l.text}
@@ -229,15 +348,11 @@ export function TerminalChat({ owner, repo }: { owner: string; repo: string }) {
       <div className="flex items-baseline gap-2 pt-2">
         <span className="shrink-0 text-muted-foreground">{prompt}</span>
         <input
+          ref={inputRef}
           className="term-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              submit();
-            }
-          }}
+          onKeyDown={onKeyDown}
           autoFocus
           autoCapitalize="none"
           autoCorrect="off"

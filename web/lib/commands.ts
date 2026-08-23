@@ -39,4 +39,5 @@ export const commandHint = [
   "  explain the last N commits",
   "  what changed in pr #N",
   "  diff base..head",
+  "  /help for everything else",
 ].join("\n");

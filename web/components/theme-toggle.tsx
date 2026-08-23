@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 
-type Theme = "auto" | "light" | "dark";
+export type Theme = "auto" | "light" | "dark";
 const ORDER: Theme[] = ["auto", "light", "dark"];
 
-function apply(theme: Theme) {
+export function applyTheme(theme: Theme) {
   const root = document.documentElement;
   root.classList.remove("light", "dark");
   if (theme !== "auto") root.classList.add(theme);
@@ -15,24 +15,33 @@ function apply(theme: Theme) {
   } catch {
     // storage may be blocked; the toggle still works for this page view
   }
+  window.dispatchEvent(new CustomEvent("wd-theme", { detail: theme }));
+}
+
+export function currentTheme(): Theme {
+  try {
+    const stored = localStorage.getItem("wd_theme");
+    if (stored === "light" || stored === "dark") return stored;
+  } catch {
+    // ignore
+  }
+  return "auto";
 }
 
 export function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>("auto");
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("wd_theme");
-      if (stored === "light" || stored === "dark") setTheme(stored);
-    } catch {
-      // ignore
-    }
+    setTheme(currentTheme());
+    const onTheme = (e: Event) => setTheme((e as CustomEvent<Theme>).detail);
+    window.addEventListener("wd-theme", onTheme);
+    return () => window.removeEventListener("wd-theme", onTheme);
   }, []);
 
   const cycle = () => {
     const next = ORDER[(ORDER.indexOf(theme) + 1) % ORDER.length];
     setTheme(next);
-    apply(next);
+    applyTheme(next);
   };
 
   return (
