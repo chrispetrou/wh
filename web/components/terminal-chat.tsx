@@ -92,26 +92,70 @@ const WD_HELP = [
   "source: github.com/chrispetrou/wd",
 ];
 
-const SLASH_CMDS = [
-  "/help",
-  "/repos",
-  "/key",
-  "/model",
-  "/theme",
-  "/account",
-  "/info",
-  "/font",
-  "/fontsize",
-  "/ligatures",
-  "/show",
-  "/export",
-  "/wd",
-  "/stop",
-  "/clear",
-  "/logout",
+const FONTS = ["default", "fira", "jetbrains", "plex"];
+
+// the completion menu: commands, their descriptions, and their options
+interface CmdSpec {
+  name: string;
+  desc: string;
+  args?: string[];
+}
+
+const COMMANDS: CmdSpec[] = [
+  { name: "/help", desc: "all commands and keys" },
+  { name: "/repos", desc: "switch repo" },
+  { name: "/key", desc: "set the llm key", args: ["clear"] },
+  {
+    name: "/model",
+    desc: "pick the model",
+    args: [
+      "default",
+      "claude-opus-5",
+      "claude-sonnet-5",
+      "claude-haiku-4-5",
+      "gpt-5-mini",
+      "gpt-5",
+    ],
+  },
+  { name: "/theme", desc: "light or dark", args: ["auto", "light", "dark"] },
+  { name: "/font", desc: "terminal font", args: FONTS },
+  {
+    name: "/fontsize",
+    desc: "11 to 18",
+    args: ["default", "11", "12", "13", "14", "15", "16", "17", "18"],
+  },
+  { name: "/ligatures", desc: "fira and jetbrains only", args: ["on", "off"] },
+  { name: "/account", desc: "who is signed in" },
+  { name: "/info", desc: "repo, provider, theme, font" },
+  { name: "/show", desc: "raw payload of the last command" },
+  { name: "/export", desc: "save the transcript" },
+  { name: "/wd", desc: "about the wd cli" },
+  { name: "/stop", desc: "stop a running explain" },
+  { name: "/clear", desc: "clear the screen" },
+  { name: "/logout", desc: "sign out" },
 ];
 
-const FONTS = ["default", "fira", "jetbrains", "plex"];
+interface Menu {
+  stage: "cmd" | "arg";
+  rows: string[];
+  spec?: CmdSpec;
+}
+
+function menuFor(input: string): Menu | null {
+  if (!input.startsWith("/")) return null;
+  const sp = input.indexOf(" ");
+  if (sp < 0) {
+    const q = input.toLowerCase();
+    const rows = COMMANDS.filter((c) => c.name.startsWith(q)).map((c) => c.name);
+    return rows.length ? { stage: "cmd", rows } : null;
+  }
+  const spec = COMMANDS.find((c) => c.name === input.slice(0, sp).toLowerCase());
+  if (!spec?.args) return null;
+  const partial = input.slice(sp + 1).toLowerCase();
+  const rows = spec.args.filter((a) => a.startsWith(partial));
+  if (rows.length === 1 && rows[0] === partial) return null; // fully typed
+  return rows.length ? { stage: "arg", rows, spec } : null;
+}
 
 function pref(key: string): string {
   try {
@@ -149,14 +193,6 @@ function applyLigatures(on: boolean) {
   if (on) root.removeAttribute("data-lig");
   else root.setAttribute("data-lig", "off");
   setPref("wd_lig", on ? "" : "off");
-}
-
-function commonPrefix(items: string[]): string {
-  let p = items[0] ?? "";
-  for (const s of items) {
-    while (!s.startsWith(p)) p = p.slice(0, -1);
-  }
-  return p;
 }
 
 function readKey(): string {
@@ -568,8 +604,8 @@ export function TerminalChat({
     }
   };
 
-  const submit = () => {
-    const raw = input.trim();
+  const submit = (given?: string) => {
+    const raw = (given ?? input).trim();
     if (!raw) return;
     setInput("");
     setHistPos(-1);
@@ -609,13 +645,34 @@ export function TerminalChat({
     return -1;
   };
 
-  // slash autocomplete: matches while typing a bare /command
-  const slashMatches =
-    input.startsWith("/") && !input.includes(" ")
-      ? SLASH_CMDS.filter((c) => c.startsWith(input))
-      : [];
-  const showMatches =
-    slashMatches.length > 0 && !(slashMatches.length === 1 && slashMatches[0] === input);
+  // completion menu (fx-style dropdown for commands and their options)
+  const [menuSel, setMenuSel] = useState(0);
+  const [menuDismissed, setMenuDismissed] = useState(false);
+  const menu = menuDismissed ? null : menuFor(input);
+
+  const changeInput = (v: string) => {
+    setInput(v);
+    setMenuDismissed(false);
+    // arg stage defaults to "what you typed" so custom values are never
+    // hijacked by a listed suggestion; arrows opt into the list
+    setMenuSel(menuFor(v)?.stage === "arg" ? -1 : 0);
+  };
+
+  const applyMenuRow = (m: Menu, row: string) => {
+    if (m.stage === "cmd") {
+      const spec = COMMANDS.find((c) => c.name === row);
+      if (spec?.args) {
+        changeInput(`${row} `);
+        inputRef.current?.focus();
+      } else {
+        changeInput("");
+        submit(row);
+      }
+    } else {
+      changeInput("");
+      submit(`${m.spec?.name} ${row}`);
+    }
+  };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (search) {
@@ -641,12 +698,40 @@ export function TerminalChat({
       setSearch({ q: "", idx: 0 });
       return;
     }
-    if (e.key === "Tab" && slashMatches.length > 0) {
-      e.preventDefault();
-      const target =
-        slashMatches.length === 1 ? slashMatches[0] : commonPrefix(slashMatches);
-      if (target.length > input.length) setInput(target);
-      return;
+    if (menu) {
+      const minSel = menu.stage === "arg" ? -1 : 0;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMenuSel(Math.min(menuSel + 1, menu.rows.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMenuSel(Math.max(menuSel - 1, minSel));
+        return;
+      }
+      if (e.key === "Tab") {
+        e.preventDefault();
+        const row = menu.rows[Math.max(menuSel, 0)];
+        if (menu.stage === "cmd") {
+          const spec = COMMANDS.find((c) => c.name === row);
+          changeInput(spec?.args ? `${row} ` : row);
+        } else {
+          changeInput(`${menu.spec?.name} ${row}`);
+        }
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setMenuDismissed(true);
+        return;
+      }
+      if (e.key === "Enter" && !(menu.stage === "arg" && menuSel < 0)) {
+        e.preventDefault();
+        applyMenuRow(menu, menu.rows[Math.max(menuSel, 0)]);
+        return;
+      }
+      // enter with no selection in the arg stage submits the typed text
     }
     if (e.key === "Enter") {
       e.preventDefault();
@@ -699,7 +784,7 @@ export function TerminalChat({
           className={`term-input ${input.startsWith("/") ? "text-wd-accent" : ""}`}
           style={input.startsWith("/") ? { color: "var(--wd-accent)" } : undefined}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => changeInput(e.target.value)}
           onKeyDown={onKeyDown}
           autoFocus
           autoCapitalize="none"
@@ -717,8 +802,43 @@ export function TerminalChat({
             return i >= 0 ? historyRef.current[i] : "";
           })()}
         </div>
-      ) : showMatches ? (
-        <div className="pt-1 text-wd-faint">{slashMatches.join("  ")}</div>
+      ) : menu ? (
+        <div className="mt-2 border-t border-border pt-1.5">
+          <div className="max-h-56 overflow-y-auto">
+            {menu.rows.map((row, i) => {
+              const spec =
+                menu.stage === "cmd"
+                  ? COMMANDS.find((c) => c.name === row)
+                  : undefined;
+              const sel = i === menuSel;
+              return (
+                <button
+                  key={row}
+                  type="button"
+                  onClick={() => applyMenuRow(menu, row)}
+                  onMouseEnter={() => setMenuSel(i)}
+                  className={`flex w-full cursor-pointer items-baseline gap-4 rounded-[3px] px-1.5 py-0.5 text-left ${
+                    sel ? "row-sel" : ""
+                  }`}
+                >
+                  <span className={sel ? "font-semibold" : "text-wd-accent"}>
+                    {row}
+                  </span>
+                  {spec ? (
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                      {spec.desc}
+                    </span>
+                  ) : menu.stage === "arg" && row === "default" ? (
+                    <span className="text-wd-faint">provider default</span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+          <div className="pt-1 text-wd-faint">
+            ↑↓ navigate · tab complete · enter use · esc close
+          </div>
+        </div>
       ) : null}
     </div>
   );
