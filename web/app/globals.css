@@ -46,6 +46,7 @@
   --color-wd-amber: var(--wd-amber);
   --color-wd-faint: var(--wd-faint);
   --color-wd-sel: var(--wd-sel);
+  --color-wd-accent: var(--wd-accent);
   --radius-sm: 3px;
   --radius-md: var(--radius);
   --radius-lg: var(--radius);
@@ -96,6 +97,7 @@
   --wd-amber: #b08900;
   --wd-faint: #c8c8c8;
   --wd-sel: #eef2ff;
+  --wd-accent: #4263eb;
 }
 
 .dark {
@@ -135,6 +137,7 @@
   --wd-amber: #e0b420;
   --wd-faint: #3a3a3a;
   --wd-sel: #1c2333;
+  --wd-accent: #e0b420;
 }
 
 /* follow the system like the landing page does, until a toggle exists */
@@ -176,7 +179,26 @@
     --wd-amber: #e0b420;
     --wd-faint: #3a3a3a;
     --wd-sel: #1c2333;
+    --wd-accent: #e0b420;
   }
+}
+
+/* user font preferences (set via /font, /fontsize, /ligatures) */
+:root[data-font="fira"] {
+  --font-wd: var(--font-fira), ui-monospace, Menlo, monospace;
+}
+:root[data-font="jetbrains"] {
+  --font-wd: var(--font-jetbrains), ui-monospace, Menlo, monospace;
+}
+:root[data-font="plex"] {
+  --font-wd: var(--font-plex), ui-monospace, Menlo, monospace;
+}
+:root[data-lig="off"] body {
+  font-feature-settings: "calt" 0, "liga" 0;
+}
+
+::selection {
+  background: var(--wd-sel);
 }
 
 /* full-viewport app surface: the page is the terminal */
@@ -188,6 +210,7 @@
 .app-main {
   white-space: pre-wrap;
   word-break: break-word;
+  font-size: var(--wd-font-size, 13px);
 }
 .row-sel {
   background: var(--wd-sel);
@@ -229,6 +252,18 @@
   flex: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--wd-faint) transparent;
+}
+.term-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.term-scroll::-webkit-scrollbar-thumb {
+  background: var(--wd-faint);
+  border-radius: 3px;
+}
+.term-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 /* bordered paste field (setup screen): still flat, hairline, monospace */
@@ -264,7 +299,7 @@ button:focus-visible,
 
 @media (max-width: 560px) {
   .app-main {
-    font-size: 12px;
+    font-size: var(--wd-font-size, 12px);
   }
 }
 @media (pointer: coarse) {

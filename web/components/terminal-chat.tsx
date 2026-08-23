@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { commandHint, parseCommand } from "@/lib/commands";
 import { applyTheme, currentTheme, type Theme } from "./theme-toggle";
 
-type Cls = "p" | "c" | "o" | "g" | "a" | "";
+type Cls = "p" | "c" | "o" | "g" | "a" | "x" | "";
 
 interface Line {
   text: string;
   cls: Cls;
+  prefix?: string; // muted prompt rendered before the text
 }
 
 const CLS: Record<Cls, string> = {
@@ -18,8 +19,37 @@ const CLS: Record<Cls, string> = {
   o: "text-muted-foreground",
   g: "text-wd-green",
   a: "text-wd-amber",
+  x: "text-wd-accent",
   "": "",
 };
+
+// urls in output become quiet accent links
+const URL_RE = /\bhttps?:\/\/[^\s]+|\bgithub\.com\/[^\s]+/g;
+
+function renderText(text: string) {
+  const parts = text.split(URL_RE);
+  const urls = text.match(URL_RE);
+  if (!urls) return text;
+  const out: React.ReactNode[] = [];
+  parts.forEach((part, i) => {
+    out.push(part);
+    const url = urls[i];
+    if (url) {
+      out.push(
+        <a
+          key={i}
+          href={url.startsWith("http") ? url : `https://${url}`}
+          target="_blank"
+          rel="noreferrer"
+          className="text-wd-accent underline decoration-wd-faint underline-offset-2 hover:decoration-wd-accent"
+        >
+          {url}
+        </a>
+      );
+    }
+  });
+  return out;
+}
 
 const KEY_STORE = "wd_key";
 const RECENT_STORE = "wd_recent";
@@ -35,7 +65,10 @@ const HELP = [
   "  /key <value>      set the llm key (/key clear removes it)",
   "  /theme <t>        auto, light, or dark",
   "  /account          who is signed in",
-  "  /info             repo, provider, theme",
+  "  /info             repo, provider, theme, font",
+  "  /font <f>         default, fira, jetbrains, or plex",
+  "  /fontsize <n>     11 to 18, or default",
+  "  /ligatures <t>    on or off",
   "  /stop             stop a running explain (esc works too)",
   "  /clear            clear the screen",
   "  /logout           sign out",
@@ -48,10 +81,53 @@ const SLASH_CMDS = [
   "/theme",
   "/account",
   "/info",
+  "/font",
+  "/fontsize",
+  "/ligatures",
   "/stop",
   "/clear",
   "/logout",
 ];
+
+const FONTS = ["default", "fira", "jetbrains", "plex"];
+
+function pref(key: string): string {
+  try {
+    return localStorage.getItem(key) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function setPref(key: string, value: string) {
+  try {
+    if (value) localStorage.setItem(key, value);
+    else localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
+function applyFont(font: string) {
+  const root = document.documentElement;
+  if (font === "default") root.removeAttribute("data-font");
+  else root.setAttribute("data-font", font);
+  setPref("wd_font", font === "default" ? "" : font);
+}
+
+function applyFontSize(size: string) {
+  const root = document.documentElement;
+  if (size === "default") root.style.removeProperty("--wd-font-size");
+  else root.style.setProperty("--wd-font-size", `${size}px`);
+  setPref("wd_fontsize", size === "default" ? "" : size);
+}
+
+function applyLigatures(on: boolean) {
+  const root = document.documentElement;
+  if (on) root.removeAttribute("data-lig");
+  else root.setAttribute("data-lig", "off");
+  setPref("wd_lig", on ? "" : "off");
+}
 
 function commonPrefix(items: string[]): string {
   let p = items[0] ?? "";
@@ -112,7 +188,8 @@ export function TerminalChat({
   const push = (rows: Line[]) => setLines((prev) => [...prev, ...rows]);
   const muted = (texts: string[]) =>
     push(texts.map((text) => ({ text, cls: "o" as Cls })));
-  const echo = (text: string) => push([{ text: `${prompt} ${text}`, cls: "p" }]);
+  const echo = (text: string) =>
+    push([{ prefix: prompt, text, cls: text.startsWith("/") ? "x" : "c" }]);
 
   const logStore = `wd_log:${owner}/${repo}`;
 
@@ -140,6 +217,7 @@ export function TerminalChat({
     } catch {
       // ignore
     }
+    muted([`wd · ${owner}/${repo}`]);
     if (!present) {
       muted([
         "paste an anthropic or openai api key to enable explanations.",
@@ -327,7 +405,42 @@ export function TerminalChat({
           `repo      ${owner}/${repo}`,
           `provider  ${providerInfo()}`,
           `theme     ${currentTheme()}`,
+          `font      ${pref("wd_font") || "default"} · ${pref("wd_fontsize") || "13"}px · ligatures ${pref("wd_lig") === "off" ? "off" : "on"}`,
         ]);
+        break;
+      case "font":
+        echo(raw);
+        if (FONTS.includes(arg)) {
+          applyFont(arg);
+          muted([`font set to ${arg}`]);
+        } else {
+          muted([
+            `font is ${pref("wd_font") || "default"}. usage: /font ${FONTS.join("|")}`,
+          ]);
+        }
+        break;
+      case "fontsize": {
+        echo(raw);
+        const n = parseInt(arg, 10);
+        if (arg === "default") {
+          applyFontSize("default");
+          muted(["font size reset."]);
+        } else if (n >= 11 && n <= 18) {
+          applyFontSize(String(n));
+          muted([`font size set to ${n}px`]);
+        } else {
+          muted(["usage: /fontsize 11..18 or default"]);
+        }
+        break;
+      }
+      case "ligatures":
+        echo(raw);
+        if (arg === "on" || arg === "off") {
+          applyLigatures(arg === "on");
+          muted([`ligatures ${arg} (visible with fira or jetbrains)`]);
+        } else {
+          muted(["usage: /ligatures on|off"]);
+        }
         break;
       case "stop":
         echo(raw);
@@ -421,8 +534,11 @@ export function TerminalChat({
     <div className="flex min-h-0 flex-1 flex-col" onClick={focusInput}>
       <div ref={logRef} role="log" aria-live="polite" className="term-scroll">
         {lines.map((l, i) => (
-          <div key={i} className={CLS[l.cls]}>
-            {l.text}
+          <div key={i}>
+            {l.prefix ? (
+              <span className="text-muted-foreground">{l.prefix} </span>
+            ) : null}
+            <span className={CLS[l.cls]}>{renderText(l.text)}</span>
           </div>
         ))}
         {busy ? <span className="cursor" /> : null}
@@ -431,7 +547,8 @@ export function TerminalChat({
         <span className="shrink-0 text-muted-foreground">{prompt}</span>
         <input
           ref={inputRef}
-          className="term-input"
+          className={`term-input ${input.startsWith("/") ? "text-wd-accent" : ""}`}
+          style={input.startsWith("/") ? { color: "var(--wd-accent)" } : undefined}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}

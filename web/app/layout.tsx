@@ -1,5 +1,20 @@
 import type { Metadata, Viewport } from "next";
+import { Fira_Code, IBM_Plex_Mono, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+
+// optional terminal fonts, self-hosted at build time (/font to switch)
+const fira = Fira_Code({ subsets: ["latin"], variable: "--font-fira", display: "swap" });
+const jetbrains = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains",
+  display: "swap",
+});
+const plex = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "600"],
+  variable: "--font-plex",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "wd · tiny git companion",
@@ -22,13 +37,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${fira.variable} ${jetbrains.variable} ${plex.variable}`}
+    >
       <body className="antialiased">
         <script
-          // apply the stored theme before paint so there is no flash
+          // apply stored preferences before paint so there is no flash
           dangerouslySetInnerHTML={{
-            __html:
-              'try{var t=localStorage.getItem("wd_theme");if(t==="dark"||t==="light")document.documentElement.classList.add(t)}catch(e){}',
+            __html: `try{var d=document.documentElement,g=function(k){return localStorage.getItem(k)};
+var t=g("wd_theme");if(t==="dark"||t==="light")d.classList.add(t);
+var f=g("wd_font");if(f)d.setAttribute("data-font",f);
+var s=g("wd_fontsize");if(s)d.style.setProperty("--wd-font-size",s+"px");
+if(g("wd_lig")==="off")d.setAttribute("data-lig","off")}catch(e){}`,
           }}
         />
         {children}
