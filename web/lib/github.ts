@@ -263,20 +263,26 @@ export async function branchesText(
   );
 
   const width = Math.max(def.length, ...others.map((b) => b.name.length), 0) + 2;
-  const lines = [`${def.padEnd(width)}default`];
+  const total = branches.length;
+  const numWidth = String(total).length;
+  let i = 0;
+  const row = (name: string, status: string) =>
+    `${String(++i).padStart(numWidth)}  ${name.padEnd(width)}${status}`.trimEnd();
+
+  const lines = [row(def, "default")];
   for (const b of compared) {
     const parts: string[] = [];
     if (b.ahead > 0) parts.push(`ahead ${b.ahead}`);
     if (b.behind > 0) parts.push(`behind ${b.behind}`);
     if (b.ahead === 0 && b.behind === 0) parts.push("even");
-    if (b.ahead < 0) parts.push("");
-    lines.push(`${b.name.padEnd(width)}${parts.join(" · ")}`.trimEnd());
+    lines.push(row(b.name, b.ahead < 0 ? "" : parts.join(" · ")));
   }
   for (const b of others.slice(BRANCH_COUNTS_CAP)) {
-    lines.push(b.name);
+    lines.push(row(b.name, ""));
   }
+  lines.push(`${total} ${total === 1 ? "branch" : "branches"}`);
   if (others.length > BRANCH_COUNTS_CAP) {
-    lines.push(`(counts shown for the ${BRANCH_COUNTS_CAP} first branches)`);
+    lines.push(`(counts shown for the first ${BRANCH_COUNTS_CAP})`);
   }
   return lines.join("\n") + "\n";
 }
