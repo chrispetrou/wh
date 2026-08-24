@@ -72,6 +72,18 @@ describe("parseCommand", () => {
     expect(parseCommand("branches")).toEqual({ kind: "branches" });
     expect(parseCommand("wd branches")).toEqual({ kind: "branches" });
     expect(parseCommand("list branches")).toEqual({ kind: "branches" });
+    expect(parseCommand("what changed in feat/multi_turn")).toEqual({
+      kind: "range",
+      base: "",
+      head: "feat/multi_turn",
+    });
+    expect(parseCommand("what changed on dev?")).toEqual({
+      kind: "range",
+      base: "",
+      head: "dev",
+    });
+    // a bare "pr" with no number stays unparsed for the client nudge
+    expect(parseCommand("what changed in pr")).toBeNull();
   });
 
   it("accepts cli-style input", () => {

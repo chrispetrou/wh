@@ -119,16 +119,27 @@ export async function compareRange(
   base: string,
   head: string
 ): Promise<ExplainInput> {
-  if (!head) {
-    // open range (base..): compare against the default branch tip
+  if (!head || !base) {
+    // open side of a range means the default branch tip
     const info = await gh(token, `/repos/${owner}/${repo}`);
-    head = ((await info.json()) as { default_branch: string }).default_branch;
+    const def = ((await info.json()) as { default_branch: string }).default_branch;
+    head = head || def;
+    base = base || def;
   }
   const path = `/repos/${owner}/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`;
-  const [diffRes, jsonRes] = await Promise.all([
-    gh(token, path, "application/vnd.github.diff"),
-    gh(token, path),
-  ]);
+  let diffRes: Response;
+  let jsonRes: Response;
+  try {
+    [diffRes, jsonRes] = await Promise.all([
+      gh(token, path, "application/vnd.github.diff"),
+      gh(token, path),
+    ]);
+  } catch (e) {
+    if (e instanceof GithubError && e.status === 404) {
+      throw new GithubError(404, `unknown ref in ${base}..${head}; run branches to see refs`);
+    }
+    throw e;
+  }
   const diff = await diffRes.text();
   const json = (await jsonRes.json()) as CompareJson;
   const files = json.files ?? [];
@@ -149,7 +160,15 @@ export async function lastNCommits(
   ref?: string
 ): Promise<ExplainInput> {
   const sha = ref ? `&sha=${encodeURIComponent(ref)}` : "";
-  const res = await gh(token, `/repos/${owner}/${repo}/commits?per_page=${n + 1}${sha}`);
+  let res: Response;
+  try {
+    res = await gh(token, `/repos/${owner}/${repo}/commits?per_page=${n + 1}${sha}`);
+  } catch (e) {
+    if (ref && e instanceof GithubError && e.status === 404) {
+      throw new GithubError(404, `branch ${ref} not found; run branches to see refs`);
+    }
+    throw e;
+  }
   const commits = (await res.json()) as Array<{ sha: string }>;
   if (commits.length < 2) {
     throw new GithubError(422, "not enough history to compare");
@@ -177,11 +196,21 @@ export async function prInput(
   num: number
 ): Promise<ExplainInput> {
   const path = `/repos/${owner}/${repo}/pulls/${num}`;
-  const [diffRes, jsonRes, commitsRes] = await Promise.all([
-    gh(token, path, "application/vnd.github.diff"),
-    gh(token, path),
-    gh(token, `${path}/commits?per_page=100`),
-  ]);
+  let diffRes: Response;
+  let jsonRes: Response;
+  let commitsRes: Response;
+  try {
+    [diffRes, jsonRes, commitsRes] = await Promise.all([
+      gh(token, path, "application/vnd.github.diff"),
+      gh(token, path),
+      gh(token, `${path}/commits?per_page=100`),
+    ]);
+  } catch (e) {
+    if (e instanceof GithubError && e.status === 404) {
+      throw new GithubError(404, `pr #${num} not found in this repo`);
+    }
+    throw e;
+  }
   const diff = await diffRes.text();
   const pr = (await jsonRes.json()) as PrJson;
   const commits = (await commitsRes.json()) as Array<{

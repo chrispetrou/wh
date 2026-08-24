@@ -47,6 +47,12 @@ export function parseCommand(raw: string): Command | null {
   const pr = PR.exec(phrase) ?? HASH.exec(phrase);
   if (pr) return { kind: "pr", num: parseInt(pr[1], 10) };
 
+  // "what changed in <branch>": the branch's changes vs the default
+  const wc = /^what\s+changed\s+(?:in|on)\s+(\S+)$/i.exec(input);
+  if (wc && !/^pr$/i.test(wc[1]) && !wc[1].includes("..")) {
+    return { kind: "range", base: "", head: wc[1] };
+  }
+
   const rangeInput = input
     .replace(/^(?:diff|compare|explain|summarize|show)\s+/i, "")
     .replace(/\s+and\s+(?:summarize|explain)(?:\s+it)?$/i, "");
@@ -66,8 +72,8 @@ export function parseCommand(raw: string): Command | null {
 export const commandHint = [
   "commands:",
   "  explain the last N commits [on <branch>]",
-  "  what changed in pr #N",
-  "  diff base..head",
+  "  what changed in pr #N (or in <branch>)",
+  "  diff main..dev (any two refs)",
   "  branches",
   "  cli-style works too: wd explain HEAD~3..",
   "  /help for everything else",

@@ -129,7 +129,8 @@ branches
 ```
 
 Phrasing is flexible: `summarize`, `show me`, and `what changed in` work
-as leading verbs, `pull request 42` and bare `#42` name a PR, and
+as leading verbs, `pull request 42` and bare `#42` name a PR,
+`what changed in <branch>` compares a branch against the default, and
 cli-style input like `wd explain HEAD~3..` or open ranges (`main..`)
 works exactly as it does in the terminal.
 

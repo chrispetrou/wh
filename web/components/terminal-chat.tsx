@@ -72,8 +72,8 @@ interface ExplainMeta {
 const HELP = [
   "repo commands:",
   "  explain the last N commits [on <branch>]",
-  "  what changed in pr #N",
-  "  diff base..head",
+  "  what changed in pr #N (or in <branch>)",
+  "  diff main..dev (any two refs)",
   "  branches          list branches with ahead/behind",
   "  after an explain, plain words are follow-up questions",
   "slash commands:",
@@ -753,7 +753,8 @@ export function TerminalChat({
 
     historyRef.current.unshift(raw);
     echo(raw);
-    if (!parseCommand(raw)) {
+    const cmd = parseCommand(raw);
+    if (!cmd) {
       if (/^wd\s/i.test(raw)) {
         muted(["the worktree commands (new, ls, switch, rm) live in the cli: /wd"]);
         muted([commandHint]);
@@ -764,7 +765,22 @@ export function TerminalChat({
         void runFollowup(raw);
         return;
       }
+      if (/\bpr\b/i.test(raw) && !/\d/.test(raw)) {
+        muted(["name the pr by number, e.g. what changed in pr #42"]);
+      }
       muted([commandHint]);
+      return;
+    }
+    // the docs placeholder typed literally
+    if (
+      cmd.kind === "range" &&
+      cmd.base.toLowerCase() === "base" &&
+      ["head", ""].includes(cmd.head.toLowerCase())
+    ) {
+      muted([
+        "base..head is a placeholder: use real refs, e.g. diff main..feat/x",
+        "(run branches to see what exists)",
+      ]);
       return;
     }
     lastCmdRef.current = raw;
