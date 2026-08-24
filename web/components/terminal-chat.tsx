@@ -66,18 +66,21 @@ interface ExplainMeta {
   note: string | null;
   context?: string;
   followup?: boolean;
+  branches?: boolean;
 }
 
 const HELP = [
   "repo commands:",
-  "  explain the last N commits",
+  "  explain the last N commits [on <branch>]",
   "  what changed in pr #N",
   "  diff base..head",
+  "  branches          list branches with ahead/behind",
   "  after an explain, plain words are follow-up questions",
   "slash commands:",
   "  /repos            switch repo",
   "  /key <value>      set the llm key (/key clear removes it)",
   "  /model <name>     pick the model (/model default resets)",
+  "  /effort <level>   reasoning effort (model support varies)",
   "  /theme <t>        auto, light, or dark",
   "  /account          who is signed in",
   "  /info             repo, provider, theme, font",
@@ -121,6 +124,19 @@ function modelArgs(): string[] {
   ];
 }
 
+const ANTHROPIC_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
+const OPENAI_EFFORTS = ["minimal", "low", "medium", "high"];
+
+function effortArgs(): string[] {
+  const key = readKey();
+  const levels = !key
+    ? [...new Set([...ANTHROPIC_EFFORTS, ...OPENAI_EFFORTS])]
+    : key.startsWith("sk-ant-")
+      ? ANTHROPIC_EFFORTS
+      : OPENAI_EFFORTS;
+  return ["default", ...levels];
+}
+
 // the completion menu: commands, their descriptions, and their options
 interface CmdSpec {
   name: string;
@@ -133,6 +149,7 @@ const COMMANDS: CmdSpec[] = [
   { name: "/repos", desc: "switch repo" },
   { name: "/key", desc: "set the llm key", args: ["clear"] },
   { name: "/model", desc: "pick the model", args: modelArgs },
+  { name: "/effort", desc: "reasoning effort", args: effortArgs },
   { name: "/theme", desc: "light or dark", args: ["auto", "light", "dark"] },
   { name: "/font", desc: "terminal font", args: FONTS },
   {
@@ -472,13 +489,16 @@ export function TerminalChat({
   };
 
   const run = async (command: string, raw = false) => {
-    if (!raw) chatStore.clearContext(storeKey); // a new command, a new context
+    const isBranches = parseCommand(command)?.kind === "branches";
+    // a new diff command starts a new context; lookups leave it alone
+    if (!raw && !isBranches) chatStore.clearContext(storeKey);
     let context = "";
     const full = await stream(
       { owner, repo, input: command, raw },
       {
         raw,
         onMeta: (meta) => {
+          if (meta.branches) return;
           context = meta.context ?? "";
           const rows = [
             `reading ${meta.commits} ${meta.commits === 1 ? "commit" : "commits"} · ${meta.files} ${meta.files === 1 ? "file" : "files"} · +${meta.additions} −${meta.deletions}`,
@@ -576,6 +596,27 @@ export function TerminalChat({
           ]);
         } else {
           muted(["that does not look like a model id."]);
+        }
+        break;
+      }
+      case "effort": {
+        echo(raw);
+        const level = arg.toLowerCase();
+        const levels = effortArgs().slice(1);
+        if (!level) {
+          muted([
+            `effort: ${pref("wd_effort") || "provider default"}`,
+            `usage: /effort ${levels.join("|")} or /effort default`,
+            "higher levels think longer; not every model accepts effort.",
+          ]);
+        } else if (level === "default") {
+          setPref("wd_effort", "");
+          muted(["effort reset to the provider default."]);
+        } else if (levels.includes(level)) {
+          setPref("wd_effort", level);
+          muted([`effort set to ${level}`]);
+        } else {
+          muted([`usage: /effort ${levels.join("|")} or /effort default`]);
         }
         break;
       }
@@ -940,7 +981,7 @@ export function TerminalChat({
       >
         {/* localStorage reads must wait for mount or hydration breaks */}
         {mounted ? providerInfo() : " "}
-        {mounted && ctxLen ? " · follow-ups on" : ""}
+        {mounted && pref("wd_effort") ? ` · effort ${pref("wd_effort")}` : ""}
       </div>
     </div>
   );

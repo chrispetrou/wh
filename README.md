@@ -122,9 +122,10 @@ The web app (`web/`) is wd explain for any GitHub repo, in the browser:
 sign in with GitHub, pick a repo, and ask in a full-page terminal:
 
 ```
-explain the last 5 commits
+explain the last 5 commits [on <branch>]
 what changed in pr #42
 diff main..release
+branches
 ```
 
 Phrasing is flexible: `summarize`, `show me`, and `what changed in` work
@@ -132,15 +133,21 @@ as leading verbs, `pull request 42` and bare `#42` name a PR, and
 cli-style input like `wd explain HEAD~3..` or open ranges (`main..`)
 works exactly as it does in the terminal.
 
+Ranges take any refs, `on <branch>` scopes the last-N commands to a
+branch, and `branches` lists branches with ahead/behind against the
+default (the web cousin of `wd ls`; worktrees themselves live in the
+cli).
+
 It uses the same explain spec as the CLI (`shared/prompts/`), on your own
 LLM key: pasted once into the terminal, stored only in your browser, sent
 per request, never stored or logged server-side. `/model` picks the model
 the same way (any id accepted, stored in your browser, sent per request);
 its suggestions follow your key's provider, defaulting to claude-opus-5
-for anthropic keys and gpt-5-mini for openai keys.
+for anthropic keys and gpt-5-mini for openai keys. `/effort` sets the
+reasoning effort when the model supports it.
 
 Typing `/` opens a completion menu of every slash command with its
-options: `/help`, `/repos`, `/key`, `/model`, `/theme`, `/font`
+options: `/help`, `/repos`, `/key`, `/model`, `/effort`, `/theme`, `/font`
 (fira, jetbrains, plex, or the system default), `/fontsize`,
 `/ligatures`, `/show` (the raw diff payload, pager-colored), `/export`
 (save the transcript), `/account`, `/info`, `/wd`, `/stop`, `/clear`,
@@ -160,8 +167,7 @@ keeps going while you are on another tab. ctrl+t opens a new tab via
 the picker, ctrl+1..9 switches, × closes.
 
 Hover any control for its purpose and shortcut, and a faint status
-line under the prompt shows the provider and model in use, plus
-whether follow-ups are armed.
+line under the prompt shows the provider, model, and effort in use.
 
 Notes:
 

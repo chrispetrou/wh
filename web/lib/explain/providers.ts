@@ -15,6 +15,21 @@ export const DEFAULT_MODELS: Record<ProviderName, string> = {
 // model ids as accepted by providers; also guards the request body
 export const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
 
+// reasoning effort levels each provider understands (anthropic:
+// output_config.effort; openai: reasoning_effort). model support varies;
+// an unsupported combination surfaces as a provider error.
+export const EFFORTS: Record<ProviderName, string[]> = {
+  anthropic: ["low", "medium", "high", "xhigh", "max"],
+  openai: ["minimal", "low", "medium", "high"],
+};
+
+function effortBody(provider: ProviderName, effort?: string) {
+  if (!effort) return {};
+  return provider === "anthropic"
+    ? { output_config: { effort } }
+    : { reasoning_effort: effort };
+}
+
 export interface ProviderRequest {
   url: string;
   headers: HeadersInit;
@@ -26,7 +41,8 @@ export function buildRequest(
   key: string,
   system: string,
   user: string,
-  model?: string
+  model?: string,
+  effort?: string
 ): ProviderRequest {
   const chosen = model || DEFAULT_MODELS[provider];
   if (provider === "anthropic") {
@@ -43,6 +59,7 @@ export function buildRequest(
         stream: true,
         system,
         messages: [{ role: "user", content: user }],
+        ...effortBody(provider, effort),
       }),
     };
   }
@@ -59,6 +76,7 @@ export function buildRequest(
         { role: "system", content: system },
         { role: "user", content: user },
       ],
+      ...effortBody(provider, effort),
     }),
   };
 }
@@ -77,7 +95,8 @@ export function buildFollowupRequest(
   system: string,
   history: ChatMessage[],
   question: string,
-  model?: string
+  model?: string,
+  effort?: string
 ): ProviderRequest {
   const chosen = model || DEFAULT_MODELS[provider];
   if (provider === "anthropic") {
@@ -108,6 +127,7 @@ export function buildFollowupRequest(
         stream: true,
         system,
         messages: [...messages, { role: "user", content: question }],
+        ...effortBody(provider, effort),
       }),
     };
   }
@@ -125,6 +145,7 @@ export function buildFollowupRequest(
         ...history,
         { role: "user", content: question },
       ],
+      ...effortBody(provider, effort),
     }),
   };
 }

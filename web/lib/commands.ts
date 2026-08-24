@@ -3,14 +3,16 @@
 // intent.
 
 export type Command =
-  | { kind: "last"; n: number }
+  | { kind: "last"; n: number; ref?: string }
   | { kind: "pr"; num: number }
-  | { kind: "range"; base: string; head: string };
+  | { kind: "range"; base: string; head: string }
+  | { kind: "branches" };
 
 // leading verbs people naturally type before any of the three shapes
 const VERB = /^(?:(?:explain|summarize|show)(?:\s+me)?|what\s+changed\s+in)\s+/i;
-// "last N commits", "last commit", "the last 5", ...
-const LAST = /^(?:the\s+)?last(?:\s+(\d{1,3}))?(\s+commits?)?$/i;
+// "last N commits", "last commit", "the last 5 commits on dev", ...
+const LAST =
+  /^(?:the\s+)?last(?:\s+(\d{1,3}))?(\s+commits?)?(?:\s+on\s+(\S+))?$/i;
 // "pr 42", "pull request #42", "#42"
 const PR = /^(?:the\s+)?(?:pr|pull\s+request)\s*#?\s*(\d{1,6})$/i;
 const HASH = /^#(\d{1,6})$/;
@@ -29,6 +31,7 @@ export function parseCommand(raw: string): Command | null {
   // cli muscle memory ("wd explain HEAD~3..") and trailing question marks
   input = input.replace(/^wd\s+/i, "").replace(/\s*\?+$/, "");
   if (/^explain$/i.test(input)) return { kind: "last", n: 1 }; // cli default
+  if (/^(?:list\s+)?branches$/i.test(input)) return { kind: "branches" };
 
   const phrase = input.replace(VERB, "");
 
@@ -36,7 +39,9 @@ export function parseCommand(raw: string): Command | null {
   const last = LAST.exec(phrase);
   if (last) {
     const n = last[1] ? clampN(last[1]) : /^\s+commit$/i.test(last[2] ?? "") ? 1 : 0;
-    if (n) return { kind: "last", n };
+    if (n) {
+      return last[3] ? { kind: "last", n, ref: last[3] } : { kind: "last", n };
+    }
   }
 
   const pr = PR.exec(phrase) ?? HASH.exec(phrase);
@@ -60,9 +65,10 @@ export function parseCommand(raw: string): Command | null {
 
 export const commandHint = [
   "commands:",
-  "  explain the last N commits",
+  "  explain the last N commits [on <branch>]",
   "  what changed in pr #N",
   "  diff base..head",
+  "  branches",
   "  cli-style works too: wd explain HEAD~3..",
   "  /help for everything else",
 ].join("\n");

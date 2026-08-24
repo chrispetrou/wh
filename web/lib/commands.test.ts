@@ -58,6 +58,22 @@ describe("parseCommand", () => {
     });
   });
 
+  it("parses branch-scoped and branches shapes", () => {
+    expect(parseCommand("explain the last 5 commits on dev")).toEqual({
+      kind: "last",
+      n: 5,
+      ref: "dev",
+    });
+    expect(parseCommand("last 3 on feat/auth")).toEqual({
+      kind: "last",
+      n: 3,
+      ref: "feat/auth",
+    });
+    expect(parseCommand("branches")).toEqual({ kind: "branches" });
+    expect(parseCommand("wd branches")).toEqual({ kind: "branches" });
+    expect(parseCommand("list branches")).toEqual({ kind: "branches" });
+  });
+
   it("accepts cli-style input", () => {
     expect(parseCommand("wd explain HEAD~3..")).toEqual({ kind: "last", n: 3 });
     expect(parseCommand("HEAD~5..HEAD")).toEqual({ kind: "last", n: 5 });
