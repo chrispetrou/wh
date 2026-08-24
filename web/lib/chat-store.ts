@@ -21,6 +21,8 @@ interface Entry {
   abort?: AbortController;
   // follow-up context: alternating user/assistant, [0] is the payload
   context?: ChatMessage[];
+  // branch names for completion, default branch first
+  branches?: string[];
 }
 
 const MAX_CONTEXT_MESSAGES = 26;
@@ -119,6 +121,13 @@ export const chatStore = {
   },
   context(key: string): ChatMessage[] | undefined {
     return entry(key).context;
+  },
+  branchList(key: string): string[] | undefined {
+    return entry(key).branches;
+  },
+  setBranches(key: string, branches: string[]) {
+    entry(key).branches = branches;
+    emit(key);
   },
   setContext(key: string, firstUser: string, firstAnswer: string) {
     entry(key).context = [

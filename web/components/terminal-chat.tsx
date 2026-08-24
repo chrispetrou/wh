@@ -169,9 +169,31 @@ const COMMANDS: CmdSpec[] = [
 ];
 
 interface Menu {
-  stage: "cmd" | "arg";
+  stage: "cmd" | "arg" | "branch";
   rows: string[];
   spec?: CmdSpec;
+  prefix?: string; // branch stage: the text before the branch slot
+}
+
+// where a branch name belongs in a repo command being typed
+interface BranchSlot {
+  prefix: string;
+  partial: string;
+}
+
+function branchSlot(input: string): BranchSlot | null {
+  if (!input || input.startsWith("/")) return null;
+  let m = /^((?:wd\s+)?what\s+changed\s+(?:in|on)\s+)(\S*)$/i.exec(input);
+  if (m && !/^pr\b|^#/i.test(m[2])) return { prefix: m[1], partial: m[2] };
+  m = /^((?:wd\s+)?(?:explain\s+(?:the\s+)?)?last\s+\d{1,3}(?:\s+commits?)?\s+on\s+)(\S*)$/i.exec(
+    input
+  );
+  if (m) return { prefix: m[1], partial: m[2] };
+  m = /^((?:(?:wd\s+)?(?:diff|compare|explain)\s+)?\S*?\.{2,3})(\S*)$/i.exec(input);
+  if (m && m[1].includes("..")) return { prefix: m[1], partial: m[2] };
+  m = /^((?:wd\s+)?(?:diff|compare)\s+)([^\s.]*)$/i.exec(input);
+  if (m) return { prefix: m[1], partial: m[2] };
+  return null;
 }
 
 function menuFor(input: string): Menu | null {
@@ -796,17 +818,56 @@ export function TerminalChat({
     return -1;
   };
 
-  // completion menu (fx-style dropdown for commands and their options)
+  // completion menu (fx-style dropdown for commands, options, branches)
   const [menuSel, setMenuSel] = useState(0);
   const [menuDismissed, setMenuDismissed] = useState(false);
-  const menu = menuDismissed ? null : menuFor(input);
+  const branchList = useSyncExternalStore(
+    (cb) => chatStore.subscribe(storeKey, cb),
+    () => chatStore.branchList(storeKey),
+    () => undefined
+  );
+  const branchFetchRef = useRef(false);
+
+  const slot = menuDismissed ? null : branchSlot(input);
+  const slashMenu = menuDismissed ? null : menuFor(input);
+  const branchRows =
+    slot && branchList
+      ? branchList
+          .filter(
+            (b) =>
+              b.toLowerCase().startsWith(slot.partial.toLowerCase()) &&
+              b !== slot.partial
+          )
+          .slice(0, 12)
+      : [];
+  const menu: Menu | null =
+    slashMenu ??
+    (slot && branchRows.length
+      ? { stage: "branch", rows: branchRows, prefix: slot.prefix }
+      : null);
+
+  // branch names load lazily the first time a slot appears
+  useEffect(() => {
+    if (!slot || branchList || branchFetchRef.current) return;
+    branchFetchRef.current = true;
+    fetch(`/api/branches?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`)
+      .then((r) => r.json())
+      .then((j: { branches?: string[] }) =>
+        chatStore.setBranches(storeKey, j.branches ?? [])
+      )
+      .catch(() => chatStore.setBranches(storeKey, []));
+  }, [slot, branchList, owner, repo, storeKey]);
+
+  const stageOf = (v: string): Menu["stage"] | undefined =>
+    menuFor(v)?.stage ?? (branchSlot(v) ? "branch" : undefined);
 
   const changeInput = (v: string) => {
     setInput(v);
     setMenuDismissed(false);
-    // arg stage defaults to "what you typed" so custom values are never
+    // value stages default to "what you typed" so custom refs are never
     // hijacked by a listed suggestion; arrows opt into the list
-    setMenuSel(menuFor(v)?.stage === "arg" ? -1 : 0);
+    const st = stageOf(v);
+    setMenuSel(st === "arg" || st === "branch" ? -1 : 0);
   };
 
   const applyMenuRow = (m: Menu, row: string) => {
@@ -818,6 +879,16 @@ export function TerminalChat({
       } else {
         changeInput("");
         submit(row);
+      }
+    } else if (m.stage === "branch") {
+      const full = `${m.prefix ?? ""}${row}`;
+      if (parseCommand(full)) {
+        changeInput("");
+        submit(full);
+      } else {
+        // an incomplete expression (e.g. the first side of a range)
+        changeInput(full);
+        inputRef.current?.focus();
       }
     } else {
       changeInput("");
@@ -850,7 +921,7 @@ export function TerminalChat({
       return;
     }
     if (menu) {
-      const minSel = menu.stage === "arg" ? -1 : 0;
+      const minSel = menu.stage === "cmd" ? 0 : -1;
       if (e.key === "ArrowDown") {
         e.preventDefault();
         setMenuSel(Math.min(menuSel + 1, menu.rows.length - 1));
@@ -867,6 +938,8 @@ export function TerminalChat({
         if (menu.stage === "cmd") {
           const spec = COMMANDS.find((c) => c.name === row);
           changeInput(spec?.args ? `${row} ` : row);
+        } else if (menu.stage === "branch") {
+          changeInput(`${menu.prefix ?? ""}${row}`);
         } else {
           changeInput(`${menu.spec?.name} ${row}`);
         }
@@ -877,7 +950,7 @@ export function TerminalChat({
         setMenuDismissed(true);
         return;
       }
-      if (e.key === "Enter" && !(menu.stage === "arg" && menuSel < 0)) {
+      if (e.key === "Enter" && !(menu.stage !== "cmd" && menuSel < 0)) {
         e.preventDefault();
         applyMenuRow(menu, menu.rows[Math.max(menuSel, 0)]);
         return;
@@ -981,6 +1054,8 @@ export function TerminalChat({
                     </span>
                   ) : menu.stage === "arg" && row === "default" ? (
                     <span className="text-wd-faint">provider default</span>
+                  ) : menu.stage === "branch" && row === branchList?.[0] ? (
+                    <span className="text-wd-faint">default branch</span>
                   ) : null}
                 </button>
               );

@@ -287,6 +287,21 @@ export async function branchesText(
   return lines.join("\n") + "\n";
 }
 
+// branch names for completion menus, default branch first
+export async function branchNames(
+  token: string,
+  owner: string,
+  repo: string
+): Promise<string[]> {
+  const [infoRes, listRes] = await Promise.all([
+    gh(token, `/repos/${owner}/${repo}`),
+    gh(token, `/repos/${owner}/${repo}/branches?per_page=100`),
+  ]);
+  const def = ((await infoRes.json()) as { default_branch: string }).default_branch;
+  const names = ((await listRes.json()) as Array<{ name: string }>).map((b) => b.name);
+  return [def, ...names.filter((n) => n !== def)];
+}
+
 // per-file counts derived from the unified diff: +/- body lines per
 // "diff --git" section; binary sections yield 0/0 like the compare json.
 export function numstatFromDiff(diff: string): string {

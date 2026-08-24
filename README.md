@@ -135,9 +135,10 @@ cli-style input like `wd explain HEAD~3..` or open ranges (`main..`)
 works exactly as it does in the terminal.
 
 Ranges take any refs, `on <branch>` scopes the last-N commands to a
-branch, and `branches` lists branches with ahead/behind against the
-default (the web cousin of `wd ls`; worktrees themselves live in the
-cli).
+branch, and `branches` lists branches numbered with ahead/behind
+against the default (the web cousin of `wd ls`; worktrees themselves
+live in the cli). Wherever a branch name belongs, the completion menu
+drops down with the repo's branches, filtered as you type.
 
 It uses the same explain spec as the CLI (`shared/prompts/`), on your own
 LLM key: pasted once into the terminal, stored only in your browser, sent
