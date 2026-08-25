@@ -340,6 +340,7 @@ export function TerminalChat({
   useEffect(() => setMounted(true), []);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const partialRef = useRef("");
   const initRef = useRef(false);
   const historyRef = useRef<string[]>([]);
@@ -846,6 +847,13 @@ export function TerminalChat({
       ? { stage: "branch", rows: branchRows, prefix: slot.prefix }
       : null);
 
+  // keep the keyboard selection visible inside the scrolling menu
+  useEffect(() => {
+    menuRef.current
+      ?.querySelector(".row-sel")
+      ?.scrollIntoView({ block: "nearest" });
+  }, [menuSel]);
+
   // branch names load lazily the first time a slot appears
   useEffect(() => {
     if (!slot || branchList || branchFetchRef.current) return;
@@ -1028,7 +1036,7 @@ export function TerminalChat({
         </div>
       ) : menu ? (
         <div className="mt-2 border-t border-border pt-1.5">
-          <div className="max-h-56 overflow-y-auto">
+          <div ref={menuRef} className="max-h-56 overflow-y-auto">
             {menu.rows.map((row, i) => {
               const spec =
                 menu.stage === "cmd"
