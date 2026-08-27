@@ -5,7 +5,7 @@
 // terminal-chat), and an expandable panel per row with the commit or pr
 // in full. everything in the panel is a way into explain.
 
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Block, CommitRow, PrRow } from "@/lib/block";
 import { chatStore, type CommitDetail, type Detail, type PrDetail } from "@/lib/chat-store";
 import type { LaneRow } from "@/lib/graph";
@@ -403,17 +403,51 @@ function PrCells({ row }: { row: PrRow }) {
   );
 }
 
-function Files({ files, onPick }: { files: Detail["files"]; onPick: (path: string) => void }) {
+// copy with a moment of confirmation in place of the label
+function CopyAction({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <Action
+      onClick={() => {
+        void navigator.clipboard?.writeText(text);
+        setDone(true);
+        setTimeout(() => setDone(false), 1200);
+      }}
+    >
+      {done ? "copied" : "copy"}
+    </Action>
+  );
+}
+
+// one line per file: counts, then actions that appear on hover (always
+// on touch): explain the change to this file, its history, copy the path
+function Files({
+  files,
+  onExplain,
+  onHistory,
+}: {
+  files: Detail["files"];
+  onExplain: (path: string) => void;
+  onHistory: (path: string) => void;
+}) {
   if (!files.length) return null;
   const w = Math.max(...files.map((f) => f.path.length));
   return (
     <div>
       {files.map((f) => (
-        <div key={f.path}>
-          <Action onClick={() => onPick(f.path)}>{f.path}</Action>
+        <div key={f.path} className="log-file">
+          <span>{f.path}</span>
           <span className="text-muted-foreground">{" ".repeat(Math.max(w - f.path.length, 0) + 2)}</span>
           <span className="text-wd-green">+{f.additions}</span> <span className="text-destructive">−{f.deletions}</span>
           {f.status !== "modified" ? <span className="text-muted-foreground"> {f.status}</span> : null}
+          <span className="log-file-actions">
+            <span className="text-muted-foreground">   </span>
+            <Action onClick={() => onExplain(f.path)}>explain</Action>
+            <span className="text-muted-foreground"> · </span>
+            <Action onClick={() => onHistory(f.path)}>history</Action>
+            <span className="text-muted-foreground"> · </span>
+            <CopyAction text={f.path} />
+          </span>
         </div>
       ))}
     </div>
@@ -437,8 +471,7 @@ function CommitPanel({
     <div>
       <div>
         <span className="text-muted-foreground">sha      </span>
-        {d.sha}{" "}
-        <Action onClick={() => void navigator.clipboard?.writeText(d.sha)}>copy</Action>
+        {d.sha} <CopyAction text={d.sha} />
       </div>
       {d.parents.length ? (
         <div>
@@ -462,7 +495,11 @@ function CommitPanel({
       <div className="mt-2">{subject}</div>
       {body ? <div className="text-muted-foreground">{body}</div> : null}
       <div className="mt-2">
-        <Files files={d.files} onPick={(p) => submit(`explain ${d.sha.slice(0, 7)} in ${p}`)} />
+        <Files
+          files={d.files}
+          onExplain={(p) => submit(`explain ${d.sha.slice(0, 7)} in ${p}`)}
+          onHistory={(p) => submit(`history ${p}`)}
+        />
       </div>
       <div className="mt-2">
         <Action onClick={() => submit(`explain ${d.sha.slice(0, 7)}`)}>explain</Action>
@@ -500,7 +537,11 @@ function PrPanel({ d, submit }: { d: PrDetail; submit: (c: string) => void }) {
       </div>
       {body ? <div className="mt-2 text-muted-foreground">{body}</div> : null}
       <div className="mt-2">
-        <Files files={d.files} onPick={(p) => submit(`pr ${d.num} in ${p}`)} />
+        <Files
+          files={d.files}
+          onExplain={(p) => submit(`pr ${d.num} in ${p}`)}
+          onHistory={(p) => submit(`history ${p}`)}
+        />
       </div>
       <div className="mt-2">
         <Action onClick={() => submit(`pr ${d.num}`)}>explain</Action>

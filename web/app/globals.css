@@ -383,6 +383,21 @@
     animation: none;
   }
 }
+/* per-file actions in an opened row: hidden until the line is hovered
+   (or focused), always shown where there is no hover */
+.log-file-actions {
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+.log-file:hover .log-file-actions,
+.log-file:focus-within .log-file-actions {
+  opacity: 1;
+}
+@media (hover: none) {
+  .log-file-actions {
+    opacity: 1;
+  }
+}
 .log-action {
   color: var(--wd-accent);
   cursor: pointer;

@@ -207,8 +207,10 @@ graph; `log 100` shows more rows, `log on <branch>` scopes to one
 branch. After a `log`, the arrow keys walk its rows (`›` marks the one
 selected), enter opens a commit in place (full sha, parents, author,
 message, files with their +/−, and `explain`, `changelog`, `github ↗`
-actions; a file opens `explain <sha> in <path>`, a parent jumps to its
-row), esc steps back out, and clicking a row does the same. The numbers
+actions; hovering a file offers `explain` (that commit, cut to the
+file), `history` (the file's story), and `copy` (its path); a parent
+jumps to its row), esc steps back out, and clicking a row does the
+same. The numbers
 still work as words: `explain 3` explains that commit, `explain 2..5`
 the span of rows (from the parent of row 5 to row 2), and `explain
 <sha>` takes any sha directly; typing `explain ` with a log on screen
