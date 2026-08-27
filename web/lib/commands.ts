@@ -30,7 +30,8 @@ type Shape =
   // why a line exists: blame, then the blaming commit cut to the file
   | { kind: "why"; path: string; line: number; ref?: string };
 
-// "history src/git.rs", "history of src on dev" (bare history is the log)
+// "history src/git.rs", "history of src on dev"; bare history is not a
+// command (the client nudges toward a path)
 const HISTORY = /^(?:file\s+)?history\s+(?:of\s+|for\s+)?(\S+)(?:\s+on\s+(\S+))?$/i;
 // "why src/git.rs:42", "why line 42 of src/git.rs", optional "on <ref>"
 const WHY_COLON = /^why\s+(\S+?):(\d{1,6})(?:\s+on\s+(\S+))?$/i;
@@ -71,8 +72,8 @@ const HASH = /^#(\d{1,6})$/;
 // refnames, so dotted branch names like v1.2 parse correctly. the head
 // side may be empty (cli-style open ranges like HEAD~3..)
 const RANGE = /^(\S+?)\.{2,3}(\S*)$/;
-// "log", "git log 50", "graph on dev", bare "history"
-const LOG = /^(?:git\s+)?(?:log|graph|history)(?:\s+(\d{1,3}))?(?:\s+on\s+(\S+))?$/i;
+// "log", "git log 50", "graph on dev" (history is a file's story, see below)
+const LOG = /^(?:git\s+)?(?:log|graph)(?:\s+(\d{1,3}))?(?:\s+on\s+(\S+))?$/i;
 // an abbreviated or full sha
 const SHA = /^[0-9a-f]{7,40}$/i;
 // a row of the last log, or a span of rows

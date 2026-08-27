@@ -363,6 +363,26 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* a placeholder for a value still in flight: a faint bar that breathes.
+   no spinner, no gradient sweep; the pulse stops under reduced motion */
+.skel {
+  display: inline-block;
+  height: 0.75em;
+  vertical-align: -1px;
+  border-radius: 2px;
+  background: var(--wd-faint);
+  animation: skel 1.6s ease-in-out infinite;
+}
+@keyframes skel {
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skel {
+    animation: none;
+  }
+}
 .log-action {
   color: var(--wd-accent);
   cursor: pointer;

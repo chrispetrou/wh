@@ -1072,6 +1072,10 @@ export function TerminalChat({
       if (/\bpr\b/i.test(raw) && !/\d/.test(raw)) {
         muted(["name the pr by number, e.g. what changed in pr #42"]);
       }
+      if (/^(?:file\s+)?history(?:\s+on\s+\S+)?$/i.test(raw)) {
+        muted(["history takes a path: history src/git.rs [on <branch>]. log draws the graph"]);
+        return;
+      }
       muted([commandHint]);
       return;
     }

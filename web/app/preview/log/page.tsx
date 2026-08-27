@@ -13,5 +13,5 @@ export default async function Page({
 }) {
   if (process.env.WD_PREVIEW !== "1") notFound();
   const { theme, open } = await searchParams;
-  return <PreviewLog dark={theme === "dark"} open={open === "1"} />;
+  return <PreviewLog dark={theme === "dark"} open={open === "1" || open === "loading"} loading={open === "loading"} />;
 }

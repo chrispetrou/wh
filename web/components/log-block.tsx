@@ -101,6 +101,71 @@ function Chip({ name, color }: { name: string; color: string }) {
   );
 }
 
+// a value still in flight
+function Skel({ w }: { w: number }) {
+  return <span className="skel" style={{ width: `${w}ch` }} />;
+}
+
+// the panel before its fetch lands: what the row already knows is real,
+// the rest breathes as placeholders, so opening never feels blocked
+function CommitSkeleton({ row }: { row: CommitRow }) {
+  return (
+    <div>
+      <div>
+        <span className="text-muted-foreground">sha      </span>
+        {row.sha}
+      </div>
+      <div>
+        <span className="text-muted-foreground">parents  </span>
+        {row.parents.length ? row.parents.map((p) => p.slice(0, 7)).join(" ") : <Skel w={7} />}
+      </div>
+      <div>
+        <span className="text-muted-foreground">author   </span>
+        {row.author}
+        <span className="text-muted-foreground"> · {absolute(row.date)}</span>
+      </div>
+      <div className="mt-2">{row.subject}</div>
+      <div className="text-muted-foreground">
+        <Skel w={44} />
+      </div>
+      <div className="mt-2">
+        <Skel w={22} /> <Skel w={8} />
+        <br />
+        <Skel w={30} /> <Skel w={8} />
+      </div>
+      <div className="mt-2 text-muted-foreground">explain · changelog</div>
+    </div>
+  );
+}
+
+function PrSkeleton({ row }: { row: PrRow }) {
+  return (
+    <div>
+      <div>
+        <span className="text-muted-foreground">pr       </span>#{row.num} {row.title}
+      </div>
+      <div>
+        <span className="text-muted-foreground">by       </span>
+        {row.author}
+        <span className="text-muted-foreground">
+          {" "}
+          · {row.head} → {row.base}
+          {row.flags.length ? ` · ${row.flags.join(" · ")}` : ""}
+        </span>
+      </div>
+      <div className="mt-2 text-muted-foreground">
+        <Skel w={48} />
+        <br />
+        <Skel w={36} />
+      </div>
+      <div className="mt-2">
+        <Skel w={26} /> <Skel w={8} />
+      </div>
+      <div className="mt-2 text-muted-foreground">explain · changelog</div>
+    </div>
+  );
+}
+
 function Action({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
   return (
     <button type="button" className="log-action" onClick={onClick}>
@@ -231,7 +296,11 @@ export function LogBlock({
                 </div>
                 <div className="log-panel-body">
                   {detail === undefined || detail === "loading" ? (
-                    <span className="text-muted-foreground">fetching…</span>
+                    block.kind === "log" ? (
+                      <CommitSkeleton row={row as CommitRow} />
+                    ) : (
+                      <PrSkeleton row={row as PrRow} />
+                    )
                   ) : detail === "failed" ? (
                     <span>
                       <span className="text-wd-amber">error:</span> could not fetch this one

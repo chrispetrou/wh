@@ -112,7 +112,8 @@ describe("parseCommand", () => {
     expect(parseCommand("log 999")).toEqual({ kind: "log", n: 200 });
     expect(parseCommand("log on dev")).toEqual({ kind: "log", ref: "dev" });
     expect(parseCommand("graph 20 on feat/x")).toEqual({ kind: "log", n: 20, ref: "feat/x" });
-    expect(parseCommand("history")).toEqual({ kind: "log" });
+    // history is a file's story, never the graph
+    expect(parseCommand("history")).toBeNull();
   });
 
   it("parses commits by sha and by log row", () => {
@@ -216,8 +217,7 @@ describe("parseCommand", () => {
       path: "src",
       ref: "dev",
     });
-    expect(parseCommand("history")).toEqual({ kind: "log" });
-    expect(parseCommand("history 50")).toEqual({ kind: "log", n: 50 });
+    expect(parseCommand("history on dev")).toBeNull();
 
     expect(parseCommand("explain the last 5 commits in src/git.rs")).toEqual({
       kind: "last",

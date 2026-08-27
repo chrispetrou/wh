@@ -244,7 +244,9 @@ changed in pr #42` shows the pr's state under its title: `draft`,
 Files have a history too. `history src/git.rs` (or a directory, `on
 <branch>` to scope) lists the commits touching it as a log block
 without lanes, numbered and navigable the same way, so `explain 3`
-follows. Any explain takes `in <path>` to cut the
+follows. (`log` is the whole repo across branches; `history` always
+takes a path.) Opening a row shows what the row already knows at once
+and fills in parents, message, and files as they arrive; nothing spins. Any explain takes `in <path>` to cut the
 diff down to one file or directory before the model sees it: `explain
 the last 5 commits in src/`, `what changed in src/git.rs since v1.2`,
 `changelog of pr 42 in docs/`; the header says `2 of 14 files, under

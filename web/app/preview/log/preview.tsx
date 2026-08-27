@@ -63,7 +63,7 @@ const prs: Block = {
   ],
 };
 
-export function PreviewLog({ dark, open }: { dark: boolean; open: boolean }) {
+export function PreviewLog({ dark, open, loading }: { dark: boolean; open: boolean; loading: boolean }) {
   const block = build();
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
@@ -71,6 +71,12 @@ export function PreviewLog({ dark, open }: { dark: boolean; open: boolean }) {
     if (open && block.kind === "log") {
       const rows = block.rows;
       const sha = rows[5].sha;
+      if (loading) {
+        // the skeleton: a panel whose fetch never lands
+        chatStore.setDetail(KEY, `commit:${sha}`, "loading");
+        chatStore.setLive(KEY, { line: 0, selected: 5, expanded: [sha] });
+        return;
+      }
       chatStore.setDetail(KEY, `commit:${sha}`, {
         kind: "commit",
         sha,
@@ -89,7 +95,7 @@ export function PreviewLog({ dark, open }: { dark: boolean; open: boolean }) {
       chatStore.setLive(KEY, { line: 0, selected: 5, expanded: [sha] });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dark, open]);
+  }, [dark, open, loading]);
   return (
     <div className="app-main p-4">
       <div className="text-muted-foreground">chrispetrou/wd $ <span className="font-semibold text-foreground">log</span></div>
