@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { chatStore, type LogRow } from "@/lib/chat-store";
+import { chatStore, type LogRow, type PrRow } from "@/lib/chat-store";
 import { commandHint, parseCommand } from "@/lib/commands";
-import { logLine, type LogLayout } from "@/lib/log-line";
+import { logLine, prLine, type LogLayout } from "@/lib/log-line";
 import { relTime } from "@/lib/utils";
 import {
   DEFAULT_MODELS,
@@ -132,10 +132,11 @@ interface ExplainMeta {
   followup?: boolean;
   branches?: boolean;
   tags?: boolean;
+  prs?: boolean;
   log?: boolean;
   count?: number;
   rails?: number;
-  rows?: LogRow[];
+  rows?: LogRow[] | PrRow[];
   empty?: string; // "nothing since yesterday": no diff, no model call
 }
 
@@ -157,6 +158,7 @@ const HELP: HelpRow[] = [
   ["changelog [range]", "release notes: added, changed, fixed, removed"],
   ["branches", "list branches with ahead/behind"],
   ["tags", "list tags, newest first"],
+  ["prs [open|closed|mine]", "pull requests, recently updated first"],
   "  after an explain, plain words are follow-up questions",
   "slash commands:",
   ["/repos", "switch repo"],
@@ -267,7 +269,7 @@ const COMMANDS: CmdSpec[] = [
 ];
 
 interface Menu {
-  stage: "cmd" | "arg" | "branch" | "row";
+  stage: "cmd" | "arg" | "branch" | "row" | "pr";
   rows: string[];
   spec?: CmdSpec;
   prefix?: string; // branch and row stages: the text before the slot
@@ -304,6 +306,15 @@ function branchSlot(input: string): BranchSlot | null {
 // "explain " with a log on screen offers its row numbers
 function rowSlot(input: string): BranchSlot | null {
   const m = /^((?:wd\s+)?(?:explain|show)\s+)(\d{0,3})$/i.exec(input);
+  return m ? { prefix: m[1], partial: m[2] } : null;
+}
+
+// "pr " with a prs list on screen offers its numbers
+function prSlot(input: string): BranchSlot | null {
+  const m =
+    /^((?:wd\s+)?(?:(?:explain|changelog|release\s+notes)\s+(?:for\s+)?|what\s+changed\s+in\s+)?(?:pr|pull\s+request)\s*#?)(\d{0,6})$/i.exec(
+      input
+    );
   return m ? { prefix: m[1], partial: m[2] } : null;
 }
 
@@ -484,7 +495,7 @@ export function TerminalChat({
   const [search, setSearch] = useState<{ q: string; idx: number } | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const lastCmdRef = useRef("");
-  const streamModeRef = useRef<"text" | "diff" | "branches" | "log" | "tags">("text");
+  const streamModeRef = useRef<"text" | "diff" | "branches" | "log" | "tags" | "prs">("text");
   const logLayoutRef = useRef<LogLayout>({ n: 0, width: 1, rails: 1 });
   const prompt = `${owner}/${repo} $`;
 
@@ -577,6 +588,7 @@ export function TerminalChat({
     if (streamModeRef.current === "branches") return branchLine(t);
     if (streamModeRef.current === "log") return logLine(t, logLayoutRef.current) as Line;
     if (streamModeRef.current === "tags") return tagLine(t);
+    if (streamModeRef.current === "prs") return prLine(t) as Line;
     if (streamModeRef.current === "diff") {
       if (t.startsWith("diff --git")) return { text, cls: "c" };
       if (t.startsWith("- ")) return { text, cls: "o" }; // payload commit list
@@ -688,7 +700,7 @@ export function TerminalChat({
 
   const run = async (command: string, raw = false) => {
     const kind = parseCommand(command)?.kind;
-    const lookup = kind === "branches" || kind === "log" || kind === "tags";
+    const lookup = kind === "branches" || kind === "log" || kind === "tags" || kind === "prs";
     // a new diff command starts a new context; lookups leave it alone
     if (!raw && !lookup) chatStore.clearContext(storeKey);
     let context = "";
@@ -707,6 +719,11 @@ export function TerminalChat({
             streamModeRef.current = "tags";
             return;
           }
+          if (meta.prs) {
+            streamModeRef.current = "prs";
+            chatStore.setPrRows(storeKey, (meta.rows as PrRow[] | undefined) ?? []);
+            return;
+          }
           if (meta.log) {
             streamModeRef.current = "log";
             logLayoutRef.current = {
@@ -714,7 +731,7 @@ export function TerminalChat({
               width: String(meta.count ?? 0).length,
               rails: meta.rails ?? 1,
             };
-            chatStore.setLogRows(storeKey, meta.rows ?? []);
+            chatStore.setLogRows(storeKey, (meta.rows as LogRow[] | undefined) ?? []);
             return;
           }
           if (meta.empty) {
@@ -780,6 +797,7 @@ export function TerminalChat({
         chatStore.setAll(storeKey, []);
         chatStore.clearContext(storeKey);
         chatStore.setLogRows(storeKey, undefined); // row numbers left with the screen
+        chatStore.setPrRows(storeKey, undefined);
         break;
       case "key": {
         const usage = "usage: /key <value> adds or replaces, /key clear [provider] removes";
@@ -1141,13 +1159,27 @@ export function TerminalChat({
         .filter((r) => r.startsWith(rslot.partial) && r !== rslot.partial)
         .slice(0, 12)
     : [];
+  const prRows = useSyncExternalStore(
+    (cb) => chatStore.subscribe(storeKey, cb),
+    () => chatStore.prRows(storeKey),
+    () => undefined
+  );
+  const pslot = menuDismissed || !prRows?.length ? null : prSlot(input);
+  const prNums = pslot
+    ? prRows!
+        .map((p) => String(p.num))
+        .filter((n) => n.startsWith(pslot.partial) && n !== pslot.partial)
+        .slice(0, 12)
+    : [];
   const menu: Menu | null =
     slashMenu ??
     (slot && branchRows.length
       ? { stage: "branch", rows: branchRows, prefix: slot.prefix }
       : rslot && rowRows.length
         ? { stage: "row", rows: rowRows, prefix: rslot.prefix }
-        : null);
+        : pslot && prNums.length
+          ? { stage: "pr", rows: prNums, prefix: pslot.prefix }
+          : null);
 
   // one name column per menu, wide enough for its longest row
   const menuCol = menu ? Math.max(...menu.rows.map((r) => r.length)) : 0;
@@ -1172,7 +1204,8 @@ export function TerminalChat({
   }, [slot, branchList, owner, repo, storeKey]);
 
   const stageOf = (v: string): Menu["stage"] | undefined =>
-    menuFor(v)?.stage ?? (branchSlot(v) ? "branch" : rowSlot(v) ? "row" : undefined);
+    menuFor(v)?.stage ??
+    (branchSlot(v) ? "branch" : rowSlot(v) ? "row" : prSlot(v) ? "pr" : undefined);
 
   const changeInput = (v: string) => {
     setInput(v);
@@ -1180,7 +1213,7 @@ export function TerminalChat({
     // value stages default to "what you typed" so custom refs are never
     // hijacked by a listed suggestion; arrows opt into the list
     const st = stageOf(v);
-    setMenuSel(st === "arg" || st === "branch" || st === "row" ? -1 : 0);
+    setMenuSel(st === "cmd" || st === undefined ? 0 : -1);
   };
 
   const applyMenuRow = (m: Menu, row: string) => {
@@ -1193,7 +1226,7 @@ export function TerminalChat({
         changeInput("");
         submit(row);
       }
-    } else if (m.stage === "row") {
+    } else if (m.stage === "row" || m.stage === "pr") {
       changeInput("");
       submit(`${m.prefix ?? ""}${row}`);
     } else if (m.stage === "branch") {
@@ -1254,7 +1287,7 @@ export function TerminalChat({
         if (menu.stage === "cmd") {
           const spec = COMMANDS.find((c) => c.name === row);
           changeInput(spec?.args ? `${row} ` : row);
-        } else if (menu.stage === "branch" || menu.stage === "row") {
+        } else if (menu.stage === "branch" || menu.stage === "row" || menu.stage === "pr") {
           changeInput(`${menu.prefix ?? ""}${row}`);
         } else {
           changeInput(`${menu.spec?.name} ${row}`);
@@ -1410,6 +1443,10 @@ export function TerminalChat({
                   ) : menu.stage === "row" ? (
                     <span className="min-w-0 flex-1 truncate text-muted-foreground">
                       {logRows?.[Number(row) - 1]?.subject}
+                    </span>
+                  ) : menu.stage === "pr" ? (
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                      {prRows?.find((p) => String(p.num) === row)?.title}
                     </span>
                   ) : null}
                 </button>

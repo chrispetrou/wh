@@ -141,7 +141,7 @@ worktrees           new, ls, switch, rm           (cli only)
 explain a range     wd explain main..dev          diff main..dev
 last N commits      wd explain HEAD~3..           explain the last 3 commits
                                                   (on <branch> to scope it)
-a pull request      fetch the branch, then a range what changed in pr #42
+a pull request      fetch the branch, then a range prs, then what changed in pr #42
 one commit          wd explain <sha>~1..<sha>     explain <sha>
 the graph           git log --graph               log, then explain 3
 time and people     git log --since, --author     since yesterday by me, standup
@@ -181,7 +181,7 @@ log [N] [on <branch>]
 explain 3 (a row of the log), explain 2..5, explain <sha>
 since yesterday | this week | v1.2 [by <login>], standup
 changelog [v1.1..v1.2 | since v1.2 | pr #42]
-branches, tags
+branches, tags, prs [open | closed | mine]
 ```
 
 Phrasing is flexible: `summarize`, `show me`, and `what changed in` work
@@ -223,6 +223,13 @@ per user-visible change, the same contract as `wd explain --changelog`
 in the cli. `tags` lists tags newest first with their sha and age, and
 tag names join branch names in the completion menu wherever a ref
 belongs (`since `, `changelog `, ranges).
+
+`prs` lists open pull requests, most recently updated first (`closed
+prs`, `my prs`): number, author, title, `head → base`, age, and `draft`,
+`merged`, or `closed` where it applies. Typing `pr ` afterwards offers
+those numbers in the completion menu, and `what changed in pr #42`
+shows the pr's state under its title: `draft`, `mergeable`, or
+`conflicts with base`.
 
 It uses the same explain spec as the CLI (`shared/prompts/`), on your own
 LLM keys. The first time a repo opens with no key stored, the terminal

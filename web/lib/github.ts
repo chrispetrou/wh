@@ -191,6 +191,21 @@ interface PrJson {
   deletions: number;
   changed_files: number;
   commits: number;
+  draft: boolean;
+  state: "open" | "closed";
+  merged: boolean;
+  mergeable: boolean | null; // null while github is still computing it
+}
+
+// the state words shown under a pr's title
+export function prFlags(pr: Pick<PrJson, "draft" | "state" | "merged" | "mergeable">): string[] {
+  const flags: string[] = [];
+  if (pr.draft) flags.push("draft");
+  if (pr.merged) flags.push("merged");
+  else if (pr.state === "closed") flags.push("closed");
+  else if (pr.mergeable === false) flags.push("conflicts with base");
+  else if (pr.mergeable === true) flags.push("mergeable");
+  return flags;
 }
 
 export async function prInput(
@@ -223,6 +238,7 @@ export async function prInput(
   }>;
   // the diff media type has no per-file stats, so numstat comes from the
   // diff itself being preprocessed; give the payload a whole-pr stats line
+  const flags = prFlags(pr);
   return {
     diff,
     commits: commitLines(commits),
@@ -230,6 +246,75 @@ export async function prInput(
     commitCount: pr.commits,
     truncated: pr.commits > 100 || pr.changed_files >= 300,
     title: pr.title,
+    note: flags.length ? flags.join(" · ") : undefined,
+  };
+}
+
+// pull requests, most recently updated first. rows travel tab-separated
+// (`#N` and author padded here, the title laid out by the client with
+// the relative time); the footer carries no tabs.
+const PRS_PAGE = 30;
+
+interface PrListJson {
+  number: number;
+  title: string;
+  draft: boolean;
+  state: "open" | "closed";
+  merged_at: string | null;
+  updated_at: string;
+  user: { login: string } | null;
+  head: { ref: string };
+  base: { ref: string };
+}
+
+export interface PrRow {
+  num: number;
+  title: string;
+}
+
+export async function prsText(
+  token: string,
+  owner: string,
+  repo: string,
+  state: "open" | "closed" | "mine",
+  login: string
+): Promise<{ text: string; rows: PrRow[] }> {
+  const q = new URLSearchParams({
+    state: state === "mine" ? "all" : state,
+    sort: "updated",
+    direction: "desc",
+    per_page: String(state === "mine" ? 100 : PRS_PAGE),
+  });
+  const res = await gh(token, `/repos/${owner}/${repo}/pulls?${q}`);
+  let prs = (await res.json()) as PrListJson[];
+  const capped = prs.length >= PRS_PAGE;
+  if (state === "mine") prs = prs.filter((p) => p.user?.login === login).slice(0, PRS_PAGE);
+  const what = state === "mine" ? `prs by ${login || "you"}` : `${state} prs`;
+  if (!prs.length) return { text: `no ${what}\n`, rows: [] };
+
+  const numWidth = Math.max(...prs.map((p) => String(p.number).length)) + 1;
+  const authorWidth = Math.max(...prs.map((p) => (p.user?.login ?? "").length));
+  const lines = prs.map((p) => {
+    const flags = prFlags({
+      draft: p.draft,
+      state: p.state,
+      merged: p.merged_at !== null,
+      mergeable: null,
+    });
+    return [
+      `#${p.number}`.padEnd(numWidth),
+      (p.user?.login ?? "").padEnd(authorWidth),
+      p.title,
+      `${p.head.ref} → ${p.base.ref}`,
+      p.updated_at,
+      flags.join(" · "),
+    ].join("\t");
+  });
+  lines.push(`${prs.length} ${what.replace(/prs$/, prs.length === 1 ? "pr" : "prs")}`);
+  if (capped && state !== "mine") lines.push(`(the ${PRS_PAGE} most recently updated)`);
+  return {
+    text: lines.join("\n") + "\n",
+    rows: prs.map((p) => ({ num: p.number, title: p.title })),
   };
 }
 

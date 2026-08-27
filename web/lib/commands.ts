@@ -21,7 +21,13 @@ type Shape =
   // a period ("yesterday", "this week", "2026-08-20") or a ref ("v1.2"),
   // optionally one author's commits only ("me" is the signed-in user)
   | { kind: "since"; period: string; author?: string }
-  | { kind: "tags" };
+  | { kind: "tags" }
+  // pull requests: open (default), closed, or the signed-in user's
+  | { kind: "prs"; state: "open" | "closed" | "mine" };
+
+// "prs", "open prs", "closed pull requests", "my prs", "prs mine"
+const PRS =
+  /^(?:list\s+)?(?:(open|closed|my)\s+)?(?:prs|pull\s+requests)(?:\s+(open|closed|mine))?$/i;
 
 // "changelog", "changelog v1.1..v1.2", "release notes for pr 42",
 // "changelog since v1.2"; bare means since the latest tag
@@ -30,7 +36,7 @@ export const LATEST_TAG = "latest tag";
 
 // lookups have no diff to frame
 function isDiff(c: Command): boolean {
-  return c.kind !== "branches" && c.kind !== "log" && c.kind !== "tags";
+  return c.kind !== "branches" && c.kind !== "log" && c.kind !== "tags" && c.kind !== "prs";
 }
 
 // log rows shown by default and at most
@@ -105,6 +111,11 @@ export function parseCommand(raw: string): Command | null {
   if (/^explain$/i.test(input)) return { kind: "last", n: 1 }; // cli default
   if (/^(?:list\s+)?branches$/i.test(input)) return { kind: "branches" };
   if (/^(?:list\s+)?tags$/i.test(input)) return { kind: "tags" };
+  const prs = PRS.exec(input);
+  if (prs) {
+    const w = (prs[1] ?? prs[2] ?? "open").toLowerCase();
+    return { kind: "prs", state: w === "my" || w === "mine" ? "mine" : (w as "open" | "closed") };
+  }
 
   const changelog = CHANGELOG.exec(input);
   if (changelog) {
@@ -181,7 +192,7 @@ export const commandHint = [
   "  explain <sha>",
   "  since yesterday | this week | v1.2 [by <login>], standup",
   "  changelog [v1.1..v1.2 | since v1.2 | pr #N] (release notes)",
-  "  branches, tags",
+  "  branches, tags, prs [open | closed | mine]",
   "  cli-style works too: wd explain HEAD~3..",
   "  /help for everything else",
 ].join("\n");

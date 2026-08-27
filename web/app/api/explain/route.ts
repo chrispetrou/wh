@@ -8,6 +8,7 @@ import {
   lastNCommits,
   logText,
   prInput,
+  prsText,
   sinceInput,
   tagsText,
   type ExplainInput,
@@ -185,6 +186,14 @@ export async function POST(req: NextRequest) {
   if (command.kind === "tags") {
     try {
       return plain({ tags: true }, await tagsText(session.token, owner, repo));
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
+  if (command.kind === "prs") {
+    try {
+      const prs = await prsText(session.token, owner, repo, command.state, session.login ?? "");
+      return plain({ prs: true, rows: prs.rows }, prs.text);
     } catch (e) {
       return githubFailure(e, destroy);
     }

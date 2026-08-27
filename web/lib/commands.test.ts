@@ -199,6 +199,16 @@ describe("parseCommand", () => {
     expect(parseCommand("list tags")).toEqual({ kind: "tags" });
   });
 
+  it("parses pull request lists", () => {
+    expect(parseCommand("prs")).toEqual({ kind: "prs", state: "open" });
+    expect(parseCommand("open pull requests")).toEqual({ kind: "prs", state: "open" });
+    expect(parseCommand("closed prs")).toEqual({ kind: "prs", state: "closed" });
+    expect(parseCommand("prs closed")).toEqual({ kind: "prs", state: "closed" });
+    expect(parseCommand("my prs")).toEqual({ kind: "prs", state: "mine" });
+    expect(parseCommand("prs mine")).toEqual({ kind: "prs", state: "mine" });
+    expect(parseCommand("changelog prs")).toBeNull();
+  });
+
   it("rejects everything else", () => {
     expect(parseCommand("")).toBeNull();
     expect(parseCommand("hello")).toBeNull();

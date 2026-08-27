@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { commitInput, latestTag, logText, sinceInput, tagsText } from "./github";
+import {
+  commitInput,
+  latestTag,
+  logText,
+  prFlags,
+  prInput,
+  prsText,
+  sinceInput,
+  tagsText,
+} from "./github";
 
 // a tiny github: main = M(A, F) > A > C, feat = F > C, tag v1 on C
 const SHA = (c: string) => c.repeat(40);
@@ -235,6 +244,89 @@ describe("tagsText", () => {
       "",
     ]);
     expect(await latestTag("t", "o", "r")).toBe("v2.0");
+  });
+});
+
+describe("prs", () => {
+  const pr = (number: number, login: string, extra: Record<string, unknown> = {}) => ({
+    number,
+    title: `pr ${number}`,
+    draft: false,
+    state: "open",
+    merged_at: null,
+    updated_at: "2026-08-27T04:00:00Z",
+    user: { login },
+    head: { ref: `feat/${number}` },
+    base: { ref: "main" },
+    ...extra,
+  });
+
+  it("lists prs with padded columns and state words", async () => {
+    const calls = stub({});
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+      calls.push(url);
+      return Response.json([pr(12, "alice", { draft: true }), pr(7, "bob")]);
+    });
+    const { text, rows } = await prsText("t", "o", "r", "open", "me");
+    expect(text.split("\n")).toEqual([
+      "#12\talice\tpr 12\tfeat/12 → main\t2026-08-27T04:00:00Z\tdraft",
+      "#7 \tbob  \tpr 7\tfeat/7 → main\t2026-08-27T04:00:00Z\t",
+      "2 open prs",
+      "",
+    ]);
+    expect(rows).toEqual([
+      { num: 12, title: "pr 12" },
+      { num: 7, title: "pr 7" },
+    ]);
+    expect(calls[0]).toContain("state=open");
+    expect(calls[0]).toContain("sort=updated");
+  });
+
+  it("filters mine across all states and marks merged ones", async () => {
+    stub({});
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () =>
+      Response.json([
+        pr(3, "me", { state: "closed", merged_at: "2026-08-20T00:00:00Z" }),
+        pr(2, "other"),
+        pr(1, "me", { state: "closed" }),
+      ])
+    );
+    const { text } = await prsText("t", "o", "r", "mine", "me");
+    expect(text.split("\n")).toEqual([
+      "#3\tme\tpr 3\tfeat/3 → main\t2026-08-27T04:00:00Z\tmerged",
+      "#1\tme\tpr 1\tfeat/1 → main\t2026-08-27T04:00:00Z\tclosed",
+      "2 prs by me",
+      "",
+    ]);
+  });
+
+  it("puts the mergeable state in the pr explain note", async () => {
+    stub({});
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      async (url: string, init?: { headers?: Record<string, string> }) => {
+        if (url.endsWith("/commits?per_page=100")) return Response.json([A]);
+        if (init?.headers?.accept === "application/vnd.github.diff") {
+          return new Response("diff --git a/x b/x\n+++ b/x\n+1\n");
+        }
+        return Response.json({
+          title: "t",
+          additions: 1,
+          deletions: 0,
+          changed_files: 1,
+          commits: 1,
+          draft: true,
+          state: "open",
+          merged: false,
+          mergeable: false,
+        });
+      }
+    );
+    const input = await prInput("t", "o", "r", 5);
+    expect(input.note).toBe("draft · conflicts with base");
+    expect(prFlags({ draft: false, state: "open", merged: false, mergeable: null })).toEqual([]);
+    expect(prFlags({ draft: false, state: "open", merged: false, mergeable: true })).toEqual([
+      "mergeable",
+    ]);
   });
 });
 

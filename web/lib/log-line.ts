@@ -15,6 +15,34 @@ export interface LogLayout {
 // the row budget before the author and date stop lining up
 export const LOG_COLS = 100;
 
+// a pr row: "#12 \talice\ttitle\thead → base\tiso\tflags" (number and author
+// padded by the server). the number is accent so it reads as the thing
+// to type next (`pr 12`); the title is fg; branches, age, state muted
+export function prLine(text: string, now = Date.now()): ChatLine {
+  const f = text.split("\t");
+  if (f.length < 6) return { text, cls: "o" };
+  const [num, author, title, branches, iso, flags] = f;
+  const meta = ` ${branches} ${relTime(iso, now)}${flags ? ` · ${flags}` : ""}`;
+  const used = num.length + 1 + author.length + 1;
+  const room = LOG_COLS - used - meta.length;
+  let t = title;
+  if (room >= 12) {
+    if (t.length > room) t = t.slice(0, room - 1) + "…";
+    t = t.padEnd(room);
+  }
+  return {
+    text: "",
+    cls: "",
+    pre: true,
+    spans: [
+      { text: `${num} `, cls: "x" },
+      { text: `${author} `, cls: "o" },
+      { text: t, cls: "" },
+      { text: meta, cls: "o" },
+    ],
+  };
+}
+
 export function logLine(text: string, st: LogLayout, now = Date.now()): ChatLine {
   const f = text.split("\t");
   if (f.length < 6) return { text, cls: "o" };

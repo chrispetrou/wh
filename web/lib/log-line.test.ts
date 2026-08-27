@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LOG_COLS, logLine, type LogLayout } from "./log-line";
+import { LOG_COLS, logLine, prLine, type LogLayout } from "./log-line";
 
 const NOW = Date.parse("2026-08-27T12:00:00Z");
 const T = "2026-08-27T09:00:00Z"; // 3h before
@@ -37,6 +37,16 @@ describe("logLine", () => {
     expect(s.length).toBe(LOG_COLS);
     expect(s).toContain("…");
     expect(s.trimEnd().endsWith("me 3h")).toBe(true);
+  });
+
+  it("lays out a pr row with an accent number and muted state", () => {
+    const l = prLine(`#12 \talice\tfix the thing\tfeat/x → main\t${T}\tdraft`, NOW);
+    expect(l.spans!.map((s) => s.cls)).toEqual(["x", "o", "", "o"]);
+    const s = flat(l);
+    expect(s.startsWith("#12  alice fix the thing")).toBe(true);
+    expect(s.trimEnd().endsWith("feat/x → main 3h · draft")).toBe(true);
+    expect(s.length).toBe(LOG_COLS);
+    expect(prLine("2 open prs", NOW)).toEqual({ text: "2 open prs", cls: "o" });
   });
 
   it("lets a row run on instead of squeezing the subject under 12 columns", () => {

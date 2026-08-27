@@ -21,6 +21,12 @@ export interface LogRow {
   subject: string;
 }
 
+// a row of the last prs list, for the completion menu after `pr `
+export interface PrRow {
+  num: number;
+  title: string;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
@@ -38,6 +44,8 @@ interface Entry {
   branches?: string[];
   // rows of the last log, numbered from 1
   log?: LogRow[];
+  // rows of the last prs list
+  prs?: PrRow[];
 }
 
 const MAX_CONTEXT_MESSAGES = 26;
@@ -154,6 +162,13 @@ export const chatStore = {
   },
   setLogRows(key: string, rows: LogRow[] | undefined) {
     entry(key).log = rows;
+    emit(key);
+  },
+  prRows(key: string): PrRow[] | undefined {
+    return entry(key).prs;
+  },
+  setPrRows(key: string, rows: PrRow[] | undefined) {
+    entry(key).prs = rows;
     emit(key);
   },
   setContext(key: string, firstUser: string, firstAnswer: string) {
