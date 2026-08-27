@@ -651,8 +651,10 @@ export function TerminalChat({
       if (!res.ok || !res.body) {
         const fail = (await res.json().catch(() => null)) as {
           error?: string;
+          hint?: string | null;
         } | null;
         err(fail?.error ?? `request failed (${res.status})`);
+        if (fail?.hint) muted([fail.hint]);
         if (res.status === 401 && fail?.error?.includes("sign in")) {
           window.location.href = "/api/auth/reset";
         }

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { providerFailure } from "./providers";
 import {
   buildFollowupRequest,
   buildRequest,
@@ -110,5 +111,71 @@ describe("extractText for groq", () => {
     expect(
       extractText("groq", '{"choices":[{"delta":{},"finish_reason":"stop"}],"x_groq":{"usage":{}}}')
     ).toBe("");
+  });
+});
+
+describe("providerFailure", () => {
+  it("turns a too-large body into our words, with the counts and a way out", () => {
+    const groq = JSON.stringify({
+      error: {
+        message:
+          "Request too large for model `openai/gpt-oss-120b` in organization `org_x` service tier `on_demand` on tokens per minute (TPM): Limit 8000, Requested 17842, please reduce your message size and try again.",
+        type: "tokens",
+      },
+    });
+    const f = providerFailure(413, groq, "openai/gpt-oss-120b");
+    expect(f).toEqual({
+      status: 413,
+      error: "the diff is too big for openai/gpt-oss-120b: 17842 tokens, limit 8000",
+      hint: "try fewer commits, cut it to a path (add: in src/), or /model one with a larger context",
+    });
+    // no org id, no raw json
+    expect(f.error).not.toContain("org_x");
+
+    const openai = JSON.stringify({
+      error: {
+        message:
+          "This model's maximum context length is 8192 tokens. However, you requested 17842 tokens (17842 in the messages, 0 in the completion). Please reduce the length.",
+      },
+    });
+    expect(providerFailure(400, openai, "gpt-5-mini").error).toBe(
+      "the diff is too big for gpt-5-mini: 17842 tokens, limit 8192"
+    );
+    const anthropic = JSON.stringify({
+      error: { message: "prompt is too long: 213000 tokens > 200000 maximum" },
+    });
+    expect(providerFailure(400, anthropic, "claude-opus-5").error).toBe(
+      "the diff is too big for claude-opus-5: 213000 tokens, limit 200000"
+    );
+  });
+
+  it("recognizes keys, rate limits, and unknown models", () => {
+    expect(providerFailure(401, "{}", "m")).toEqual({
+      status: 401,
+      error: "provider rejected the key",
+      hint: "/key <value> replaces it",
+    });
+    expect(providerFailure(429, '{"error":{"message":"Rate limit reached"}}', "m")).toEqual({
+      status: 429,
+      error: "provider rate limit, try again in a moment",
+    });
+    expect(providerFailure(404, '{"error":{"message":"The model `x` does not exist"}}', "x")).toEqual({
+      status: 404,
+      error: "provider has no model x",
+      hint: "/model lists the ones it knows",
+    });
+  });
+
+  it("falls back to the provider's message, never its json", () => {
+    expect(providerFailure(500, '{"error":"model not found"}', "m").error).toBe(
+      "provider has no model m"
+    );
+    expect(providerFailure(500, '{"error":{"message":"overloaded"}}', "m")).toEqual({
+      status: 502,
+      error: "provider error: overloaded",
+    });
+    expect(providerFailure(502, "<html>bad gateway</html>", "m").error).toBe(
+      "provider error: <html>bad gateway</html>"
+    );
   });
 });

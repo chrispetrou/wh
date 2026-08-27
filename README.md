@@ -290,7 +290,10 @@ cmd+k jumps back to the repo picker.
 The transcript reads like the cli: your command in the accent color,
 `summary` and `watch out` in amber, a green `→` line when something
 changed (`→ model claude-sonnet-5`, `→ saved wd-owner-repo.txt`), an
-amber `error:` label when something failed, and muted gray for status
+amber `error:` label when something failed (in plain words, never the
+provider's raw json: `the diff is too big for gpt-5-mini: 17842 tokens,
+limit 8192`, followed by a muted line with the way out), and muted gray
+for status
 (`reading 3 commits · 14 files · +212 −87`). Each answer closes with its
 elapsed time and model (`· 8.4s · claude-opus-5`; `· stopped after 2.1s`
 if you pressed esc), commands and their output group into blocks, and

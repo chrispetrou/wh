@@ -21,9 +21,11 @@ import { prompt, type PromptMode } from "@/lib/explain/prompt";
 import {
   buildFollowupRequest,
   buildRequest,
+  DEFAULT_MODELS,
   detectProvider,
   EFFORTS,
   MODEL_RE,
+  providerFailure,
   sseToText,
   type ChatMessage,
   type ProviderName,
@@ -73,6 +75,7 @@ function validHistory(history: unknown): history is ChatMessage[] {
 async function streamProvider(
   request: ProviderRequest,
   provider: ProviderName,
+  model: string,
   meta: string
 ): Promise<NextResponse> {
   const upstream = await fetch(request.url, {
@@ -81,10 +84,10 @@ async function streamProvider(
     body: request.body,
   });
   if (!upstream.ok || !upstream.body) {
-    const body = (await upstream.text()).slice(0, 200);
-    if (upstream.status === 401) return err(401, "provider rejected the key");
-    if (upstream.status === 429) return err(429, "provider rate limit");
-    return err(502, `provider error: ${body.trim()}`);
+    // in our words, with a hint where there is a way out
+    const body = (await upstream.text()).slice(0, 4000);
+    const f = providerFailure(upstream.status, body, model);
+    return NextResponse.json({ error: f.error, hint: f.hint ?? null }, { status: f.status });
   }
 
   const encoder = new TextEncoder();
@@ -161,7 +164,12 @@ export async function POST(req: NextRequest) {
       model || undefined,
       effort || undefined
     );
-    return streamProvider(request, provider, JSON.stringify({ followup: true }) + "\n");
+    return streamProvider(
+      request,
+      provider,
+      model || DEFAULT_MODELS[provider],
+      JSON.stringify({ followup: true }) + "\n"
+    );
   }
 
   if (!input) return err(400, "bad request");
@@ -303,5 +311,5 @@ export async function POST(req: NextRequest) {
   const request = buildRequest(provider, key, system, user, model || undefined, effort || undefined);
   // context lets the client hold the conversation for follow-up turns
   const meta = JSON.stringify({ ...metaBase, context: user }) + "\n";
-  return streamProvider(request, provider, meta);
+  return streamProvider(request, provider, model || DEFAULT_MODELS[provider], meta);
 }
