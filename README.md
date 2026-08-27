@@ -146,6 +146,7 @@ one commit          wd explain <sha>~1..<sha>     explain <sha>
 the graph           git log --graph               log, then explain 3
 time and people     git log --since, --author     since yesterday by me, standup
 release notes       wd explain --changelog v1..   changelog v1.1..v1.2
+a file's story      git log -p -- <path>          history <path>, why <path>:<line>
 branches            wd ls (worktrees, dirty)      branches (ahead/behind), tags
 follow-ups          (not yet)                     plain words after an explain
 raw payload         wd explain --dry-run          /show
@@ -181,6 +182,7 @@ log [N] [on <branch>]
 explain 3 (a row of the log), explain 2..5, explain <sha>
 since yesterday | this week | v1.2 [by <login>], standup
 changelog [v1.1..v1.2 | since v1.2 | pr #42]
+history src/git.rs, explain the last 5 commits in src/, why src/git.rs:42
 branches, tags, prs [open | closed | mine]
 ```
 
@@ -230,6 +232,19 @@ prs`, `my prs`): number, author, title, `head → base`, age, and `draft`,
 those numbers in the completion menu, and `what changed in pr #42`
 shows the pr's state under its title: `draft`, `mergeable`, or
 `conflicts with base`.
+
+Files have a history too. `history src/git.rs` (or a directory, `on
+<branch>` to scope) lists the commits touching it, numbered like the
+log so `explain 3` follows. Any explain takes `in <path>` to cut the
+diff down to one file or directory before the model sees it: `explain
+the last 5 commits in src/`, `what changed in src/git.rs since v1.2`,
+`changelog of pr 42 in docs/`; the header says `2 of 14 files, under
+src/`. And `why src/git.rs:42` (or `why line 42 of src/git.rs`, `on
+<ref>` to pick the version) blames the line, fetches the commit that
+last touched it cut down to that file, and asks the model why the line
+exists and what would break without it: a `why` section, then `watch
+out`, with the blaming commit noted under the header so `explain
+<sha>` can follow.
 
 It uses the same explain spec as the CLI (`shared/prompts/`), on your own
 LLM keys. The first time a repo opens with no key stored, the terminal

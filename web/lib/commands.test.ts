@@ -209,6 +209,68 @@ describe("parseCommand", () => {
     expect(parseCommand("changelog prs")).toBeNull();
   });
 
+  it("parses history, path cuts, and why", () => {
+    expect(parseCommand("history src/git.rs")).toEqual({ kind: "history", path: "src/git.rs" });
+    expect(parseCommand("history of src on dev")).toEqual({
+      kind: "history",
+      path: "src",
+      ref: "dev",
+    });
+    expect(parseCommand("history")).toEqual({ kind: "log" });
+    expect(parseCommand("history 50")).toEqual({ kind: "log", n: 50 });
+
+    expect(parseCommand("explain the last 5 commits in src/git.rs")).toEqual({
+      kind: "last",
+      n: 5,
+      path: "src/git.rs",
+    });
+    expect(parseCommand("last 3 on dev in src")).toEqual({
+      kind: "last",
+      n: 3,
+      ref: "dev",
+      path: "src",
+    });
+    expect(parseCommand("what changed in src/git.rs since v1.2")).toEqual({
+      kind: "since",
+      period: "v1.2",
+      path: "src/git.rs",
+    });
+    expect(parseCommand("explain src/git.rs main..dev")).toEqual({
+      kind: "range",
+      base: "main",
+      head: "dev",
+      path: "src/git.rs",
+    });
+    expect(parseCommand("changelog of pr 42 in docs/")).toEqual({
+      kind: "pr",
+      num: 42,
+      mode: "changelog",
+      path: "docs/",
+    });
+    expect(parseCommand("explain 3 in src")).toEqual({ kind: "row", from: 3, path: "src" });
+    // the branch and pr forms keep their meaning
+    expect(parseCommand("what changed in feat/x")).toEqual({
+      kind: "range",
+      base: "",
+      head: "feat/x",
+    });
+    expect(parseCommand("what changed in pr #42")).toEqual({ kind: "pr", num: 42 });
+    expect(parseCommand("branches in src")).toBeNull();
+
+    expect(parseCommand("why src/git.rs:42")).toEqual({
+      kind: "why",
+      path: "src/git.rs",
+      line: 42,
+    });
+    expect(parseCommand("why line 7 of README.md on dev")).toEqual({
+      kind: "why",
+      path: "README.md",
+      line: 7,
+      ref: "dev",
+    });
+    expect(parseCommand("why")).toBeNull();
+  });
+
   it("rejects everything else", () => {
     expect(parseCommand("")).toBeNull();
     expect(parseCommand("hello")).toBeNull();

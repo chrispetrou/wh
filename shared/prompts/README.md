@@ -17,6 +17,11 @@ implementations must produce the same payloads and the same output shape.
   --changelog`, `changelog <range>` on the web): the output contract is up
   to four sections, `added`, `changed`, `fixed`, `removed`, empty ones
   left out, or the single line `nothing user-visible`.
+  `[why]` is the system prompt behind `why <path>:<line>` on the web: the
+  payload is the blaming commit cut down to that file, followed by the
+  line itself; the contract is `why` then `watch out`. (cli parity is
+  deferred: `git blame` is local, so a cli `why` would be a small
+  follow-up.)
 - `preprocess.md`: the deterministic diff-to-payload transformation
   (section splitting, exclusion, sorting, size caps, payload layout).
 - `exclude.txt`: machine-readable exclusion rules (lockfiles, vendored

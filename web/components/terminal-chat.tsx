@@ -88,7 +88,7 @@ function tagLine(text: string): Line {
 }
 
 // the section labels of both output contracts, painted amber
-const LABELS = new Set(["summary", "watch out", "added", "changed", "fixed", "removed"]);
+const LABELS = new Set(["summary", "watch out", "added", "changed", "fixed", "removed", "why"]);
 
 // urls in output become quiet accent links
 const URL_RE = /\bhttps?:\/\/[^\s]+|\bgithub\.com\/[^\s]+/g;
@@ -156,6 +156,9 @@ const HELP: HelpRow[] = [
   ["explain <sha>", "one commit"],
   ["since yesterday [by me]", "a period, a ref, one author; standup"],
   ["changelog [range]", "release notes: added, changed, fixed, removed"],
+  ["history <path>", "commits touching a file or dir, numbered"],
+  ["... in <path>", "any explain, cut down to a file or dir"],
+  ["why <path>:<line>", "why a line exists (blame, in plain words)"],
   ["branches", "list branches with ahead/behind"],
   ["tags", "list tags, newest first"],
   ["prs [open|closed|mine]", "pull requests, recently updated first"],
@@ -289,7 +292,9 @@ function branchSlot(input: string): BranchSlot | null {
     input
   );
   if (m) return { prefix: m[1], partial: m[2] };
-  m = /^((?:wd\s+)?(?:git\s+)?(?:log|graph|history)(?:\s+\d{1,3})?\s+on\s+)(\S*)$/i.exec(input);
+  m = /^((?:wd\s+)?(?:git\s+)?(?:log|graph|history)(?:\s+\S+)?\s+on\s+)(\S*)$/i.exec(input);
+  if (m) return { prefix: m[1], partial: m[2] };
+  m = /^((?:wd\s+)?why\s+\S+:\d+\s+on\s+)(\S*)$/i.exec(input);
   if (m) return { prefix: m[1], partial: m[2] };
   // "since <ref>" anywhere at the end, and the first side of a changelog range
   m = /^((?:wd\s+)?(?:.*\s)?since\s+)([^\s.]*)$/i.exec(input);
@@ -700,7 +705,7 @@ export function TerminalChat({
 
   const run = async (command: string, raw = false) => {
     const kind = parseCommand(command)?.kind;
-    const lookup = kind === "branches" || kind === "log" || kind === "tags" || kind === "prs";
+    const lookup = ["branches", "log", "tags", "prs", "history"].includes(kind ?? "");
     // a new diff command starts a new context; lookups leave it alone
     if (!raw && !lookup) chatStore.clearContext(storeKey);
     let context = "";
@@ -1107,6 +1112,7 @@ export function TerminalChat({
         resolved = `${b.parent}..${a.sha}`;
         muted([`rows ${cmd.from}..${cmd.to}: ${b.sha.slice(0, 7)} to ${a.sha.slice(0, 7)}`]);
       }
+      if (cmd.path) resolved = `${resolved} in ${cmd.path}`;
       if (cmd.mode === "changelog") resolved = `changelog ${resolved}`;
       lastCmdRef.current = resolved;
       void run(resolved);

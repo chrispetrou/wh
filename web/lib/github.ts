@@ -3,11 +3,13 @@
 // spec applies unchanged.
 
 import { LATEST_TAG } from "./commands";
+import { filterDiff } from "./explain/filter";
 import { graph } from "./graph";
 import { resolvePeriod } from "./time";
 
 // overridable for github enterprise (and tests)
 const API = process.env.GITHUB_API_URL ?? "https://api.github.com";
+const GRAPHQL = process.env.GITHUB_GRAPHQL_URL ?? "https://api.github.com/graphql";
 
 export class GithubError extends Error {
   constructor(
@@ -36,9 +38,28 @@ async function gh(
     cache: "no-store",
   });
   if (res.ok) return res;
-  if (res.status === 401) throw new GithubError(401, "session expired, sign in again");
-  if (res.status === 404) throw new GithubError(404, "not found on github");
-  if (res.status === 406) throw new GithubError(406, "diff too large to explain");
+  throw failure(res);
+}
+
+// graphql, only where rest has no answer (blame). same errors, same token
+async function ghql<T>(token: string, query: string, variables: object): Promise<T> {
+  const res = await fetch(GRAPHQL, {
+    method: "POST",
+    headers: { ...headers(token, "application/json"), "content-type": "application/json" },
+    body: JSON.stringify({ query, variables }),
+    cache: "no-store",
+  });
+  if (!res.ok) throw failure(res);
+  const json = (await res.json()) as { data?: T; errors?: Array<{ message: string }> };
+  if (json.errors?.length) throw new GithubError(502, `github: ${json.errors[0].message}`);
+  if (!json.data) throw new GithubError(502, "github error (empty reply)");
+  return json.data;
+}
+
+function failure(res: Response): GithubError {
+  if (res.status === 401) return new GithubError(401, "session expired, sign in again");
+  if (res.status === 404) return new GithubError(404, "not found on github");
+  if (res.status === 406) return new GithubError(406, "diff too large to explain");
   if (
     (res.status === 403 || res.status === 429) &&
     res.headers.get("x-ratelimit-remaining") === "0"
@@ -47,9 +68,13 @@ async function gh(
     const at = reset
       ? new Date(reset).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
       : "later";
-    throw new GithubError(res.status, `github rate limit, try again after ${at}`);
+    return new GithubError(res.status, `github rate limit, try again after ${at}`);
   }
-  throw new GithubError(res.status, `github error (${res.status})`);
+  return new GithubError(res.status, `github error (${res.status})`);
+}
+
+function encodePath(path: string): string {
+  return path.split("/").map(encodeURIComponent).join("/");
 }
 
 export interface RepoItem {
@@ -540,6 +565,144 @@ export async function tagsText(token: string, owner: string, repo: string): Prom
 export async function tagNames(token: string, owner: string, repo: string): Promise<string[]> {
   const res = await gh(token, `/repos/${owner}/${repo}/tags?per_page=100`);
   return ((await res.json()) as TagJson[]).map((t) => t.name);
+}
+
+// the commits touching a path, in the log's row format without rails so
+// `explain 3` works the same way
+const HISTORY_ROWS = 30;
+
+export async function historyText(
+  token: string,
+  owner: string,
+  repo: string,
+  path: string,
+  ref?: string
+): Promise<LogResult> {
+  const q = new URLSearchParams({ path, per_page: String(HISTORY_ROWS) });
+  if (ref) q.set("sha", ref);
+  let res: Response;
+  try {
+    res = await gh(token, `/repos/${owner}/${repo}/commits?${q}`);
+  } catch (e) {
+    if (ref && e instanceof GithubError && e.status === 404) {
+      throw new GithubError(404, `branch ${ref} not found; run branches to see refs`);
+    }
+    throw e;
+  }
+  const commits = (await res.json()) as CommitJson[];
+  if (!commits.length) {
+    return { text: `no commits touch ${path}${ref ? ` on ${ref}` : ""}\n`, count: 0, rails: 0, rows: [] };
+  }
+  const rows: LogRef[] = [];
+  const lines = commits.map((c) => {
+    const subject = c.commit.message.split("\n")[0];
+    rows.push({ sha: c.sha, parent: c.parents[0]?.sha ?? null, subject });
+    return [
+      "",
+      c.sha.slice(0, 7),
+      "",
+      subject,
+      c.author?.login ?? c.commit.author.name,
+      c.commit.committer.date,
+    ].join("\t");
+  });
+  const n = commits.length;
+  lines.push(
+    `${n === HISTORY_ROWS ? "the latest " : ""}${n} ${n === 1 ? "commit" : "commits"} touching ${path}${ref ? ` on ${ref}` : ""}`
+  );
+  return { text: lines.join("\n") + "\n", count: n, rails: 0, rows };
+}
+
+// why a line exists: blame the line on the ref, then the blaming commit
+// cut down to that file, with the line itself for the prompt
+interface BlameData {
+  repository: {
+    object: {
+      blame: {
+        ranges: Array<{
+          startingLine: number;
+          endingLine: number;
+          commit: {
+            oid: string;
+            messageHeadline: string;
+            committedDate: string;
+            author: { name: string; user: { login: string } | null };
+          };
+        }>;
+      } | null;
+    } | null;
+  } | null;
+}
+
+const BLAME_QUERY = `query($owner: String!, $name: String!, $expr: String!, $path: String!) {
+  repository(owner: $owner, name: $name) {
+    object(expression: $expr) {
+      ... on Commit {
+        blame(path: $path) {
+          ranges {
+            startingLine
+            endingLine
+            commit { oid messageHeadline committedDate author { name user { login } } }
+          }
+        }
+      }
+    }
+  }
+}`;
+
+export interface WhyInput extends ExplainInput {
+  question: string; // appended to the user turn after the payload
+}
+
+export async function whyInput(
+  token: string,
+  owner: string,
+  repo: string,
+  path: string,
+  line: number,
+  ref?: string
+): Promise<WhyInput> {
+  const base = `/repos/${owner}/${repo}`;
+  if (!ref) {
+    const info = await gh(token, base);
+    ref = ((await info.json()) as { default_branch: string }).default_branch;
+  }
+  let fileRes: Response;
+  try {
+    fileRes = await gh(
+      token,
+      `${base}/contents/${encodePath(path)}?ref=${encodeURIComponent(ref)}`,
+      "application/vnd.github.raw"
+    );
+  } catch (e) {
+    if (e instanceof GithubError && e.status === 404) {
+      throw new GithubError(404, `${path} not found on ${ref}`);
+    }
+    throw e;
+  }
+  const text = await fileRes.text();
+  const lines = text.split("\n");
+  if (lines.length && lines[lines.length - 1] === "") lines.pop();
+  if (line < 1 || line > lines.length) {
+    throw new GithubError(422, `${path} has ${lines.length} lines`);
+  }
+
+  const data = await ghql<BlameData>(token, BLAME_QUERY, { owner, name: repo, expr: ref, path });
+  const ranges = data.repository?.object?.blame?.ranges ?? [];
+  const range = ranges.find((r) => r.startingLine <= line && line <= r.endingLine);
+  if (!range) throw new GithubError(404, `no blame for ${path}:${line} on ${ref}`);
+  const c = range.commit;
+
+  const input = await commitInput(token, owner, repo, c.oid);
+  const cut = filterDiff(input.diff, input.numstat, path);
+  const who = c.author.user?.login ?? c.author.name;
+  return {
+    ...input,
+    diff: cut.diff,
+    numstat: cut.numstat,
+    note: `${path}:${line} last changed in ${c.oid.slice(0, 7)} by ${who}, ${c.committedDate.slice(0, 10)}: ${c.messageHeadline}`,
+    question: `\n\nthe line in question, ${path}:${line} on ${ref}:\n${lines[line - 1]}`,
+  };
 }
 
 // the ascii graph: one walk per branch head (capped), unioned by sha,

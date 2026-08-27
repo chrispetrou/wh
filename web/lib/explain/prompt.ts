@@ -4,8 +4,9 @@
 import { explainTemplate } from "./shared.gen";
 
 // which system prompt frames the payload: the review shape (summary,
-// watch out) or release notes (added, changed, fixed, removed)
-export type PromptMode = "explain" | "changelog";
+// watch out), release notes (added, changed, fixed, removed), or the
+// reason a line exists (why, watch out)
+export type PromptMode = "explain" | "changelog" | "why";
 
 function sections(): Record<string, string> {
   const out: Record<string, string> = {};
@@ -31,7 +32,7 @@ export function prompt(
 } {
   const s = sections();
   return {
-    system: (s[mode === "changelog" ? "changelog" : "system"] ?? "").trim(),
+    system: (s[mode === "explain" ? "system" : mode] ?? "").trim(),
     user: (s.user ?? "").trim().replace("{{payload}}", payload),
     followup: (s.followup ?? "").trim(),
   };

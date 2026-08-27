@@ -4,8 +4,9 @@
 
 import { isPeriod } from "./time";
 
-// changelog mode frames the same diff as release notes
-export type Command = Shape & { mode?: "changelog" };
+// changelog mode frames the same diff as release notes; a path cuts the
+// diff down to one file or directory
+export type Command = Shape & { mode?: "changelog"; path?: string };
 
 type Shape =
   | { kind: "last"; n: number; ref?: string }
@@ -23,7 +24,22 @@ type Shape =
   | { kind: "since"; period: string; author?: string }
   | { kind: "tags" }
   // pull requests: open (default), closed, or the signed-in user's
-  | { kind: "prs"; state: "open" | "closed" | "mine" };
+  | { kind: "prs"; state: "open" | "closed" | "mine" }
+  // the commits touching a path, numbered like the log
+  | { kind: "history"; path: string; ref?: string }
+  // why a line exists: blame, then the blaming commit cut to the file
+  | { kind: "why"; path: string; line: number; ref?: string };
+
+// "history src/git.rs", "history of src on dev" (bare history is the log)
+const HISTORY = /^(?:file\s+)?history\s+(?:of\s+|for\s+)?(\S+)(?:\s+on\s+(\S+))?$/i;
+// "why src/git.rs:42", "why line 42 of src/git.rs", optional "on <ref>"
+const WHY_COLON = /^why\s+(\S+?):(\d{1,6})(?:\s+on\s+(\S+))?$/i;
+const WHY_WORDS = /^why\s+line\s+(\d{1,6})\s+(?:of|in)\s+(\S+)(?:\s+on\s+(\S+))?$/i;
+// "<diff command> in <path>"
+const IN_PATH = /^(.+?)\s+in\s+(\S+)$/i;
+// "what changed in <path> since v1.2", "explain <path> main..dev"
+const PATH_FIRST =
+  /^(?:what\s+changed\s+in|changes\s+in|explain|show)\s+(\S+)\s+((?:since\s+.+)|\S+\.{2,3}\S*)$/i;
 
 // "prs", "open prs", "closed pull requests", "my prs", "prs mine"
 const PRS =
@@ -36,7 +52,7 @@ export const LATEST_TAG = "latest tag";
 
 // lookups have no diff to frame
 function isDiff(c: Command): boolean {
-  return c.kind !== "branches" && c.kind !== "log" && c.kind !== "tags" && c.kind !== "prs";
+  return !["branches", "log", "tags", "prs", "history", "why"].includes(c.kind);
 }
 
 // log rows shown by default and at most
@@ -125,6 +141,34 @@ export function parseCommand(raw: string): Command | null {
     return inner && isDiff(inner) ? { ...inner, mode: "changelog" } : null;
   }
 
+  const why = WHY_COLON.exec(input);
+  if (why) {
+    const out: Command = { kind: "why", path: why[1], line: parseInt(why[2], 10) };
+    if (why[3]) out.ref = why[3];
+    return out;
+  }
+  const whyWords = WHY_WORDS.exec(input);
+  if (whyWords) {
+    const out: Command = { kind: "why", path: whyWords[2], line: parseInt(whyWords[1], 10) };
+    if (whyWords[3]) out.ref = whyWords[3];
+    return out;
+  }
+
+  // a path cut: only diff commands take one, and "in pr" or "in <branch>"
+  // keep their meaning because their remainder is not a command
+  const inPath = IN_PATH.exec(input);
+  if (inPath) {
+    const inner = parseCommand(inPath[1]);
+    if (inner && isDiff(inner) && !inner.path && !/^(?:pr|#\d+)$/i.test(inPath[2])) {
+      return { ...inner, path: inPath[2] };
+    }
+  }
+  const pathFirst = PATH_FIRST.exec(input);
+  if (pathFirst) {
+    const inner = parseCommand(pathFirst[2]);
+    if (inner && isDiff(inner)) return { ...inner, path: pathFirst[1] };
+  }
+
   const phrase = input.replace(VERB, "");
 
   // a number, or the singular "last commit"; bare plural is too ambiguous
@@ -144,6 +188,13 @@ export function parseCommand(raw: string): Command | null {
     const out: Command = { kind: "log" };
     if (log[1]) out.n = Math.min(Math.max(parseInt(log[1], 10), 1), LOG_MAX);
     if (log[2]) out.ref = log[2];
+    return out;
+  }
+
+  const history = HISTORY.exec(phrase);
+  if (history) {
+    const out: Command = { kind: "history", path: history[1] };
+    if (history[2]) out.ref = history[2];
     return out;
   }
 
@@ -192,6 +243,7 @@ export const commandHint = [
   "  explain <sha>",
   "  since yesterday | this week | v1.2 [by <login>], standup",
   "  changelog [v1.1..v1.2 | since v1.2 | pr #N] (release notes)",
+  "  history <path>, any command + in <path>, why <path>:<line>",
   "  branches, tags, prs [open | closed | mine]",
   "  cli-style works too: wd explain HEAD~3..",
   "  /help for everything else",

@@ -5,16 +5,19 @@ import {
   commitInput,
   compareRange,
   GithubError,
+  historyText,
   lastNCommits,
   logText,
   prInput,
   prsText,
   sinceInput,
   tagsText,
+  whyInput,
   type ExplainInput,
 } from "@/lib/github";
+import { filterDiff } from "@/lib/explain/filter";
 import { defaultCaps, defaultRules, preprocess, stats } from "@/lib/explain/preprocess";
-import { prompt } from "@/lib/explain/prompt";
+import { prompt, type PromptMode } from "@/lib/explain/prompt";
 import {
   buildFollowupRequest,
   buildRequest,
@@ -198,6 +201,14 @@ export async function POST(req: NextRequest) {
       return githubFailure(e, destroy);
     }
   }
+  if (command.kind === "history") {
+    try {
+      const h = await historyText(session.token, owner, repo, command.path, command.ref);
+      return plain({ log: true, count: h.count, rails: h.rails, rows: h.rows }, h.text);
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
   // row numbers only mean something next to the client's last log
   if (command.kind === "row") return err(400, "run log first, then explain a row number");
 
@@ -205,8 +216,22 @@ export async function POST(req: NextRequest) {
   const tz = Math.max(-840, Math.min(840, Number(req.headers.get("x-wd-tz") ?? 0) || 0));
 
   let data: ExplainInput;
+  let question = ""; // why: the line itself, after the payload
+  let mode: PromptMode = command.mode ?? "explain";
   try {
-    if (command.kind === "since") {
+    if (command.kind === "why") {
+      const w = await whyInput(
+        session.token,
+        owner,
+        repo,
+        command.path,
+        command.line,
+        command.ref
+      );
+      question = w.question;
+      mode = "why";
+      data = w;
+    } else if (command.kind === "since") {
       const r = await sinceInput(session.token, owner, repo, {
         period: command.period,
         author: command.author,
@@ -230,6 +255,20 @@ export async function POST(req: NextRequest) {
     return githubFailure(e, destroy);
   }
 
+  // a path cuts the diff down before anything is counted
+  if (command.path) {
+    const cut = filterDiff(data.diff, data.numstat, command.path);
+    if (!cut.kept) return plain({ empty: `nothing under ${command.path} in this range` }, "");
+    data = {
+      ...data,
+      diff: cut.diff,
+      numstat: cut.numstat,
+      note: [data.note, `${cut.kept} of ${cut.total} files, under ${command.path}`]
+        .filter(Boolean)
+        .join(" · "),
+    };
+  }
+
   const { files, added, deleted } = stats(data.numstat);
   const metaBase = {
     commits: data.commitCount,
@@ -239,7 +278,7 @@ export async function POST(req: NextRequest) {
     truncated: data.truncated,
     title: data.title ?? null,
     note: data.note ?? null,
-    mode: command.mode ?? null,
+    mode,
   };
 
   if (!data.diff.trim()) {
@@ -258,7 +297,8 @@ export async function POST(req: NextRequest) {
   }
 
   if (!key || !provider) return err(401, "paste an api key first");
-  const { system, user } = prompt(payload, command.mode ?? "explain");
+  const { system, user: userBase } = prompt(payload, mode);
+  const user = userBase + question;
   const request = buildRequest(provider, key, system, user, model || undefined, effort || undefined);
   // context lets the client hold the conversation for follow-up turns
   const meta = JSON.stringify({ ...metaBase, context: user }) + "\n";

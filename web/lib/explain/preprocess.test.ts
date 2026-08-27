@@ -81,4 +81,11 @@ describe("prompt", () => {
     expect(system).not.toContain("watch out");
     expect(user).toBe("PAYLOAD");
   });
+
+  it("has a why section for line archaeology", () => {
+    const { system } = prompt("PAYLOAD", "why");
+    expect(system).toContain("\nwhy\n");
+    expect(system).toContain("\nwatch out\n");
+    expect(system).not.toContain("summary");
+  });
 });

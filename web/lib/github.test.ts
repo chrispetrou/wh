@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   commitInput,
+  historyText,
   latestTag,
   logText,
   prFlags,
@@ -8,6 +9,7 @@ import {
   prsText,
   sinceInput,
   tagsText,
+  whyInput,
 } from "./github";
 
 // a tiny github: main = M(A, F) > A > C, feat = F > C, tag v1 on C
@@ -327,6 +329,130 @@ describe("prs", () => {
     expect(prFlags({ draft: false, state: "open", merged: false, mergeable: true })).toEqual([
       "mergeable",
     ]);
+  });
+});
+
+describe("historyText", () => {
+  it("lists the commits touching a path as rail-less log rows", async () => {
+    const calls = stub({});
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+      calls.push(url);
+      return Response.json([A, C]);
+    });
+    const h = await historyText("t", "o", "r", "src/a.ts", "dev");
+    expect(calls[0]).toContain("path=src%2Fa.ts");
+    expect(calls[0]).toContain("sha=dev");
+    expect(h.text.split("\n")).toEqual([
+      `\t${"a".repeat(7)}\t\tadd a\tchris\t2026-08-27T04:00:00Z`,
+      `\t${"c".repeat(7)}\t\tinit\tchris\t2026-08-27T01:00:00Z`,
+      "2 commits touching src/a.ts on dev",
+      "",
+    ]);
+    expect(h.rails).toBe(0);
+    expect(h.rows[1]).toEqual({ sha: SHA("c"), parent: null, subject: "init" });
+  });
+
+  it("says when nothing touches the path", async () => {
+    stub({});
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () => Response.json([]));
+    const h = await historyText("t", "o", "r", "nope.txt");
+    expect(h.text).toBe("no commits touch nope.txt\n");
+    expect(h.rows).toEqual([]);
+  });
+});
+
+describe("whyInput", () => {
+  const file = "one\ntwo\nthree\n";
+  const blame = {
+    data: {
+      repository: {
+        object: {
+          blame: {
+            ranges: [
+              {
+                startingLine: 1,
+                endingLine: 1,
+                commit: {
+                  oid: SHA("c"),
+                  messageHeadline: "init",
+                  committedDate: "2026-08-27T01:00:00Z",
+                  author: { name: "Chris", user: { login: "chris" } },
+                },
+              },
+              {
+                startingLine: 2,
+                endingLine: 3,
+                commit: {
+                  oid: SHA("a"),
+                  messageHeadline: "add a",
+                  committedDate: "2026-08-27T04:00:00Z",
+                  author: { name: "Chris", user: null },
+                },
+              },
+            ],
+          },
+        },
+      },
+    },
+  };
+
+  function whyStub() {
+    const calls: Array<{ url: string; body?: string }> = [];
+    stub({});
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      async (url: string, init?: { headers?: Record<string, string>; body?: string }) => {
+        calls.push({ url, body: init?.body });
+        if (url.endsWith("/repos/o/r")) return Response.json({ default_branch: "main" });
+        if (url.includes("/contents/")) {
+          return url.includes("missing")
+            ? new Response("{}", { status: 404 })
+            : new Response(file);
+        }
+        if (url.endsWith("/graphql")) return Response.json(blame);
+        if (url.includes(`/commits/${SHA("a")}`)) {
+          if (init?.headers?.accept === "application/vnd.github.diff") {
+            return new Response(
+              "diff --git a/src/a.ts b/src/a.ts\n+++ b/src/a.ts\n+two\ndiff --git a/other.ts b/other.ts\n+++ b/other.ts\n+x\n"
+            );
+          }
+          return Response.json({
+            ...A,
+            files: [
+              { filename: "src/a.ts", additions: 1, deletions: 0 },
+              { filename: "other.ts", additions: 1, deletions: 0 },
+            ],
+          });
+        }
+        return new Response("{}", { status: 404 });
+      }
+    );
+    return calls;
+  }
+
+  it("blames the line and cuts the commit down to the file", async () => {
+    const calls = whyStub();
+    const w = await whyInput("t", "o", "r", "src/a.ts", 2);
+    const ql = calls.find((c) => c.url.endsWith("/graphql"))!;
+    expect(JSON.parse(ql.body!).variables).toEqual({
+      owner: "o",
+      name: "r",
+      expr: "main",
+      path: "src/a.ts",
+    });
+    expect(calls.some((c) => c.url.includes("/contents/src%2Fa.ts") || c.url.includes("/contents/src/a.ts"))).toBe(true);
+    expect(w.diff).toBe("diff --git a/src/a.ts b/src/a.ts\n+++ b/src/a.ts\n+two\n");
+    expect(w.numstat).toBe("1\t0\tsrc/a.ts");
+    expect(w.commits).toBe(`${"a".repeat(7)} add a`);
+    expect(w.note).toBe(`src/a.ts:2 last changed in ${"a".repeat(7)} by Chris, 2026-08-27: add a`);
+    expect(w.question).toBe("\n\nthe line in question, src/a.ts:2 on main:\ntwo");
+  });
+
+  it("rejects lines past the end and missing files", async () => {
+    whyStub();
+    await expect(whyInput("t", "o", "r", "src/a.ts", 9)).rejects.toThrow("src/a.ts has 3 lines");
+    await expect(whyInput("t", "o", "r", "missing.ts", 1)).rejects.toThrow(
+      "missing.ts not found on main"
+    );
   });
 });
 
