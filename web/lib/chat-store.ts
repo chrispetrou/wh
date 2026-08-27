@@ -13,11 +13,12 @@ export interface ChatLine {
   block?: Block;
 }
 
-// the block the arrow keys drive right now, and what is open in it
+// the block the arrow keys drive right now. what is open in a block is
+// kept apart (see `expanded`), so a command launched from a panel does
+// not close the panel it came from
 export interface Live {
   line: number; // index into lines
   selected: number | null;
-  expanded: string[]; // shas or pr numbers as strings
 }
 
 // lazily fetched details for the expanded panel, keyed "commit:<sha>"
@@ -80,8 +81,12 @@ interface Entry {
   // rows of the last prs list
   prs?: PrRow[];
   live?: Live;
+  // open rows per block line: shas, or pr numbers as strings
+  expanded?: Map<number, string[]>;
   details?: Map<string, Detail | "loading" | "failed">;
 }
+
+const NONE: string[] = [];
 
 const MAX_CONTEXT_MESSAGES = 26;
 const MAX_CONTEXT_CHARS = 400_000;
@@ -211,6 +216,19 @@ export const chatStore = {
   },
   setLive(key: string, live: Live | undefined) {
     entry(key).live = live;
+    emit(key);
+  },
+  expanded(key: string, line: number): string[] {
+    return entry(key).expanded?.get(line) ?? NONE;
+  },
+  setExpanded(key: string, line: number, ids: string[]) {
+    const e = entry(key);
+    e.expanded = new Map(e.expanded ?? []);
+    e.expanded.set(line, ids);
+    emit(key);
+  },
+  clearExpanded(key: string) {
+    entry(key).expanded = undefined;
     emit(key);
   },
   detail(key: string, id: string): Detail | "loading" | "failed" | undefined {

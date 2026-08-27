@@ -201,7 +201,12 @@ export function LogBlock({
   );
   const mine = live?.line === line;
   const selected = mine ? live!.selected : null;
-  const expanded = mine ? live!.expanded : NONE;
+  // open rows survive the keys moving on to the next command
+  const expanded = useSyncExternalStore(
+    (cb) => chatStore.subscribe(storeKey, cb),
+    () => chatStore.expanded(storeKey, line),
+    () => NONE
+  );
   const rootRef = useRef<HTMLDivElement>(null);
   // the details map is replaced on every write, so its identity is a
   // stable snapshot; individual entries are read during render
@@ -236,10 +241,10 @@ export function LogBlock({
   const toggle = (i: number) => {
     const id = rowId(block, i);
     const open = expanded.includes(id) ? expanded.filter((e) => e !== id) : [...expanded, id];
-    chatStore.setLive(storeKey, { line, selected: i, expanded: open });
+    chatStore.setExpanded(storeKey, line, open);
+    chatStore.setLive(storeKey, { line, selected: i });
   };
-  const select = (i: number) =>
-    chatStore.setLive(storeKey, { line, selected: i, expanded: mine ? expanded : [] });
+  const select = (i: number) => chatStore.setLive(storeKey, { line, selected: i });
 
   const numW = String(block.rows.length).length;
   const lanes = block.kind === "log" ? block.lanes : 0;
@@ -265,6 +270,7 @@ export function LogBlock({
 
   return (
     <div ref={rootRef} className="log-block">
+      {block.rows.length ? (
       <div className="log-row log-head" style={{ gridTemplateColumns: cols }}>
         <span />
         <span className="log-num">#</span>
@@ -274,6 +280,7 @@ export function LogBlock({
         <span className="log-cell">{block.kind === "log" ? "age" : "author"}</span>
         <span className="log-cell">{block.kind === "log" ? "sha" : "age"}</span>
       </div>
+      ) : null}
       {block.rows.map((row, i) => {
         const id = rowId(block, i);
         const isSel = selected === i;
@@ -345,13 +352,9 @@ function jumpTo(block: Block, sha: string, line: number, storeKey: string, submi
     submit(sha);
     return;
   }
-  const live = chatStore.live(storeKey);
-  const expanded = live?.line === line ? live.expanded : [];
-  chatStore.setLive(storeKey, {
-    line,
-    selected: i,
-    expanded: expanded.includes(sha) ? expanded : [...expanded, sha],
-  });
+  const expanded = chatStore.expanded(storeKey, line);
+  if (!expanded.includes(sha)) chatStore.setExpanded(storeKey, line, [...expanded, sha]);
+  chatStore.setLive(storeKey, { line, selected: i });
 }
 
 function LogCells({ row, i, lanes, selected }: { row: CommitRow; i: number; lanes: number; selected: boolean }) {

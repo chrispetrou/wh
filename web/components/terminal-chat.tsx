@@ -734,7 +734,6 @@ export function TerminalChat({
               chatStore.setLive(storeKey, {
                 line: chatStore.lines(storeKey).length - 1,
                 selected: null,
-                expanded: [],
               });
             }
             return;
@@ -804,6 +803,7 @@ export function TerminalChat({
         chatStore.setLogRows(storeKey, undefined); // row numbers left with the screen
         chatStore.setPrRows(storeKey, undefined);
         chatStore.setLive(storeKey, undefined);
+        chatStore.clearExpanded(storeKey);
         break;
       case "key": {
         const usage = "usage: /key <value> adds or replaces, /key clear [provider] removes";
@@ -1299,18 +1299,20 @@ export function TerminalChat({
         chatStore.setLive(storeKey, { ...live, selected: live.selected > 0 ? live.selected - 1 : null });
         return;
       }
+      const expanded = chatStore.expanded(storeKey, live.line);
       if (e.key === "Enter" && live.selected !== null) {
         e.preventDefault();
         const id = idAt(live.selected);
-        const expanded = live.expanded.includes(id)
-          ? live.expanded.filter((x) => x !== id)
-          : [...live.expanded, id];
-        chatStore.setLive(storeKey, { ...live, expanded });
+        chatStore.setExpanded(
+          storeKey,
+          live.line,
+          expanded.includes(id) ? expanded.filter((x) => x !== id) : [...expanded, id]
+        );
         return;
       }
       if (e.key === "Escape" && !busy) {
         e.preventDefault();
-        if (live.expanded.length) chatStore.setLive(storeKey, { ...live, expanded: [] });
+        if (expanded.length) chatStore.setExpanded(storeKey, live.line, []);
         else chatStore.setLive(storeKey, undefined);
         return;
       }

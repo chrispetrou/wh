@@ -74,7 +74,8 @@ export function PreviewLog({ dark, open, loading }: { dark: boolean; open: boole
       if (loading) {
         // the skeleton: a panel whose fetch never lands
         chatStore.setDetail(KEY, `commit:${sha}`, "loading");
-        chatStore.setLive(KEY, { line: 0, selected: 5, expanded: [sha] });
+        chatStore.setExpanded(KEY, 0, [sha]);
+        chatStore.setLive(KEY, { line: 0, selected: 5 });
         return;
       }
       chatStore.setDetail(KEY, `commit:${sha}`, {
@@ -92,7 +93,8 @@ export function PreviewLog({ dark, open, loading }: { dark: boolean; open: boole
           { path: "web/lib/commands.ts", additions: 12, deletions: 2, status: "modified" },
         ],
       });
-      chatStore.setLive(KEY, { line: 0, selected: 5, expanded: [sha] });
+      chatStore.setExpanded(KEY, 0, [sha]);
+      chatStore.setLive(KEY, { line: 0, selected: 5 });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dark, open, loading]);

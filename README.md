@@ -210,7 +210,9 @@ message, files with their +/−, and `explain`, `changelog`, `github ↗`
 actions; hovering a file offers `explain` (that commit, cut to the
 file), `history` (the file's story), and `copy` (its path); a parent
 jumps to its row), esc steps back out, and clicking a row does the
-same. The numbers
+same. A command launched from an open panel leaves the panel open, so
+the answer below it still shows where it came from; only /clear closes
+them all. The numbers
 still work as words: `explain 3` explains that commit, `explain 2..5`
 the span of rows (from the parent of row 5 to row 2), and `explain
 <sha>` takes any sha directly; typing `explain ` with a log on screen
