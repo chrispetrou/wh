@@ -12,14 +12,18 @@ use std::process::{Command, Stdio};
 pub enum Provider {
     Anthropic { key: String },
     OpenAi { key: String },
+    Groq { key: String, url: String },
     Ollama { url: String },
 }
 
-/// Provider choice: WD_PROVIDER wins, else the first key found, else a
-/// local ollama. `get` abstracts env lookup so this is testable.
+/// Provider choice: WD_PROVIDER wins, else the first key found (paid
+/// keys before the free groq tier, so nobody is silently downgraded),
+/// else a local ollama. `get` abstracts env lookup so this is testable.
 pub fn choose(get: &dyn Fn(&str) -> Option<String>) -> Result<Provider, WdError> {
     let ollama_url =
         || get("WD_OLLAMA_URL").unwrap_or_else(|| "http://localhost:11434".to_string());
+    let groq_url =
+        || get("WD_GROQ_URL").unwrap_or_else(|| "https://api.groq.com/openai".to_string());
     match get("WD_PROVIDER").as_deref() {
         Some("anthropic") => match get("ANTHROPIC_API_KEY") {
             Some(key) => Ok(Provider::Anthropic { key }),
@@ -29,15 +33,27 @@ pub fn choose(get: &dyn Fn(&str) -> Option<String>) -> Result<Provider, WdError>
             Some(key) => Ok(Provider::OpenAi { key }),
             None => Err(WdError::Msg("OPENAI_API_KEY is not set".into())),
         },
+        Some("groq") => match get("GROQ_API_KEY") {
+            Some(key) => Ok(Provider::Groq {
+                key,
+                url: groq_url(),
+            }),
+            None => Err(WdError::Msg("GROQ_API_KEY is not set".into())),
+        },
         Some("ollama") => Ok(Provider::Ollama { url: ollama_url() }),
         Some(other) => Err(WdError::Msg(format!(
-            "unknown WD_PROVIDER '{other}' (anthropic, openai, ollama)"
+            "unknown WD_PROVIDER '{other}' (anthropic, openai, groq, ollama)"
         ))),
         None => {
             if let Some(key) = get("ANTHROPIC_API_KEY") {
                 Ok(Provider::Anthropic { key })
             } else if let Some(key) = get("OPENAI_API_KEY") {
                 Ok(Provider::OpenAi { key })
+            } else if let Some(key) = get("GROQ_API_KEY") {
+                Ok(Provider::Groq {
+                    key,
+                    url: groq_url(),
+                })
             } else {
                 Ok(Provider::Ollama { url: ollama_url() })
             }
@@ -52,8 +68,15 @@ pub fn model_for(provider: &Provider, get: &dyn Fn(&str) -> Option<String>) -> S
     match provider {
         Provider::Anthropic { .. } => "claude-opus-5".to_string(),
         Provider::OpenAi { .. } => "gpt-5-mini".to_string(),
+        Provider::Groq { .. } => "llama-3.3-70b-versatile".to_string(),
         Provider::Ollama { .. } => "llama3.2".to_string(),
     }
+}
+
+/// Urls come from the environment and land inside curl's config file as
+/// `url = "..."`, where a quote or newline could inject directives.
+fn valid_url(url: &str) -> bool {
+    !url.is_empty() && !url.contains(['"', '\n', '\r'])
 }
 
 /// (system, user) parts of shared/prompts/explain.md, split on the
@@ -64,15 +87,16 @@ pub fn prompt(payload: &str) -> (String, String) {
     let mut user = String::new();
     let mut target: Option<&mut String> = None;
     for line in template.lines() {
-        match line {
-            "[system]" => target = Some(&mut system),
-            "[user]" => target = Some(&mut user),
-            _ => {
-                if let Some(t) = target.as_deref_mut() {
-                    t.push_str(line);
-                    t.push('\n');
-                }
-            }
+        // any [section] line switches sections; unknown ones are skipped
+        if line.starts_with('[') && line.ends_with(']') {
+            target = match line {
+                "[system]" => Some(&mut system),
+                "[user]" => Some(&mut user),
+                _ => None,
+            };
+        } else if let Some(t) = target.as_deref_mut() {
+            t.push_str(line);
+            t.push('\n');
         }
     }
     (
@@ -223,6 +247,17 @@ pub fn stream(
             "content",
             None,
         ),
+        Provider::Groq { key, url } => (
+            format!("{}/v1/chat/completions", url.trim_end_matches('/')),
+            vec![format!("Authorization: Bearer {key}")],
+            format!(
+                r#"{{"model":"{}","stream":true,"messages":{}}}"#,
+                json_escape(model),
+                messages_json(system, user)
+            ),
+            "content",
+            None,
+        ),
         Provider::Ollama { url } => (
             format!("{}/api/chat", url.trim_end_matches('/')),
             vec![],
@@ -236,6 +271,9 @@ pub fn stream(
         ),
     };
 
+    if !valid_url(&url) {
+        return Err(WdError::Msg("invalid provider url".into()));
+    }
     let body_file = write_body(&body)?;
     let mut config = String::from("silent\nshow-error\nno-buffer\n");
     config.push_str(&format!("url = \"{url}\"\n"));
@@ -324,8 +362,21 @@ mod tests {
     fn chooses_provider_by_key_then_ollama() {
         let e = env_of(&[("ANTHROPIC_API_KEY", "a"), ("OPENAI_API_KEY", "b")]);
         assert!(matches!(choose(&e).unwrap(), Provider::Anthropic { .. }));
-        let e = env_of(&[("OPENAI_API_KEY", "b")]);
+        let e = env_of(&[("OPENAI_API_KEY", "b"), ("GROQ_API_KEY", "g")]);
         assert!(matches!(choose(&e).unwrap(), Provider::OpenAi { .. }));
+        let e = env_of(&[("GROQ_API_KEY", "g")]);
+        match choose(&e).unwrap() {
+            Provider::Groq { key, url } => {
+                assert_eq!(key, "g");
+                assert_eq!(url, "https://api.groq.com/openai");
+            }
+            _ => panic!("expected groq"),
+        }
+        let e = env_of(&[("GROQ_API_KEY", "g"), ("WD_GROQ_URL", "http://x")]);
+        match choose(&e).unwrap() {
+            Provider::Groq { url, .. } => assert_eq!(url, "http://x"),
+            _ => panic!("expected groq"),
+        }
         let e = env_of(&[]);
         match choose(&e).unwrap() {
             Provider::Ollama { url } => assert_eq!(url, "http://localhost:11434"),
@@ -337,7 +388,15 @@ mod tests {
     fn explicit_provider_wins_and_needs_its_key() {
         let e = env_of(&[("WD_PROVIDER", "ollama"), ("ANTHROPIC_API_KEY", "a")]);
         assert!(matches!(choose(&e).unwrap(), Provider::Ollama { .. }));
+        let e = env_of(&[
+            ("WD_PROVIDER", "groq"),
+            ("GROQ_API_KEY", "g"),
+            ("ANTHROPIC_API_KEY", "a"),
+        ]);
+        assert!(matches!(choose(&e).unwrap(), Provider::Groq { .. }));
         let e = env_of(&[("WD_PROVIDER", "openai")]);
+        assert!(choose(&e).is_err());
+        let e = env_of(&[("WD_PROVIDER", "groq")]);
         assert!(choose(&e).is_err());
         let e = env_of(&[("WD_PROVIDER", "nope")]);
         assert!(choose(&e).is_err());
@@ -353,6 +412,25 @@ mod tests {
             model_for(&Provider::Anthropic { key: "k".into() }, &e),
             "claude-opus-5"
         );
+        assert_eq!(
+            model_for(
+                &Provider::Groq {
+                    key: "k".into(),
+                    url: "u".into()
+                },
+                &e
+            ),
+            "llama-3.3-70b-versatile"
+        );
+    }
+
+    #[test]
+    fn rejects_urls_that_break_curl_config() {
+        assert!(valid_url("https://api.groq.com/openai"));
+        assert!(valid_url("http://127.0.0.1:1234"));
+        assert!(!valid_url(""));
+        assert!(!valid_url("http://x\"\noutput = /tmp/pwn"));
+        assert!(!valid_url("http://x\r"));
     }
 
     #[test]

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseCommand } from "@/lib/commands";
 import {
+  branchesText,
   compareRange,
   GithubError,
   lastNCommits,
@@ -9,85 +10,48 @@ import {
 } from "@/lib/github";
 import { defaultCaps, defaultRules, preprocess, stats } from "@/lib/explain/preprocess";
 import { prompt } from "@/lib/explain/prompt";
-import { buildRequest, detectProvider, sseToText } from "@/lib/explain/providers";
+import {
+  buildFollowupRequest,
+  buildRequest,
+  detectProvider,
+  EFFORTS,
+  MODEL_RE,
+  sseToText,
+  type ChatMessage,
+  type ProviderName,
+  type ProviderRequest,
+} from "@/lib/explain/providers";
 import { getSession } from "@/lib/session";
 
 export const runtime = "nodejs";
+
+// follow-up conversations stay client-side; these bound what we relay
+const MAX_QUESTION = 4_000;
+const MAX_MESSAGES = 26;
+const MAX_TOTAL_CHARS = 400_000;
 
 function err(status: number, message: string): NextResponse {
   return NextResponse.json({ error: message }, { status });
 }
 
-export async function POST(req: NextRequest) {
-  // same-origin guard; the session cookie is sameSite=lax already
-  const origin = req.headers.get("origin");
-  if (origin && process.env.APP_URL && origin !== process.env.APP_URL) {
-    return err(403, "cross-origin request rejected");
+function validHistory(history: unknown): history is ChatMessage[] {
+  if (!Array.isArray(history) || history.length === 0) return false;
+  if (history.length > MAX_MESSAGES) return false;
+  let total = 0;
+  for (let i = 0; i < history.length; i++) {
+    const m = history[i] as ChatMessage;
+    const expected = i % 2 === 0 ? "user" : "assistant";
+    if (m?.role !== expected || typeof m.content !== "string") return false;
+    total += m.content.length;
   }
+  return total <= MAX_TOTAL_CHARS && history.length % 2 === 0;
+}
 
-  const session = await getSession();
-  if (!session.token) return err(401, "sign in required");
-
-  const key = req.headers.get("x-wd-provider-key") ?? "";
-
-  const { owner, repo, input, raw } = (await req.json()) as {
-    owner?: string;
-    repo?: string;
-    input?: string;
-    raw?: boolean;
-  };
-  if (!owner || !repo || !input) return err(400, "bad request");
-  const command = parseCommand(input);
-  if (!command) return err(400, "unknown command");
-
-  let data: ExplainInput;
-  try {
-    data =
-      command.kind === "last"
-        ? await lastNCommits(session.token, owner, repo, command.n)
-        : command.kind === "pr"
-          ? await prInput(session.token, owner, repo, command.num)
-          : await compareRange(session.token, owner, repo, command.base, command.head);
-  } catch (e) {
-    if (e instanceof GithubError) {
-      if (e.status === 401) session.destroy();
-      return err(e.status, e.message);
-    }
-    return err(502, "github request failed");
-  }
-
-  const { files, added, deleted } = stats(data.numstat);
-  const meta =
-    JSON.stringify({
-      commits: data.commitCount,
-      files,
-      additions: added,
-      deletions: deleted,
-      truncated: data.truncated,
-      title: data.title ?? null,
-      note: data.note ?? null,
-    }) + "\n";
-
-  if (!data.diff.trim()) {
-    return new NextResponse(meta, {
-      headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
-    });
-  }
-
-  const payload = preprocess(data.diff, data.commits, data.numstat, defaultCaps, defaultRules());
-
-  // raw mode (/show): the preprocessed payload itself, no model call
-  if (raw) {
-    return new NextResponse(meta + payload, {
-      headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
-    });
-  }
-
-  if (!key) return err(401, "paste an api key first");
-  const { system, user } = prompt(payload);
-  const provider = detectProvider(key);
-  const request = buildRequest(provider, key, system, user);
-
+async function streamProvider(
+  request: ProviderRequest,
+  provider: ProviderName,
+  meta: string
+): Promise<NextResponse> {
   const upstream = await fetch(request.url, {
     method: "POST",
     headers: request.headers,
@@ -121,4 +85,128 @@ export async function POST(req: NextRequest) {
   return new NextResponse(out, {
     headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
   });
+}
+
+export async function POST(req: NextRequest) {
+  // same-origin guard; the session cookie is sameSite=lax already
+  const origin = req.headers.get("origin");
+  if (origin && process.env.APP_URL && origin !== process.env.APP_URL) {
+    return err(403, "cross-origin request rejected");
+  }
+
+  const session = await getSession();
+  if (!session.token) return err(401, "sign in required");
+
+  const key = req.headers.get("x-wd-provider-key") ?? "";
+  const model = req.headers.get("x-wd-model") ?? "";
+  if (model && !MODEL_RE.test(model)) return err(400, "invalid model name");
+  const provider = key ? detectProvider(key) : null;
+  let effort = req.headers.get("x-wd-effort") ?? "";
+  if (effort && provider) {
+    const levels = EFFORTS[provider];
+    // a level left over from another provider's key is dropped, not
+    // rejected, so switching keys never locks the user out
+    if (levels.length === 0) effort = "";
+    else if (!levels.includes(effort)) {
+      return err(400, `effort '${effort}' is not valid for ${provider} (${levels.join(", ")})`);
+    }
+  }
+
+  const { owner, repo, input, raw, followup } = (await req.json()) as {
+    owner?: string;
+    repo?: string;
+    input?: string;
+    raw?: boolean;
+    followup?: { history?: unknown; question?: unknown };
+  };
+  if (!owner || !repo) return err(400, "bad request");
+
+  // follow-up turn: relay the client-held conversation, no github fetch
+  if (followup) {
+    if (!key || !provider) return err(401, "paste an api key first");
+    const question = followup.question;
+    if (typeof question !== "string" || !question.trim() || question.length > MAX_QUESTION) {
+      return err(400, "bad question");
+    }
+    if (!validHistory(followup.history)) return err(400, "bad conversation history");
+    const request = buildFollowupRequest(
+      provider,
+      key,
+      prompt("").followup,
+      followup.history,
+      question.trim(),
+      model || undefined,
+      effort || undefined
+    );
+    return streamProvider(request, provider, JSON.stringify({ followup: true }) + "\n");
+  }
+
+  if (!input) return err(400, "bad request");
+  const command = parseCommand(input);
+  if (!command) return err(400, "unknown command");
+
+  // branches is a plain lookup: no diff, no model
+  if (command.kind === "branches") {
+    try {
+      const text = await branchesText(session.token, owner, repo);
+      return new NextResponse(JSON.stringify({ branches: true }) + "\n" + text, {
+        headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+      });
+    } catch (e) {
+      if (e instanceof GithubError) {
+        if (e.status === 401) session.destroy();
+        return err(e.status, e.message);
+      }
+      return err(502, "github request failed");
+    }
+  }
+
+  let data: ExplainInput;
+  try {
+    data =
+      command.kind === "last"
+        ? await lastNCommits(session.token, owner, repo, command.n, command.ref)
+        : command.kind === "pr"
+          ? await prInput(session.token, owner, repo, command.num)
+          : await compareRange(session.token, owner, repo, command.base, command.head);
+  } catch (e) {
+    if (e instanceof GithubError) {
+      if (e.status === 401) session.destroy();
+      return err(e.status, e.message);
+    }
+    return err(502, "github request failed");
+  }
+
+  const { files, added, deleted } = stats(data.numstat);
+  const metaBase = {
+    commits: data.commitCount,
+    files,
+    additions: added,
+    deletions: deleted,
+    truncated: data.truncated,
+    title: data.title ?? null,
+    note: data.note ?? null,
+  };
+
+  if (!data.diff.trim()) {
+    return new NextResponse(JSON.stringify(metaBase) + "\n", {
+      headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+    });
+  }
+
+  const payload = preprocess(data.diff, data.commits, data.numstat, defaultCaps, defaultRules());
+
+  // raw mode (/show): the preprocessed payload itself, no model call
+  if (raw) {
+    return new NextResponse(JSON.stringify(metaBase) + "\n" + payload, {
+      headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+    });
+  }
+
+  if (!key || !provider) return err(401, "paste an api key first");
+  const { system, user } = prompt(payload);
+  const request = buildRequest(provider, key, system, user, model || undefined, effort || undefined);
+  // context lets the client hold the conversation for follow-up turns
+  const meta = JSON.stringify({ ...metaBase, context: user }) + "\n";
+  return streamProvider(request, provider, meta);
 }

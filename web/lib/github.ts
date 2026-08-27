@@ -119,11 +119,27 @@ export async function compareRange(
   base: string,
   head: string
 ): Promise<ExplainInput> {
+  if (!head || !base) {
+    // open side of a range means the default branch tip
+    const info = await gh(token, `/repos/${owner}/${repo}`);
+    const def = ((await info.json()) as { default_branch: string }).default_branch;
+    head = head || def;
+    base = base || def;
+  }
   const path = `/repos/${owner}/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`;
-  const [diffRes, jsonRes] = await Promise.all([
-    gh(token, path, "application/vnd.github.diff"),
-    gh(token, path),
-  ]);
+  let diffRes: Response;
+  let jsonRes: Response;
+  try {
+    [diffRes, jsonRes] = await Promise.all([
+      gh(token, path, "application/vnd.github.diff"),
+      gh(token, path),
+    ]);
+  } catch (e) {
+    if (e instanceof GithubError && e.status === 404) {
+      throw new GithubError(404, `unknown ref in ${base}..${head}; run branches to see refs`);
+    }
+    throw e;
+  }
   const diff = await diffRes.text();
   const json = (await jsonRes.json()) as CompareJson;
   const files = json.files ?? [];
@@ -140,9 +156,19 @@ export async function lastNCommits(
   token: string,
   owner: string,
   repo: string,
-  n: number
+  n: number,
+  ref?: string
 ): Promise<ExplainInput> {
-  const res = await gh(token, `/repos/${owner}/${repo}/commits?per_page=${n + 1}`);
+  const sha = ref ? `&sha=${encodeURIComponent(ref)}` : "";
+  let res: Response;
+  try {
+    res = await gh(token, `/repos/${owner}/${repo}/commits?per_page=${n + 1}${sha}`);
+  } catch (e) {
+    if (ref && e instanceof GithubError && e.status === 404) {
+      throw new GithubError(404, `branch ${ref} not found; run branches to see refs`);
+    }
+    throw e;
+  }
   const commits = (await res.json()) as Array<{ sha: string }>;
   if (commits.length < 2) {
     throw new GithubError(422, "not enough history to compare");
@@ -170,11 +196,21 @@ export async function prInput(
   num: number
 ): Promise<ExplainInput> {
   const path = `/repos/${owner}/${repo}/pulls/${num}`;
-  const [diffRes, jsonRes, commitsRes] = await Promise.all([
-    gh(token, path, "application/vnd.github.diff"),
-    gh(token, path),
-    gh(token, `${path}/commits?per_page=100`),
-  ]);
+  let diffRes: Response;
+  let jsonRes: Response;
+  let commitsRes: Response;
+  try {
+    [diffRes, jsonRes, commitsRes] = await Promise.all([
+      gh(token, path, "application/vnd.github.diff"),
+      gh(token, path),
+      gh(token, `${path}/commits?per_page=100`),
+    ]);
+  } catch (e) {
+    if (e instanceof GithubError && e.status === 404) {
+      throw new GithubError(404, `pr #${num} not found in this repo`);
+    }
+    throw e;
+  }
   const diff = await diffRes.text();
   const pr = (await jsonRes.json()) as PrJson;
   const commits = (await commitsRes.json()) as Array<{
@@ -191,6 +227,79 @@ export async function prInput(
     truncated: pr.commits > 100 || pr.changed_files >= 300,
     title: pr.title,
   };
+}
+
+// branches with ahead/behind against the default branch, wd ls style.
+// counts come from per-branch compare calls, so they are capped.
+const BRANCH_COUNTS_CAP = 15;
+
+export async function branchesText(
+  token: string,
+  owner: string,
+  repo: string
+): Promise<string> {
+  const [infoRes, listRes] = await Promise.all([
+    gh(token, `/repos/${owner}/${repo}`),
+    gh(token, `/repos/${owner}/${repo}/branches?per_page=100`),
+  ]);
+  const def = ((await infoRes.json()) as { default_branch: string }).default_branch;
+  const branches = (await listRes.json()) as Array<{ name: string }>;
+
+  const others = branches.filter((b) => b.name !== def);
+  const counted = others.slice(0, BRANCH_COUNTS_CAP);
+  const compared = await Promise.all(
+    counted.map(async (b) => {
+      try {
+        const res = await gh(
+          token,
+          `/repos/${owner}/${repo}/compare/${encodeURIComponent(def)}...${encodeURIComponent(b.name)}`
+        );
+        const j = (await res.json()) as { ahead_by: number; behind_by: number };
+        return { name: b.name, ahead: j.ahead_by, behind: j.behind_by };
+      } catch {
+        return { name: b.name, ahead: -1, behind: -1 };
+      }
+    })
+  );
+
+  const width = Math.max(def.length, ...others.map((b) => b.name.length), 0) + 2;
+  const total = branches.length;
+  const numWidth = String(total).length;
+  let i = 0;
+  const row = (name: string, status: string) =>
+    `${String(++i).padStart(numWidth)}  ${name.padEnd(width)}${status}`.trimEnd();
+
+  const lines = [row(def, "default")];
+  for (const b of compared) {
+    const parts: string[] = [];
+    if (b.ahead > 0) parts.push(`ahead ${b.ahead}`);
+    if (b.behind > 0) parts.push(`behind ${b.behind}`);
+    if (b.ahead === 0 && b.behind === 0) parts.push("even");
+    lines.push(row(b.name, b.ahead < 0 ? "" : parts.join(" · ")));
+  }
+  for (const b of others.slice(BRANCH_COUNTS_CAP)) {
+    lines.push(row(b.name, ""));
+  }
+  lines.push(`${total} ${total === 1 ? "branch" : "branches"}`);
+  if (others.length > BRANCH_COUNTS_CAP) {
+    lines.push(`(counts shown for the first ${BRANCH_COUNTS_CAP})`);
+  }
+  return lines.join("\n") + "\n";
+}
+
+// branch names for completion menus, default branch first
+export async function branchNames(
+  token: string,
+  owner: string,
+  repo: string
+): Promise<string[]> {
+  const [infoRes, listRes] = await Promise.all([
+    gh(token, `/repos/${owner}/${repo}`),
+    gh(token, `/repos/${owner}/${repo}/branches?per_page=100`),
+  ]);
+  const def = ((await infoRes.json()) as { default_branch: string }).default_branch;
+  const names = ((await listRes.json()) as Array<{ name: string }>).map((b) => b.name);
+  return [def, ...names.filter((n) => n !== def)];
 }
 
 // per-file counts derived from the unified diff: +/- body lines per

@@ -6,10 +6,13 @@ implementations must produce the same payloads and the same output shape.
 
 ## files
 
-- `explain.md`: the prompt template. Two parts, split on the `[system]` and
-  `[user]` marker lines; `{{payload}}` in the user part is replaced with the
-  preprocessed payload. The output contract is a `summary` section followed
-  by a `watch out` section, as shown in the landing demo (`site/index.html`).
+- `explain.md`: the prompt template, split on `[section]` marker lines
+  (`[system]`, `[user]`, `[followup]`; parsers must skip unknown sections).
+  `{{payload}}` in the user part is replaced with the preprocessed payload.
+  The explain output contract is a `summary` section followed by a
+  `watch out` section, as shown in the landing demo (`site/index.html`).
+  `[followup]` is the system prompt for continuing the conversation about
+  the same diff (web today; a cli explain repl may use it later).
 - `preprocess.md`: the deterministic diff-to-payload transformation
   (section splitting, exclusion, sorting, size caps, payload layout).
 - `exclude.txt`: machine-readable exclusion rules (lockfiles, vendored

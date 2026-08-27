@@ -1,16 +1,36 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
+import { chatStore } from "@/lib/chat-store";
 import { commandHint, parseCommand } from "@/lib/commands";
+import {
+  DEFAULT_MODELS,
+  EFFORTS,
+  FREE_TIER,
+  MODEL_RE,
+  modelFamily,
+  SUGGESTED_MODELS,
+  type ProviderName,
+} from "@/lib/explain/providers";
+import { keyStore } from "@/lib/key-store";
 import { applyTheme, currentTheme, type Theme } from "./theme-toggle";
 
 type Cls = "p" | "c" | "o" | "g" | "a" | "x" | "r" | "";
+
+// a leading span in its own color: the green "→ verb" of a success line,
+// the amber "error:" label, or the fg command column of a help table
+interface Head {
+  text: string;
+  cls: Cls;
+}
 
 interface Line {
   text: string;
   cls: Cls;
   prefix?: string; // muted prompt rendered before the text
+  head?: Head;
+  tail?: Head; // trailing span, e.g. the muted status words of a branch row
 }
 
 const CLS: Record<Cls, string> = {
@@ -23,6 +43,28 @@ const CLS: Record<Cls, string> = {
   r: "text-destructive",
   "": "",
 };
+
+// a line as plain text, for /copy and /export
+function flat(l: Line): string {
+  return (
+    (l.prefix ? `${l.prefix} ` : "") + (l.head?.text ?? "") + l.text + (l.tail?.text ?? "")
+  );
+}
+
+// a branches row: "3  feat/web_app    behind 1". like the landing picker
+// and wd ls, the name is fg and the index and status words are muted
+const BRANCH_ROW = /^(\s*\d+\s{2})(\S+)(.*)$/;
+
+function branchLine(text: string): Line {
+  const m = BRANCH_ROW.exec(text);
+  if (!m) return { text, cls: "o" }; // the count and note lines
+  return {
+    head: { text: m[1], cls: "o" },
+    text: m[2],
+    cls: "",
+    tail: { text: m[3], cls: "o" },
+  };
+}
 
 // urls in output become quiet accent links
 const URL_RE = /\bhttps?:\/\/[^\s]+|\bgithub\.com\/[^\s]+/g;
@@ -52,64 +94,186 @@ function renderText(text: string) {
   return out;
 }
 
-const KEY_STORE = "wd_key";
 const RECENT_STORE = "wd_recent";
-const LOG_LIMIT = 200;
 
-const HELP = [
+interface ExplainMeta {
+  commits: number;
+  files: number;
+  additions: number;
+  deletions: number;
+  truncated: boolean;
+  title: string | null;
+  note: string | null;
+  context?: string;
+  followup?: boolean;
+  branches?: boolean;
+}
+
+// help tables: a string ending in ":" is an amber section label, any
+// other string a muted note, a pair is fg command + muted description
+type HelpRow = string | [string, string];
+
+const HELP_COL = 20;
+
+const HELP: HelpRow[] = [
   "repo commands:",
-  "  explain the last N commits",
-  "  what changed in pr #N",
-  "  diff base..head",
+  ["explain the last N commits [on <branch>]", ""],
+  ["what changed in pr #N (or in <branch>)", ""],
+  ["diff main..dev (any two refs)", ""],
+  ["branches", "list branches with ahead/behind"],
+  "  after an explain, plain words are follow-up questions",
   "slash commands:",
-  "  /repos            switch repo",
-  "  /key <value>      set the llm key (/key clear removes it)",
-  "  /theme <t>        auto, light, or dark",
-  "  /account          who is signed in",
-  "  /info             repo, provider, theme, font",
-  "  /font <f>         default, fira, jetbrains, or plex",
-  "  /fontsize <n>     11 to 18, or default",
-  "  /ligatures <t>    on or off",
-  "  /show             the raw payload of the last command",
-  "  /export           save this transcript as a text file",
-  "  /wd               about the wd cli",
-  "  /stop             stop a running explain (esc works too)",
-  "  /clear            clear the screen",
-  "  /logout           sign out",
-  "keys: tab completes, up/down history, ctrl+r searches it,",
-  "esc stops, cmd+k (or ctrl+k) jumps to the repo picker.",
+  ["/repos", "switch repo"],
+  ["/key <value>", "add an llm key (/key clear [provider] removes)"],
+  ["/model <name>", "pick the model; another provider's switches to it"],
+  ["/effort <level>", "reasoning effort (model support varies)"],
+  ["/theme <t>", "auto, light, or dark"],
+  ["/account", "who is signed in"],
+  ["/info", "repo, provider, theme, font"],
+  ["/font <f>", "default, fira, jetbrains, or plex"],
+  ["/fontsize <n>", "11 to 18, or default"],
+  ["/ligatures <t>", "on or off"],
+  ["/show", "the raw payload of the last command"],
+  ["/copy", "copy the last answer to the clipboard"],
+  ["/export", "save this transcript as a text file"],
+  ["/wd", "about the wd cli"],
+  ["/stop", "stop a running explain (esc works too)"],
+  ["/clear", "clear the screen"],
+  ["/logout", "sign out"],
+  "keys:",
+  ["tab", "complete"],
+  ["up/down", "history"],
+  ["ctrl+r", "search history"],
+  ["esc", "stop, or close the menu"],
+  ["cmd+k / ctrl+k", "repo picker"],
+  ["ctrl+t", "new tab"],
+  ["ctrl+1..9", "switch tabs"],
 ];
 
-const WD_HELP = [
+const WD_HELP: HelpRow[] = [
   "wd is also a cli: one tiny binary, no telemetry.",
-  "  wd new <branch>     worktree in a sibling dir, copies .env*",
-  "  wd ls               worktrees with dirty and ahead/behind status",
-  "  wd switch [query]   picker that cd's via a shell wrapper",
-  "  wd rm [name]        prune worktrees whose branches are merged",
-  "  wd explain [range]  this, in your terminal, on the same key",
-  "  wd init zsh         the shell wrapper for switch",
+  ["wd new <branch>", "worktree in a sibling dir, copies .env*"],
+  ["wd ls", "worktrees with dirty and ahead/behind status"],
+  ["wd switch [query]", "picker that cd's via a shell wrapper"],
+  ["wd rm [name]", "prune worktrees whose branches are merged"],
+  ["wd explain [range]", "this, in your terminal, on the same key"],
+  ["wd init zsh", "the shell wrapper for switch"],
   "source: github.com/chrispetrou/wd",
 ];
 
-const SLASH_CMDS = [
-  "/help",
-  "/repos",
-  "/key",
-  "/theme",
-  "/account",
-  "/info",
-  "/font",
-  "/fontsize",
-  "/ligatures",
-  "/show",
-  "/export",
-  "/wd",
-  "/stop",
-  "/clear",
-  "/logout",
-];
+function helpLines(rows: HelpRow[]): Line[] {
+  return rows.map((row) => {
+    if (typeof row === "string") {
+      return { text: row, cls: row.endsWith(":") ? "a" : "o" };
+    }
+    const [cmd, desc] = row;
+    return {
+      head: { text: `  ${cmd}`.padEnd(HELP_COL), cls: "" },
+      text: desc,
+      cls: "o",
+    };
+  });
+}
 
 const FONTS = ["default", "fira", "jetbrains", "plex"];
+
+const PROVIDERS = Object.keys(SUGGESTED_MODELS) as ProviderName[];
+
+// every provider's models, the active provider's first. no "default"
+// row: each provider's default is labeled, and picking it resets the
+// override (typing /model default still works)
+function modelArgs(): string[] {
+  const a = keyStore.active();
+  const order = a ? [a, ...PROVIDERS.filter((p) => p !== a)] : PROVIDERS;
+  return order.flatMap((p) => SUGGESTED_MODELS[p]);
+}
+
+function effortArgs(): string[] {
+  const a = keyStore.active();
+  const levels = a ? EFFORTS[a] : [...new Set(Object.values(EFFORTS).flat())];
+  return ["default", ...levels];
+}
+
+function keyArgs(): string[] {
+  return ["clear", ...keyStore.providers().map((p) => `clear ${p}`)];
+}
+
+// the completion menu: commands, their descriptions, and their options
+interface CmdSpec {
+  name: string;
+  desc: string;
+  args?: string[] | (() => string[]);
+}
+
+const COMMANDS: CmdSpec[] = [
+  { name: "/help", desc: "all commands and keys" },
+  { name: "/repos", desc: "switch repo" },
+  { name: "/key", desc: "add an llm key", args: keyArgs },
+  { name: "/model", desc: "pick the model", args: modelArgs },
+  { name: "/effort", desc: "reasoning effort", args: effortArgs },
+  { name: "/theme", desc: "light or dark", args: ["auto", "light", "dark"] },
+  { name: "/font", desc: "terminal font", args: FONTS },
+  {
+    name: "/fontsize",
+    desc: "11 to 18",
+    args: ["default", "11", "12", "13", "14", "15", "16", "17", "18"],
+  },
+  { name: "/ligatures", desc: "fira and jetbrains only", args: ["on", "off"] },
+  { name: "/account", desc: "who is signed in" },
+  { name: "/info", desc: "repo, provider, theme, font" },
+  { name: "/show", desc: "raw payload of the last command" },
+  { name: "/copy", desc: "copy the last answer" },
+  { name: "/export", desc: "save the transcript" },
+  { name: "/wd", desc: "about the wd cli" },
+  { name: "/stop", desc: "stop a running explain" },
+  { name: "/clear", desc: "clear the screen" },
+  { name: "/logout", desc: "sign out" },
+];
+
+interface Menu {
+  stage: "cmd" | "arg" | "branch";
+  rows: string[];
+  spec?: CmdSpec;
+  prefix?: string; // branch stage: the text before the branch slot
+}
+
+// where a branch name belongs in a repo command being typed
+interface BranchSlot {
+  prefix: string;
+  partial: string;
+}
+
+function branchSlot(input: string): BranchSlot | null {
+  if (!input || input.startsWith("/")) return null;
+  let m = /^((?:wd\s+)?what\s+changed\s+(?:in|on)\s+)(\S*)$/i.exec(input);
+  if (m && !/^pr\b|^#/i.test(m[2])) return { prefix: m[1], partial: m[2] };
+  m = /^((?:wd\s+)?(?:explain\s+(?:the\s+)?)?last\s+\d{1,3}(?:\s+commits?)?\s+on\s+)(\S*)$/i.exec(
+    input
+  );
+  if (m) return { prefix: m[1], partial: m[2] };
+  m = /^((?:(?:wd\s+)?(?:diff|compare|explain)\s+)?\S*?\.{2,3})(\S*)$/i.exec(input);
+  if (m && m[1].includes("..")) return { prefix: m[1], partial: m[2] };
+  m = /^((?:wd\s+)?(?:diff|compare)\s+)([^\s.]*)$/i.exec(input);
+  if (m) return { prefix: m[1], partial: m[2] };
+  return null;
+}
+
+function menuFor(input: string): Menu | null {
+  if (!input.startsWith("/")) return null;
+  const sp = input.indexOf(" ");
+  if (sp < 0) {
+    const q = input.toLowerCase();
+    const rows = COMMANDS.filter((c) => c.name.startsWith(q)).map((c) => c.name);
+    return rows.length ? { stage: "cmd", rows } : null;
+  }
+  const spec = COMMANDS.find((c) => c.name === input.slice(0, sp).toLowerCase());
+  if (!spec?.args) return null;
+  const args = typeof spec.args === "function" ? spec.args() : spec.args;
+  const partial = input.slice(sp + 1).toLowerCase();
+  const rows = args.filter((a) => a.startsWith(partial));
+  if (rows.length === 1 && rows[0] === partial) return null; // fully typed
+  return rows.length ? { stage: "arg", rows, spec } : null;
+}
 
 function pref(key: string): string {
   try {
@@ -149,37 +313,85 @@ function applyLigatures(on: boolean) {
   setPref("wd_lig", on ? "" : "off");
 }
 
-function commonPrefix(items: string[]): string {
-  let p = items[0] ?? "";
-  for (const s of items) {
-    while (!s.startsWith(p)) p = p.slice(0, -1);
-  }
-  return p;
+function modelList(p: ProviderName): string {
+  const [first, ...rest] = SUGGESTED_MODELS[p];
+  return [`${first} (default)`, ...rest].join(", ");
 }
 
-function readKey(): string {
-  try {
-    return localStorage.getItem(KEY_STORE) ?? "";
-  } catch {
-    return "";
-  }
+// one line per provider; the ones without a key say so
+function modelSuggestionLines(): string[] {
+  return PROVIDERS.map(
+    (p) =>
+      `${p}${FREE_TIER.includes(p) ? " (free tier)" : ""}: ${modelList(p)}${keyStore.hasKey(p) ? "" : " · no key"}`
+  );
 }
 
-function writeKey(v: string) {
-  try {
-    if (v) localStorage.setItem(KEY_STORE, v);
-    else localStorage.removeItem(KEY_STORE);
-  } catch {
-    // private windows may block storage; the key just won't persist
-  }
+// one line per provider for /key
+function keyLines(): string[] {
+  const a = keyStore.active();
+  return PROVIDERS.map((p) => {
+    const state = keyStore.hasKey(p)
+      ? p === a
+        ? "set (active)"
+        : "set"
+      : FREE_TIER.includes(p)
+        ? "none (free tier at console.groq.com)"
+        : "none";
+    return `${p.padEnd(10)}${state}`;
+  });
+}
+
+function activeModel(): string {
+  const a = keyStore.active();
+  return a ? keyStore.model(a) : "";
+}
+
+function activeEffort(): string {
+  const a = keyStore.active();
+  return a ? keyStore.effort(a) : "";
+}
+
+// true when the active provider takes no effort level
+function effortIgnored(): boolean {
+  const a = keyStore.active();
+  return a !== null && EFFORTS[a].length === 0;
 }
 
 function providerInfo(): string {
-  const key = readKey();
-  if (!key) return "no key set";
-  return key.startsWith("sk-ant-")
-    ? "anthropic · claude-opus-5"
-    : "openai · gpt-5-mini";
+  const a = keyStore.active();
+  if (!a) return "no key set";
+  const override = keyStore.model(a);
+  return `${a} · ${override || DEFAULT_MODELS[a]}`;
+}
+
+// the model a request goes to right now
+function modelName(): string {
+  const a = keyStore.active();
+  return a ? keyStore.model(a) || DEFAULT_MODELS[a] : "";
+}
+
+function seconds(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+interface Note {
+  text: string;
+  cls?: string;
+}
+
+// notes beside a completion row: for /model, the provider, whether it
+// is free, whether the row is that provider's default, and a warning
+// when no key for it is stored
+function argNotes(spec: CmdSpec | undefined, row: string): Note[] {
+  if (row === "default") return [{ text: "provider default" }];
+  if (spec?.name !== "/model") return [];
+  const p = modelFamily(row);
+  if (!p) return [];
+  const notes: Note[] = [{ text: p }];
+  if (FREE_TIER.includes(p)) notes.push({ text: "free", cls: "text-wd-green" });
+  if (DEFAULT_MODELS[p] === row) notes.push({ text: "default", cls: "text-muted-foreground" });
+  if (!keyStore.hasKey(p)) notes.push({ text: "no key", cls: "text-wd-amber" });
+  return notes;
 }
 
 export function TerminalChat({
@@ -192,13 +404,30 @@ export function TerminalChat({
   login?: string;
 }) {
   const router = useRouter();
-  const [lines, setLines] = useState<Line[]>([]);
+  const storeKey = `${owner}/${repo}`;
+  // chat state lives in the store so streams keep flowing on other tabs
+  const lines = useSyncExternalStore(
+    (cb) => chatStore.subscribe(storeKey, cb),
+    () => chatStore.lines(storeKey) as Line[],
+    () => chatStore.emptyLines() as Line[]
+  );
+  const busy = useSyncExternalStore(
+    (cb) => chatStore.subscribe(storeKey, cb),
+    () => chatStore.streaming(storeKey),
+    () => false
+  );
+  const ctxLen = useSyncExternalStore(
+    (cb) => chatStore.subscribe(storeKey, cb),
+    () => chatStore.context(storeKey)?.length ?? 0,
+    () => 0
+  );
   const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
   const [hasKey, setHasKey] = useState(true); // corrected on mount
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const partialRef = useRef("");
   const initRef = useRef(false);
   const historyRef = useRef<string[]>([]);
@@ -206,45 +435,46 @@ export function TerminalChat({
   const [search, setSearch] = useState<{ q: string; idx: number } | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const lastCmdRef = useRef("");
-  const streamModeRef = useRef<"text" | "diff">("text");
+  const streamModeRef = useRef<"text" | "diff" | "branches">("text");
   const prompt = `${owner}/${repo} $`;
 
-  const push = (rows: Line[]) => setLines((prev) => [...prev, ...rows]);
+  const push = (rows: Line[]) => chatStore.push(storeKey, rows);
   const muted = (texts: string[]) =>
     push(texts.map((text) => ({ text, cls: "o" as Cls })));
   const echo = (text: string) =>
     push([{ prefix: prompt, text, cls: text.startsWith("/") ? "x" : "c" }]);
-
-  const logStore = `wd_log:${owner}/${repo}`;
+  // the landing's success line: green arrow and verb, muted detail
+  const ok = (verb: string, detail = "") =>
+    push([
+      {
+        head: { text: `→ ${verb}`, cls: "g" },
+        text: detail ? ` ${detail}` : "",
+        cls: "o",
+      },
+    ]);
+  // errors are warnings-colored, never red: amber label, fg message
+  const err = (msg: string) =>
+    push([{ head: { text: "error:", cls: "a" }, text: ` ${msg}`, cls: "" }]);
 
   useEffect(() => {
     if (initRef.current) return; // strict mode re-runs mount effects
     initRef.current = true;
-    const present = readKey() !== "";
+    const present = keyStore.providers().length > 0;
     setHasKey(present);
     // remember this repo for the picker's recent-first ordering
     try {
       const recent: string[] = JSON.parse(localStorage.getItem(RECENT_STORE) ?? "[]");
-      const name = `${owner}/${repo}`;
-      const next = [name, ...recent.filter((r) => r !== name)].slice(0, 5);
+      const next = [storeKey, ...recent.filter((r) => r !== storeKey)].slice(0, 5);
       localStorage.setItem(RECENT_STORE, JSON.stringify(next));
     } catch {
       // ignore
     }
-    // restore this repo's log from the session, if any
-    try {
-      const stored = JSON.parse(sessionStorage.getItem(logStore) ?? "[]") as Line[];
-      if (Array.isArray(stored) && stored.length) {
-        setLines(stored);
-        return;
-      }
-    } catch {
-      // ignore
-    }
+    // a restored or still-live log means no boot lines
+    if (chatStore.lines(storeKey).length) return;
     push([{ text: `▜ wd · ${owner}/${repo}`, cls: "o" }]);
     if (!present) {
       muted([
-        "paste an anthropic or openai api key to enable explanations.",
+        "paste an api key to enable explanations: anthropic, openai, or groq (free tier at console.groq.com).",
         "it is stored only in this browser and sent per request.",
       ]);
     } else {
@@ -253,22 +483,32 @@ export function TerminalChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // persist the log so a refresh or repo switch does not wipe it
+  // elapsed ticker for the streaming cursor
   useEffect(() => {
-    try {
-      if (lines.length) {
-        sessionStorage.setItem(logStore, JSON.stringify(lines.slice(-LOG_LIMIT)));
-      } else {
-        sessionStorage.removeItem(logStore);
-      }
-    } catch {
-      // ignore
+    if (!busy) {
+      setElapsed(0);
+      return;
     }
-  }, [lines, logStore]);
+    const iv = setInterval(
+      () => setElapsed(Date.now() - chatStore.startedAt(storeKey)),
+      100
+    );
+    return () => clearInterval(iv);
+  }, [busy, storeKey]);
 
+  // follow new output only while the view is pinned to the bottom, so
+  // scrolling up to read earlier lines is never yanked back mid-stream.
+  // a submit re-pins
+  const pinnedRef = useRef(true);
+  const onLogScroll = () => {
+    const el = logRef.current;
+    if (el) pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  };
   useEffect(() => {
-    logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
-  }, [lines]);
+    if (pinnedRef.current) {
+      logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
+    }
+  }, [lines, busy]);
 
   // cmd+k / ctrl+k jumps back to the repo picker
   useEffect(() => {
@@ -284,6 +524,7 @@ export function TerminalChat({
 
   const classify = (text: string): Line => {
     const t = text.trimEnd();
+    if (streamModeRef.current === "branches") return branchLine(t);
     if (streamModeRef.current === "diff") {
       if (t.startsWith("diff --git")) return { text, cls: "c" };
       if (t.startsWith("- ")) return { text, cls: "o" }; // payload commit list
@@ -296,7 +537,7 @@ export function TerminalChat({
     }
     if (t === "summary" || t === "watch out") return { text, cls: "a" };
     if (t.startsWith("[wd:error] "))
-      return { text: `error: ${t.slice(11)}`, cls: "o" };
+      return { head: { text: "error:", cls: "a" }, text: ` ${t.slice(11)}`, cls: "" };
     return { text, cls: "" };
   };
 
@@ -314,34 +555,43 @@ export function TerminalChat({
     }
   };
 
-  const run = async (command: string, raw = false) => {
-    abortRef.current?.abort();
+  // one streaming pipeline for commands, /show, and follow-up turns
+  const stream = async (
+    body: object,
+    opts: {
+      raw?: boolean;
+      metrics?: boolean; // close with "· 3.2s · model" (model answers only)
+      onMeta?: (meta: ExplainMeta) => void;
+    }
+  ): Promise<string | null> => {
+    chatStore.abort(storeKey);
     const abort = new AbortController();
-    abortRef.current = abort;
-    streamModeRef.current = raw ? "diff" : "text";
-    setBusy(true);
-    setElapsed(0);
+    streamModeRef.current = opts.raw ? "diff" : "text";
+    chatStore.setStreaming(storeKey, true, abort);
     const t0 = Date.now();
-    const ticker = setInterval(() => setElapsed(Date.now() - t0), 100);
+    let full = "";
+    let done = false;
     try {
       const res = await fetch("/api/explain", {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-wd-provider-key": readKey(),
+          "x-wd-provider-key": keyStore.activeKey(),
+          "x-wd-model": activeModel(),
+          "x-wd-effort": activeEffort(),
         },
-        body: JSON.stringify({ owner, repo, input: command, raw }),
+        body: JSON.stringify(body),
         signal: abort.signal,
       });
       if (!res.ok || !res.body) {
-        const body = (await res.json().catch(() => null)) as {
+        const fail = (await res.json().catch(() => null)) as {
           error?: string;
         } | null;
-        muted([`error: ${body?.error ?? `request failed (${res.status})`}`]);
-        if (res.status === 401 && body?.error?.includes("sign in")) {
+        err(fail?.error ?? `request failed (${res.status})`);
+        if (res.status === 401 && fail?.error?.includes("sign in")) {
           window.location.href = "/api/auth/reset";
         }
-        return;
+        return null;
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -354,17 +604,51 @@ export function TerminalChat({
         if (!metaDone) {
           const nl = buf.indexOf("\n");
           if (nl < 0) continue;
-          const meta = JSON.parse(buf.slice(0, nl)) as {
-            commits: number;
-            files: number;
-            additions: number;
-            deletions: number;
-            truncated: boolean;
-            title: string | null;
-            note: string | null;
-          };
+          opts.onMeta?.(JSON.parse(buf.slice(0, nl)) as ExplainMeta);
           buf = buf.slice(nl + 1);
           metaDone = true;
+        }
+        if (buf) {
+          full += buf;
+          appendChunk(buf);
+          buf = "";
+        }
+      }
+      flushPartial();
+      done = true;
+      if (opts.metrics) muted([`· ${seconds(Date.now() - t0)} · ${modelName()}`]);
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") {
+        err("connection interrupted");
+      } else if (chatStore.owns(storeKey, abort)) {
+        // esc or /stop; a stream superseded by a new command stays silent
+        muted([`· stopped after ${seconds(Date.now() - t0)}`]);
+      }
+    } finally {
+      if (chatStore.owns(storeKey, abort)) {
+        streamModeRef.current = "text";
+        chatStore.setStreaming(storeKey, false);
+      }
+    }
+    return done ? full : null;
+  };
+
+  const run = async (command: string, raw = false) => {
+    const isBranches = parseCommand(command)?.kind === "branches";
+    // a new diff command starts a new context; lookups leave it alone
+    if (!raw && !isBranches) chatStore.clearContext(storeKey);
+    let context = "";
+    const full = await stream(
+      { owner, repo, input: command, raw },
+      {
+        raw,
+        metrics: !raw && !isBranches,
+        onMeta: (meta) => {
+          if (meta.branches) {
+            streamModeRef.current = "branches";
+            return;
+          }
+          context = meta.context ?? "";
           const rows = [
             `reading ${meta.commits} ${meta.commits === 1 ? "commit" : "commits"} · ${meta.files} ${meta.files === 1 ? "file" : "files"} · +${meta.additions} −${meta.deletions}`,
           ];
@@ -373,71 +657,160 @@ export function TerminalChat({
           if (meta.truncated) rows.push("comparison truncated by github");
           muted(rows);
           if (meta.files === 0) muted(["no changes in range"]);
-        }
-        if (buf) {
-          appendChunk(buf);
-          buf = "";
-        }
+        },
       }
-      flushPartial();
-    } catch (e) {
-      if ((e as Error).name !== "AbortError") {
-        muted(["error: connection interrupted"]);
+    );
+    if (!raw && context && full?.trim()) {
+      chatStore.setContext(storeKey, context, full.trim());
+      if (!pref("wd_fu_hint")) {
+        setPref("wd_fu_hint", "seen");
+        muted(["(ask follow-ups in plain words, or run another command)"]);
       }
-    } finally {
-      clearInterval(ticker);
-      streamModeRef.current = "text";
-      setBusy(false);
     }
   };
 
+  const runFollowup = async (question: string) => {
+    const history = chatStore.context(storeKey);
+    if (!history) return;
+    const full = await stream(
+      { owner, repo, followup: { history, question } },
+      { metrics: true }
+    );
+    if (full?.trim()) chatStore.appendExchange(storeKey, question, full.trim());
+  };
+
   const saveKey = (value: string, echoText: string) => {
-    writeKey(value);
+    const { provider, replaced } = keyStore.addKey(value);
     setHasKey(true);
-    push([
-      { text: `${prompt} ${echoText}`, cls: "p" },
-      { text: "→ key saved locally", cls: "g" },
-    ]);
+    echo(echoText);
+    ok(
+      "key saved",
+      `${provider}${replaced ? ", replaced" : ""}, now active, stored in this browser only`
+    );
   };
 
   const slash = (raw: string) => {
     const [cmd, ...rest] = raw.slice(1).split(" ");
     const arg = rest.join(" ").trim();
-    switch (cmd) {
+    switch (cmd.toLowerCase()) {
       case "help":
         echo(raw);
-        muted(HELP);
+        push(helpLines(HELP));
         break;
       case "repos":
         echo(raw);
         router.push("/repos");
         break;
       case "clear":
-        setLines([]);
-        try {
-          sessionStorage.removeItem(logStore);
-        } catch {
-          // ignore
-        }
+        chatStore.setAll(storeKey, []);
+        chatStore.clearContext(storeKey);
         break;
-      case "key":
+      case "key": {
+        const usage = "usage: /key <value> adds or replaces, /key clear [provider] removes";
+        const [verb, which] = arg.split(/\s+/);
         if (!arg) {
           echo(raw);
-          muted([hasKey ? `key set (${providerInfo()})` : "no key set", "usage: /key <value> or /key clear"]);
-        } else if (arg === "clear") {
-          writeKey("");
+          muted([...keyLines(), usage]);
+        } else if (verb === "clear" && !which) {
+          keyStore.removeKey();
           setHasKey(false);
           echo(raw);
-          muted(["key removed from this browser."]);
+          muted(["all keys removed from this browser."]);
+        } else if (verb === "clear") {
+          echo(raw);
+          const target = PROVIDERS.find((p) => p === which);
+          if (!target) {
+            muted([usage]);
+          } else if (!keyStore.hasKey(target)) {
+            muted([`no ${target} key stored.`]);
+          } else {
+            keyStore.removeKey(target);
+            setHasKey(keyStore.providers().length > 0);
+            muted([`${target} key removed from this browser.`, `now: ${providerInfo()}`]);
+          }
         } else {
-          saveKey(arg, "/key sk-***");
+          saveKey(arg, "/key ***");
         }
         break;
+      }
+      case "model": {
+        echo(raw);
+        const m = arg.trim();
+        const active = keyStore.active();
+        if (!m) {
+          muted([
+            `model: ${providerInfo()}`,
+            "usage: /model <name> or /model default; another provider's model switches to it",
+            ...modelSuggestionLines(),
+          ]);
+        } else if (!active) {
+          muted(["paste an api key first."]);
+        } else if (m.toLowerCase() === "default") {
+          keyStore.setModel(active, "");
+          ok("model", `${modelName()} (${active} default)`);
+        } else if (!MODEL_RE.test(m)) {
+          muted(["that does not look like a model id."]);
+        } else {
+          // ids of unknown family (llama-*, mixtral-*) stay on the active provider
+          const target = modelFamily(m) ?? active;
+          if (!keyStore.hasKey(target)) {
+            muted([`no ${target} key yet; /key <value> adds one.`]);
+          } else {
+            keyStore.setActive(target);
+            keyStore.setModel(target, m === DEFAULT_MODELS[target] ? "" : m);
+            ok("model", `${m}${target !== active ? ` (switched to ${target})` : ""}`);
+            const lines: string[] = [];
+            // said once; after that the green line is the whole story
+            if (!pref("wd_model_hint")) {
+              setPref("wd_model_hint", "seen");
+              lines.push("it is sent per request, like the key.");
+            }
+            // providers with effort levels get the /effort menu right away,
+            // so model and effort are one flow; esc keeps the current level
+            if (EFFORTS[target].length) {
+              lines.push(
+                `effort: ${keyStore.effort(target) || "provider default"} · pick a level below, esc keeps it`
+              );
+              changeInput("/effort ");
+              inputRef.current?.focus();
+            }
+            if (lines.length) muted(lines);
+          }
+        }
+        break;
+      }
+      case "effort": {
+        echo(raw);
+        const level = arg.toLowerCase();
+        const levels = effortArgs().slice(1);
+        const active = keyStore.active();
+        if (!active) {
+          muted(["paste an api key first."]);
+        } else if (effortIgnored() && level !== "default") {
+          muted([`your key is ${active}: its models take no effort level.`]);
+        } else if (!level) {
+          muted([
+            `effort: ${keyStore.effort(active) || "provider default"} (${active})`,
+            `usage: /effort ${levels.join("|")} or /effort default`,
+            "higher levels think longer; not every model accepts effort.",
+          ]);
+        } else if (level === "default") {
+          keyStore.setEffort(active, "");
+          ok("effort", `${active} default`);
+        } else if (levels.includes(level)) {
+          keyStore.setEffort(active, level);
+          ok("effort", `${level} for ${active}`);
+        } else {
+          muted([`usage: /effort ${levels.join("|")} or /effort default`]);
+        }
+        break;
+      }
       case "theme": {
         echo(raw);
-        if (arg === "auto" || arg === "light" || arg === "dark") {
-          applyTheme(arg as Theme);
-          muted([`theme set to ${arg}`]);
+        const t = arg.toLowerCase();
+        if (t === "auto" || t === "light" || t === "dark") {
+          applyTheme(t as Theme);
+          ok("theme", t);
         } else {
           muted([`theme is ${currentTheme()}. usage: /theme auto|light|dark`]);
         }
@@ -451,20 +824,24 @@ export function TerminalChat({
             : ["not signed in"]
         );
         break;
-      case "info":
+      case "info": {
         echo(raw);
+        const ctx = chatStore.context(storeKey);
         muted([
           `repo      ${owner}/${repo}`,
           `provider  ${providerInfo()}`,
+          `keys      ${keyStore.providers().join(", ") || "none"}`,
           `theme     ${currentTheme()}`,
           `font      ${pref("wd_font") || "default"} · ${pref("wd_fontsize") || "13"}px · ligatures ${pref("wd_lig") === "off" ? "off" : "on"}`,
+          `context   ${ctx ? `active (${ctx.length} messages), follow-ups on` : "none, run a command first"}`,
         ]);
         break;
+      }
       case "font":
         echo(raw);
-        if (FONTS.includes(arg)) {
-          applyFont(arg);
-          muted([`font set to ${arg}`]);
+        if (FONTS.includes(arg.toLowerCase())) {
+          applyFont(arg.toLowerCase());
+          ok("font", arg.toLowerCase());
         } else {
           muted([
             `font is ${pref("wd_font") || "default"}. usage: /font ${FONTS.join("|")}`,
@@ -476,24 +853,26 @@ export function TerminalChat({
         const n = parseInt(arg, 10);
         if (arg === "default") {
           applyFontSize("default");
-          muted(["font size reset."]);
+          ok("font size", "default");
         } else if (n >= 11 && n <= 18) {
           applyFontSize(String(n));
-          muted([`font size set to ${n}px`]);
+          ok("font size", `${n}px`);
         } else {
           muted(["usage: /fontsize 11..18 or default"]);
         }
         break;
       }
-      case "ligatures":
+      case "ligatures": {
         echo(raw);
-        if (arg === "on" || arg === "off") {
-          applyLigatures(arg === "on");
-          muted([`ligatures ${arg} (visible with fira or jetbrains)`]);
+        const lig = arg.toLowerCase();
+        if (lig === "on" || lig === "off") {
+          applyLigatures(lig === "on");
+          ok("ligatures", `${lig} (visible with fira or jetbrains)`);
         } else {
           muted(["usage: /ligatures on|off"]);
         }
         break;
+      }
       case "show":
         echo(raw);
         if (!lastCmdRef.current) {
@@ -503,27 +882,45 @@ export function TerminalChat({
           void run(lastCmdRef.current, true);
         }
         break;
+      case "copy": {
+        // the last answer: everything after the last prompt line, minus
+        // status chatter (the muted lines), so a paste is just the text
+        let start = lines.length;
+        while (start > 0 && !lines[start - 1].prefix) start--;
+        const answer = lines
+          .slice(start)
+          .filter((l) => l.cls !== "o")
+          .map(flat);
+        echo(raw);
+        if (!answer.length) {
+          muted(["nothing to copy yet."]);
+          break;
+        }
+        navigator.clipboard
+          .writeText(answer.join("\n") + "\n")
+          .then(() => ok("copied", `${answer.length} ${answer.length === 1 ? "line" : "lines"}`))
+          .catch(() => err("clipboard unavailable, select the text instead"));
+        break;
+      }
       case "export": {
         echo(raw);
-        const text = lines
-          .map((l) => (l.prefix ? `${l.prefix} ` : "") + l.text)
-          .join("\n");
+        const text = lines.map(flat).join("\n");
         const blob = new Blob([text + "\n"], { type: "text/plain" });
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
         a.download = `wd-${owner}-${repo}.txt`;
         a.click();
         URL.revokeObjectURL(a.href);
-        muted(["transcript saved."]);
+        ok("saved", a.download);
         break;
       }
       case "wd":
         echo(raw);
-        muted(WD_HELP);
+        push(helpLines(WD_HELP));
         break;
       case "stop":
         echo(raw);
-        if (busy) abortRef.current?.abort();
+        if (busy) chatStore.abort(storeKey);
         else muted(["nothing running."]);
         break;
       case "logout":
@@ -539,11 +936,12 @@ export function TerminalChat({
     }
   };
 
-  const submit = () => {
-    const raw = input.trim();
+  const submit = (given?: string) => {
+    const raw = (given ?? input).trim();
     if (!raw) return;
     setInput("");
     setHistPos(-1);
+    pinnedRef.current = true;
 
     if (raw.startsWith("/")) {
       if (!raw.startsWith("/key ")) historyRef.current.unshift(raw);
@@ -553,15 +951,41 @@ export function TerminalChat({
 
     if (!hasKey) {
       // gated: whatever was typed is the key; never store or echo it
-      saveKey(raw, "sk-***");
+      saveKey(raw, "***");
       muted([commandHint]);
       return;
     }
 
     historyRef.current.unshift(raw);
     echo(raw);
-    if (!parseCommand(raw)) {
+    const cmd = parseCommand(raw);
+    if (!cmd) {
+      if (/^wd\s/i.test(raw)) {
+        muted(["the worktree commands (new, ls, switch, rm) live in the cli: /wd"]);
+        muted([commandHint]);
+        return;
+      }
+      // plain words after an explain are a follow-up question
+      if (chatStore.context(storeKey)) {
+        void runFollowup(raw);
+        return;
+      }
+      if (/\bpr\b/i.test(raw) && !/\d/.test(raw)) {
+        muted(["name the pr by number, e.g. what changed in pr #42"]);
+      }
       muted([commandHint]);
+      return;
+    }
+    // the docs placeholder typed literally
+    if (
+      cmd.kind === "range" &&
+      cmd.base.toLowerCase() === "base" &&
+      ["head", ""].includes(cmd.head.toLowerCase())
+    ) {
+      muted([
+        "base..head is a placeholder: use real refs, e.g. diff main..feat/x",
+        "(run branches to see what exists)",
+      ]);
       return;
     }
     lastCmdRef.current = raw;
@@ -577,13 +1001,93 @@ export function TerminalChat({
     return -1;
   };
 
-  // slash autocomplete: matches while typing a bare /command
-  const slashMatches =
-    input.startsWith("/") && !input.includes(" ")
-      ? SLASH_CMDS.filter((c) => c.startsWith(input))
+  // completion menu (fx-style dropdown for commands, options, branches)
+  const [menuSel, setMenuSel] = useState(0);
+  const [menuDismissed, setMenuDismissed] = useState(false);
+  const branchList = useSyncExternalStore(
+    (cb) => chatStore.subscribe(storeKey, cb),
+    () => chatStore.branchList(storeKey),
+    () => undefined
+  );
+  const branchFetchRef = useRef(false);
+
+  const slot = menuDismissed ? null : branchSlot(input);
+  const slashMenu = menuDismissed ? null : menuFor(input);
+  const branchRows =
+    slot && branchList
+      ? branchList
+          .filter(
+            (b) =>
+              b.toLowerCase().startsWith(slot.partial.toLowerCase()) &&
+              b !== slot.partial
+          )
+          .slice(0, 12)
       : [];
-  const showMatches =
-    slashMatches.length > 0 && !(slashMatches.length === 1 && slashMatches[0] === input);
+  const menu: Menu | null =
+    slashMenu ??
+    (slot && branchRows.length
+      ? { stage: "branch", rows: branchRows, prefix: slot.prefix }
+      : null);
+
+  // one name column per menu, wide enough for its longest row
+  const menuCol = menu ? Math.max(...menu.rows.map((r) => r.length)) : 0;
+
+  // keep the keyboard selection visible inside the scrolling menu
+  useEffect(() => {
+    menuRef.current
+      ?.querySelector(".row-sel")
+      ?.scrollIntoView({ block: "nearest" });
+  }, [menuSel]);
+
+  // branch names load lazily the first time a slot appears
+  useEffect(() => {
+    if (!slot || branchList || branchFetchRef.current) return;
+    branchFetchRef.current = true;
+    fetch(`/api/branches?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`)
+      .then((r) => r.json())
+      .then((j: { branches?: string[] }) =>
+        chatStore.setBranches(storeKey, j.branches ?? [])
+      )
+      .catch(() => chatStore.setBranches(storeKey, []));
+  }, [slot, branchList, owner, repo, storeKey]);
+
+  const stageOf = (v: string): Menu["stage"] | undefined =>
+    menuFor(v)?.stage ?? (branchSlot(v) ? "branch" : undefined);
+
+  const changeInput = (v: string) => {
+    setInput(v);
+    setMenuDismissed(false);
+    // value stages default to "what you typed" so custom refs are never
+    // hijacked by a listed suggestion; arrows opt into the list
+    const st = stageOf(v);
+    setMenuSel(st === "arg" || st === "branch" ? -1 : 0);
+  };
+
+  const applyMenuRow = (m: Menu, row: string) => {
+    if (m.stage === "cmd") {
+      const spec = COMMANDS.find((c) => c.name === row);
+      if (spec?.args) {
+        changeInput(`${row} `);
+        inputRef.current?.focus();
+      } else {
+        changeInput("");
+        submit(row);
+      }
+    } else if (m.stage === "branch") {
+      const full = `${m.prefix ?? ""}${row}`;
+      if (parseCommand(full)) {
+        changeInput("");
+        submit(full);
+      } else {
+        // an incomplete expression (e.g. the first side of a range)
+        changeInput(full);
+        inputRef.current?.focus();
+      }
+    } else {
+      changeInput("");
+      submit(`${m.spec?.name} ${row}`);
+    }
+  };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (search) {
@@ -609,12 +1113,42 @@ export function TerminalChat({
       setSearch({ q: "", idx: 0 });
       return;
     }
-    if (e.key === "Tab" && slashMatches.length > 0) {
-      e.preventDefault();
-      const target =
-        slashMatches.length === 1 ? slashMatches[0] : commonPrefix(slashMatches);
-      if (target.length > input.length) setInput(target);
-      return;
+    if (menu) {
+      const minSel = menu.stage === "cmd" ? 0 : -1;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMenuSel(Math.min(menuSel + 1, menu.rows.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMenuSel(Math.max(menuSel - 1, minSel));
+        return;
+      }
+      if (e.key === "Tab") {
+        e.preventDefault();
+        const row = menu.rows[Math.max(menuSel, 0)];
+        if (menu.stage === "cmd") {
+          const spec = COMMANDS.find((c) => c.name === row);
+          changeInput(spec?.args ? `${row} ` : row);
+        } else if (menu.stage === "branch") {
+          changeInput(`${menu.prefix ?? ""}${row}`);
+        } else {
+          changeInput(`${menu.spec?.name} ${row}`);
+        }
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setMenuDismissed(true);
+        return;
+      }
+      if (e.key === "Enter" && !(menu.stage !== "cmd" && menuSel < 0)) {
+        e.preventDefault();
+        applyMenuRow(menu, menu.rows[Math.max(menuSel, 0)]);
+        return;
+      }
+      // enter with no selection in the arg stage submits the typed text
     }
     if (e.key === "Enter") {
       e.preventDefault();
@@ -633,7 +1167,7 @@ export function TerminalChat({
       setHistPos(next);
       setInput(next < 0 ? "" : historyRef.current[next]);
     } else if (e.key === "Escape") {
-      abortRef.current?.abort();
+      chatStore.abort(storeKey);
     }
   };
 
@@ -644,30 +1178,39 @@ export function TerminalChat({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" onClick={focusInput}>
-      <div ref={logRef} role="log" aria-live="polite" className="term-scroll">
+      <div
+        ref={logRef}
+        role="log"
+        aria-live="polite"
+        className="term-scroll"
+        onScroll={onLogScroll}
+      >
         {lines.map((l, i) => (
-          <div key={i}>
+          // a prompt line opens a block: command and its output read as one
+          <div key={i} className={l.prefix && i > 0 ? "mt-3" : ""}>
             {l.prefix ? (
               <span className="text-muted-foreground">{l.prefix} </span>
             ) : null}
+            {l.head ? <span className={CLS[l.head.cls]}>{l.head.text}</span> : null}
             <span className={CLS[l.cls]}>{renderText(l.text)}</span>
+            {l.tail ? <span className={CLS[l.tail.cls]}>{l.tail.text}</span> : null}
           </div>
         ))}
         {busy ? (
           <div>
             <span className="cursor" />
-            <span className="text-wd-faint"> {(elapsed / 1000).toFixed(1)}s</span>
+            <span className="text-muted-foreground"> {seconds(elapsed)}</span>
           </div>
         ) : null}
       </div>
-      <div className="flex items-baseline gap-2 pt-2">
+      <div className="flex items-baseline gap-2 pt-3">
         <span className="shrink-0 text-muted-foreground">{prompt}</span>
         <input
           ref={inputRef}
           className={`term-input ${input.startsWith("/") ? "text-wd-accent" : ""}`}
           style={input.startsWith("/") ? { color: "var(--wd-accent)" } : undefined}
           value={input}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => changeInput(e.target.value)}
           onKeyDown={onKeyDown}
           autoFocus
           autoCapitalize="none"
@@ -685,9 +1228,67 @@ export function TerminalChat({
             return i >= 0 ? historyRef.current[i] : "";
           })()}
         </div>
-      ) : showMatches ? (
-        <div className="pt-1 text-wd-faint">{slashMatches.join("  ")}</div>
+      ) : menu ? (
+        <div className="mt-2 border-t border-border pt-1.5">
+          <div ref={menuRef} className="max-h-56 overflow-y-auto">
+            {menu.rows.map((row, i) => {
+              const spec =
+                menu.stage === "cmd"
+                  ? COMMANDS.find((c) => c.name === row)
+                  : undefined;
+              const sel = i === menuSel;
+              return (
+                <button
+                  key={row}
+                  type="button"
+                  onClick={() => applyMenuRow(menu, row)}
+                  onMouseEnter={() => setMenuSel(i)}
+                  className={`flex w-full cursor-pointer items-baseline gap-2 rounded-[3px] px-1.5 py-0.5 text-left ${
+                    sel ? "row-sel" : ""
+                  }`}
+                >
+                  {/* the landing picker's marker, and one column width for
+                      the whole menu so descriptions line up */}
+                  <span className="shrink-0 text-muted-foreground">{sel ? "›" : " "}</span>
+                  <span
+                    className={`shrink-0 ${sel ? "font-semibold" : "text-wd-accent"}`}
+                    style={{ minWidth: `${menuCol}ch` }}
+                  >
+                    {row}
+                  </span>
+                  {spec ? (
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                      {spec.desc}
+                    </span>
+                  ) : menu.stage === "arg" && argNotes(menu.spec, row).length ? (
+                    <span className="text-muted-foreground">
+                      {argNotes(menu.spec, row).map((n, j) => (
+                        <span key={n.text}>
+                          {j ? " · " : ""}
+                          <span className={n.cls}>{n.text}</span>
+                        </span>
+                      ))}
+                    </span>
+                  ) : menu.stage === "branch" && row === branchList?.[0] ? (
+                    <span className="text-muted-foreground">default branch</span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+          <div className="pt-1 text-wd-faint">
+            ↑↓ navigate · tab complete · enter use · esc close
+          </div>
+        </div>
       ) : null}
+      <div
+        className="pt-1.5 text-muted-foreground"
+        data-tip="the model runs on your key; /model changes it"
+      >
+        {/* localStorage reads must wait for mount or hydration breaks */}
+        {mounted ? providerInfo() : " "}
+        {mounted && activeEffort() && !effortIgnored() ? ` · effort ${activeEffort()}` : ""}
+      </div>
     </div>
   );
 }

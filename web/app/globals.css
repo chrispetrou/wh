@@ -137,7 +137,10 @@
   --wd-amber: #e0b420;
   --wd-faint: #3a3a3a;
   --wd-sel: #1c2333;
-  --wd-accent: #e0b420;
+  /* indigo, the same family as light: commands and links must never share
+     amber with section labels and warnings. keep in sync with the media
+     block below */
+  --wd-accent: #91a7ff;
 }
 
 /* follow the system like the landing page does, until a toggle exists */
@@ -179,7 +182,7 @@
     --wd-amber: #e0b420;
     --wd-faint: #3a3a3a;
     --wd-sel: #1c2333;
-    --wd-accent: #e0b420;
+    --wd-accent: #91a7ff; /* see .dark above */
   }
 }
 
@@ -199,6 +202,7 @@
 
 ::selection {
   background: var(--wd-sel);
+  color: inherit; /* accent and amber text keep their color when selected */
 }
 
 /* full-viewport app surface: the page is the terminal */
@@ -246,6 +250,7 @@
   flex: 1;
   min-width: 0;
   caret-color: var(--foreground);
+  caret-shape: block; /* matches the streaming cursor where supported */
 }
 
 .term-scroll {
@@ -283,6 +288,30 @@
 }
 .field-input::placeholder {
   color: var(--wd-faint);
+}
+
+/* shortcut popovers: hairline, flat, muted, no shadow (brand) */
+.tip {
+  position: fixed;
+  background: var(--popover);
+  color: var(--muted-foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.tip.on {
+  opacity: 1;
+}
+@media (pointer: coarse) {
+  .tip {
+    display: none; /* no hover on touch; /help documents the keys */
+  }
 }
 
 /* keyboard users get a visible hairline focus ring; the chat and picker

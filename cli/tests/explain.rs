@@ -70,8 +70,10 @@ fn empty_range_errors() {
         .stderr(predicate::str::contains("nothing to explain in HEAD..HEAD"));
 }
 
-/// One-shot fake ollama: accepts a single request, streams ndjson chunks.
-fn fake_ollama(chunks: &[&str]) -> (String, std::thread::JoinHandle<String>) {
+/// One-shot fake provider: accepts a single request, replies with the
+/// given chunks (ndjson for ollama, sse for the openai-shaped ones).
+fn fake_server(content_type: &str, chunks: &[&str]) -> (String, std::thread::JoinHandle<String>) {
+    let content_type = content_type.to_string();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
     let body: String = chunks.concat();
@@ -102,7 +104,7 @@ fn fake_ollama(chunks: &[&str]) -> (String, std::thread::JoinHandle<String>) {
         };
         sock.write_all(
             format!(
-                "HTTP/1.1 200 OK\r\ncontent-type: application/x-ndjson\r\nconnection: close\r\n\r\n{body}"
+                "HTTP/1.1 200 OK\r\ncontent-type: {content_type}\r\nconnection: close\r\n\r\n{body}"
             )
             .as_bytes(),
         )
@@ -119,7 +121,7 @@ fn streams_from_fake_ollama() {
     t.commit("first");
     t.write("a.txt", "two\n");
     t.commit("second");
-    let (url, server) = fake_ollama(&[
+    let (url, server) = fake_server("application/x-ndjson", &[
         "{\"message\":{\"role\":\"assistant\",\"content\":\"summary\\nswapped one for two.\\n\"},\"done\":false}\n",
         "{\"message\":{\"role\":\"assistant\",\"content\":\"\\nwatch out\\nnothing notable.\\n\"},\"done\":false}\n",
         "{\"done\":true}\n",
@@ -152,7 +154,10 @@ fn provider_error_body_is_surfaced() {
     t.commit("first");
     t.write("a.txt", "two\n");
     t.commit("second");
-    let (url, _server) = fake_ollama(&["{\"error\":\"model not found\"}\n"]);
+    let (url, _server) = fake_server(
+        "application/x-ndjson",
+        &["{\"error\":\"model not found\"}\n"],
+    );
     t.wd()
         .env("WD_PROVIDER", "ollama")
         .env("WD_OLLAMA_URL", &url)
@@ -160,4 +165,58 @@ fn provider_error_body_is_surfaced() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("model not found"));
+}
+
+#[test]
+fn streams_from_fake_groq_sse() {
+    let t = TestRepo::new();
+    t.write("a.txt", "one\n");
+    t.commit("first");
+    t.write("a.txt", "two\n");
+    t.commit("second");
+    let (url, server) = fake_server(
+        "text/event-stream",
+        &[
+            "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"\"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"summary\\nswapped one for two.\\n\"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"\\nwatch out\\nnothing notable.\\n\"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"x_groq\":{\"usage\":{\"total_tokens\":9}}}\n\n",
+            "data: [DONE]\n\n",
+        ],
+    );
+    // no WD_PROVIDER: exercises auto-detect, so the developer's own paid
+    // keys must not be allowed to outrank the groq key
+    t.wd()
+        .env_remove("ANTHROPIC_API_KEY")
+        .env_remove("OPENAI_API_KEY")
+        .env("GROQ_API_KEY", "gsk_test")
+        .env("WD_GROQ_URL", &url)
+        .arg("explain")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("summary\nswapped one for two."))
+        .stdout(predicate::str::contains("watch out\nnothing notable."));
+    let request = server.join().unwrap();
+    assert!(
+        request.starts_with("POST /v1/chat/completions "),
+        "{request}"
+    );
+    assert!(request.contains("Authorization: Bearer gsk_test"));
+    assert!(request.contains("\"model\":\"llama-3.3-70b-versatile\""));
+    assert!(request.contains("\"role\":\"system\""));
+}
+
+#[test]
+fn rejects_unknown_provider() {
+    let t = TestRepo::new();
+    t.write("a.txt", "one\n");
+    t.commit("first");
+    t.write("a.txt", "two\n");
+    t.commit("second");
+    t.wd()
+        .env("WD_PROVIDER", "nope")
+        .arg("explain")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("anthropic, openai, groq, ollama"));
 }
