@@ -2,9 +2,11 @@
 // (unified diff + numstat lines + commit lines) so the shared preprocess
 // spec applies unchanged.
 
+import type { Block, CommitRow, Ref } from "./block";
+import type { CommitDetail, PrDetail } from "./chat-store";
 import { LATEST_TAG } from "./commands";
 import { filterDiff } from "./explain/filter";
-import { graph } from "./graph";
+import { laneCount, layout } from "./graph";
 import { resolvePeriod } from "./time";
 
 // overridable for github enterprise (and tests)
@@ -275,35 +277,38 @@ export async function prInput(
   };
 }
 
-// pull requests, most recently updated first. rows travel tab-separated
-// (`#N` and author padded here, the title laid out by the client with
-// the relative time); the footer carries no tabs.
+// pull requests, most recently updated first, as a block
 const PRS_PAGE = 30;
 
 interface PrListJson {
   number: number;
   title: string;
+  body?: string | null;
   draft: boolean;
   state: "open" | "closed";
   merged_at: string | null;
+  merged?: boolean;
+  mergeable?: boolean | null;
   updated_at: string;
   user: { login: string } | null;
   head: { ref: string };
   base: { ref: string };
+  html_url?: string;
+  commits?: number;
 }
 
-export interface PrRow {
+export interface PrRef {
   num: number;
   title: string;
 }
 
-export async function prsText(
+export async function prsBlock(
   token: string,
   owner: string,
   repo: string,
   state: "open" | "closed" | "mine",
   login: string
-): Promise<{ text: string; rows: PrRow[] }> {
+): Promise<{ block: Block; rows: PrRef[] }> {
   const q = new URLSearchParams({
     state: state === "mine" ? "all" : state,
     sort: "updated",
@@ -315,40 +320,127 @@ export async function prsText(
   const capped = prs.length >= PRS_PAGE;
   if (state === "mine") prs = prs.filter((p) => p.user?.login === login).slice(0, PRS_PAGE);
   const what = state === "mine" ? `prs by ${login || "you"}` : `${state} prs`;
-  if (!prs.length) return { text: `no ${what}\n`, rows: [] };
+  const footer: string[] = [];
+  if (!prs.length) footer.push(`no ${what}`);
+  else {
+    footer.push(`${prs.length} ${what.replace(/prs$/, prs.length === 1 ? "pr" : "prs")}`);
+    if (capped && state !== "mine") footer.push(`(the ${PRS_PAGE} most recently updated)`);
+  }
+  return {
+    block: {
+      kind: "prs",
+      rows: prs.map((p) => ({
+        num: p.number,
+        title: p.title,
+        author: p.user?.login ?? "",
+        head: p.head.ref,
+        base: p.base.ref,
+        updated: p.updated_at,
+        flags: prFlags({
+          draft: p.draft,
+          state: p.state,
+          merged: p.merged_at !== null,
+          mergeable: null,
+        }),
+      })),
+      footer,
+    },
+    rows: prs.map((p) => ({ num: p.number, title: p.title })),
+  };
+}
 
-  const numWidth = Math.max(...prs.map((p) => String(p.number).length)) + 1;
-  const authorWidth = Math.max(...prs.map((p) => (p.user?.login ?? "").length));
-  const lines = prs.map((p) => {
-    const flags = prFlags({
+interface FileJson {
+  filename: string;
+  additions: number;
+  deletions: number;
+  status: string;
+}
+
+const files = (list: FileJson[] | undefined) =>
+  (list ?? []).map((f) => ({
+    path: f.filename,
+    additions: f.additions,
+    deletions: f.deletions,
+    status: f.status,
+  }));
+
+// one pull request in full, for the expanded row
+export async function prDetail(
+  token: string,
+  owner: string,
+  repo: string,
+  num: number
+): Promise<PrDetail> {
+  const path = `/repos/${owner}/${repo}/pulls/${num}`;
+  const [prRes, filesRes] = await Promise.all([
+    gh(token, path),
+    gh(token, `${path}/files?per_page=100`),
+  ]);
+  const p = (await prRes.json()) as PrListJson;
+  return {
+    kind: "pr",
+    num: p.number,
+    title: p.title,
+    body: p.body ?? "",
+    author: p.user?.login ?? "",
+    head: p.head.ref,
+    base: p.base.ref,
+    flags: prFlags({
       draft: p.draft,
       state: p.state,
-      merged: p.merged_at !== null,
-      mergeable: null,
-    });
-    return [
-      `#${p.number}`.padEnd(numWidth),
-      (p.user?.login ?? "").padEnd(authorWidth),
-      p.title,
-      `${p.head.ref} → ${p.base.ref}`,
-      p.updated_at,
-      flags.join(" · "),
-    ].join("\t");
-  });
-  lines.push(`${prs.length} ${what.replace(/prs$/, prs.length === 1 ? "pr" : "prs")}`);
-  if (capped && state !== "mine") lines.push(`(the ${PRS_PAGE} most recently updated)`);
-  return {
-    text: lines.join("\n") + "\n",
-    rows: prs.map((p) => ({ num: p.number, title: p.title })),
+      merged: p.merged ?? p.merged_at !== null,
+      mergeable: p.mergeable ?? null,
+    }),
+    url: p.html_url ?? "",
+    commits: p.commits ?? 0,
+    files: files((await filesRes.json()) as FileJson[]),
   };
 }
 
 interface CommitJson {
   sha: string;
   parents: Array<{ sha: string }>;
-  commit: { message: string; committer: { date: string }; author: { name: string } };
+  commit: {
+    message: string;
+    committer: { name?: string; date: string };
+    author: { name: string; date?: string };
+  };
   author: { login: string } | null;
-  files?: Array<{ filename: string; additions: number; deletions: number }>;
+  files?: FileJson[];
+  html_url?: string;
+}
+
+// one commit in full, for the expanded row
+export async function commitDetail(
+  token: string,
+  owner: string,
+  repo: string,
+  sha: string
+): Promise<CommitDetail> {
+  let res: Response;
+  try {
+    res = await gh(token, `/repos/${owner}/${repo}/commits/${encodeURIComponent(sha)}`);
+  } catch (e) {
+    if (e instanceof GithubError && e.status === 404) {
+      throw new GithubError(404, `commit ${sha} not found in this repo`);
+    }
+    throw e;
+  }
+  const c = (await res.json()) as CommitJson;
+  return {
+    kind: "commit",
+    sha: c.sha,
+    parents: c.parents.map((p) => p.sha),
+    author: {
+      login: c.author?.login ?? null,
+      name: c.commit.author.name,
+      date: c.commit.author.date ?? c.commit.committer.date,
+    },
+    committer: { name: c.commit.committer.name ?? "", date: c.commit.committer.date },
+    message: c.commit.message,
+    url: c.html_url ?? "",
+    files: files(c.files),
+  };
 }
 
 // one commit, as an explain input
@@ -567,11 +659,25 @@ export async function tagNames(token: string, owner: string, repo: string): Prom
   return ((await res.json()) as TagJson[]).map((t) => t.name);
 }
 
-// the commits touching a path, in the log's row format without rails so
-// `explain 3` works the same way
+// the commits touching a path: a log block without rails, so `explain 3`
+// works the same way
 const HISTORY_ROWS = 30;
 
-export async function historyText(
+function commitRow(c: CommitJson, refs?: Ref[]): CommitRow {
+  return {
+    sha: c.sha,
+    parents: c.parents.map((p) => p.sha),
+    subject: c.commit.message.split("\n")[0],
+    author: c.author?.login ?? c.commit.author.name,
+    date: c.commit.committer.date,
+    refs: refs ?? [],
+  };
+}
+
+const logRefs = (rows: CommitRow[]): LogRef[] =>
+  rows.map((r) => ({ sha: r.sha, parent: r.parents[0] ?? null, subject: r.subject }));
+
+export async function historyBlock(
   token: string,
   owner: string,
   repo: string,
@@ -590,29 +696,15 @@ export async function historyText(
     throw e;
   }
   const commits = (await res.json()) as CommitJson[];
-  if (!commits.length) {
-    return { text: `no commits touch ${path}${ref ? ` on ${ref}` : ""}\n`, count: 0, rails: 0, rows: [] };
-  }
-  const rows: LogRef[] = [];
-  const lines = logLines(
-    commits.map((c) => {
-      const subject = c.commit.message.split("\n")[0];
-      rows.push({ sha: c.sha, parent: c.parents[0]?.sha ?? null, subject });
-      return [
-        "",
-        c.sha.slice(0, 7),
-        "",
-        subject,
-        c.author?.login ?? c.commit.author.name,
-        c.commit.committer.date,
-      ];
-    })
-  );
+  const where = ref ? ` on ${ref}` : "";
   const n = commits.length;
-  lines.push(
-    `${n === HISTORY_ROWS ? "the latest " : ""}${n} ${n === 1 ? "commit" : "commits"} touching ${path}${ref ? ` on ${ref}` : ""}`
-  );
-  return { text: lines.join("\n") + "\n", count: n, rails: 0, rows };
+  const rows = commits.map((c) => commitRow(c));
+  const footer = n
+    ? [
+        `${n === HISTORY_ROWS ? "the latest " : ""}${n} ${n === 1 ? "commit" : "commits"} touching ${path}${where}`,
+      ]
+    : [`no commits touch ${path}${where}`];
+  return { block: { kind: "log", rows, lanes: 0, footer }, rows: logRefs(rows) };
 }
 
 // why a line exists: blame the line on the ref, then the blaming commit
@@ -707,9 +799,8 @@ export async function whyInput(
   };
 }
 
-// the ascii graph: one walk per branch head (capped), unioned by sha,
-// drawn with lib/graph. rows travel as tab-separated fields so the client
-// lays out columns and colors; footer lines carry no tabs.
+// the commit graph: one walk per branch head (capped), unioned by sha,
+// laid out with lib/graph into a block the terminal draws as svg
 const LOG_WALKS = 12;
 
 export interface LogRef {
@@ -719,24 +810,11 @@ export interface LogRef {
 }
 
 export interface LogResult {
-  text: string;
-  count: number;
-  rails: number; // widest rail string, for the column
-  rows: LogRef[];
+  block: Block;
+  rows: LogRef[]; // for `explain 3`
 }
 
-// rows as wire lines: the author padded to a column, connectors (rails
-// only) padded out to six empty fields
-function logLines(fields: string[][]): string[] {
-  const width = Math.max(0, ...fields.map((f) => (f.length > 1 ? f[4].length : 0)));
-  return fields.map((f) =>
-    f.length > 1
-      ? [f[0], f[1], f[2], f[3], f[4].padEnd(width), f[5]].join("\t")
-      : `${f[0]}\t\t\t\t\t`
-  );
-}
-
-export async function logText(
+export async function logBlock(
   token: string,
   owner: string,
   repo: string,
@@ -776,65 +854,46 @@ export async function logText(
 
   const byShaMap = new Map<string, CommitJson>();
   for (const walk of walks) for (const c of walk) byShaMap.set(c.sha, c);
-  const ordered = graph(
+  const laid = layout(
     [...byShaMap.values()].map((c) => ({
       sha: c.sha,
       parents: c.parents.map((p) => p.sha),
       date: c.commit.committer.date,
     }))
-  );
+  ).slice(0, n);
 
-  // decorations: branch heads (default first) and tags
-  const refs = new Map<string, string[]>();
-  const decorate = (sha: string, name: string) => {
+  // decorations: the default branch first, then branches, then tags
+  const refs = new Map<string, Ref[]>();
+  const decorate = (sha: string, name: string, kind: Ref["kind"]) => {
     const list = refs.get(sha) ?? [];
-    list.push(name);
+    list.push({ name, kind });
     refs.set(sha, list);
   };
   const defHead = branches.find((b) => b.name === def);
-  if (defHead) decorate(defHead.commit.sha, def);
-  for (const b of branches) if (b.name !== def) decorate(b.commit.sha, b.name);
-  for (const t of tags) decorate(t.commit.sha, t.name);
+  if (defHead) decorate(defHead.commit.sha, def, "default");
+  for (const b of branches) if (b.name !== def) decorate(b.commit.sha, b.name, "branch");
+  for (const t of tags) decorate(t.commit.sha, t.name, "tag");
 
-  const fields: string[][] = [];
-  const rows: LogRef[] = [];
-  let rails = 1;
-  for (const r of ordered) {
-    if (rows.length >= n && r.sha) break;
-    rails = Math.max(rails, r.rails.length);
-    if (!r.sha) {
-      fields.push([r.rails]);
-      continue;
-    }
-    const c = byShaMap.get(r.sha)!;
-    const subject = c.commit.message.split("\n")[0];
-    rows.push({ sha: c.sha, parent: c.parents[0]?.sha ?? null, subject });
-    // merges get their own dot
-    const marked = c.parents.length > 1 ? r.rails.replace("*", "@") : r.rails;
-    fields.push([
-      marked,
-      c.sha.slice(0, 7),
-      (refs.get(c.sha) ?? []).join(" "),
-      subject,
-      c.author?.login ?? c.commit.author.name,
-      c.commit.committer.date,
-    ]);
-  }
-  // a trailing connector row leads nowhere
-  while (fields.length && fields[fields.length - 1].length === 1) fields.pop();
-  const lines = logLines(fields);
+  const rows: CommitRow[] = laid.map((r) => {
+    const { sha, ...graph } = r;
+    return { ...commitRow(byShaMap.get(sha)!, refs.get(sha)), graph };
+  });
 
   const shown = rows.length;
+  const footer: string[] = [];
   if (ref) {
-    lines.push(`${shown} ${shown === 1 ? "commit" : "commits"} on ${ref}`);
+    footer.push(`${shown} ${shown === 1 ? "commit" : "commits"} on ${ref}`);
   } else {
     const drawn = Math.min(heads.length, branches.length);
-    lines.push(
+    footer.push(
       `${shown} ${shown === 1 ? "commit" : "commits"} · ${drawn} ${drawn === 1 ? "branch" : "branches"}`
     );
-    if (branches.length > drawn) lines.push(`(+${branches.length - drawn} branches not drawn)`);
+    if (branches.length > drawn) footer.push(`(+${branches.length - drawn} branches not drawn)`);
   }
-  return { text: lines.join("\n") + "\n", count: shown, rails, rows };
+  return {
+    block: { kind: "log", rows, lanes: laneCount(laid), footer },
+    rows: logRefs(rows),
+  };
 }
 
 // branches with ahead/behind against the default branch, wd ls style.

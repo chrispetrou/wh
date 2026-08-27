@@ -1,11 +1,8 @@
-// ascii commit graph in the `git log --graph` style, computed from parent
-// links alone. pure: no dates, no github, no dom, so it unit tests on
-// hand-made histories.
-//
-// rows come back in display order. a row with a sha is a commit row (`*`
-// on its lane); a row without one is a connector (`|\` opening a merge
-// lane, `|/` joining a branch back). lanes are two columns wide, so the
-// rail string for k lanes is 2k-1 chars.
+// commit graph layout from parent links alone: which lane each commit
+// sits in, which lanes pass through its row, and where lines enter and
+// leave. pure (no dates beyond tie-breaking, no dom), so it unit tests
+// on hand-made histories. the terminal draws it as svg; `ascii` renders
+// the same rows as text for /copy and /export.
 
 export interface GraphCommit {
   sha: string;
@@ -14,9 +11,25 @@ export interface GraphCommit {
   date?: string | number;
 }
 
-export interface GraphRow {
-  rails: string;
-  sha?: string;
+export interface Seg {
+  from: number; // lane index at the top edge of the row
+  to: number; // lane index at the bottom edge
+  color: number;
+}
+
+export interface LaneRow {
+  sha: string;
+  lane: number; // column of the dot
+  color: number; // thread color id of the commit
+  merge: boolean;
+  // lanes running straight through this row without touching the dot,
+  // or sliding sideways when a lane closed to their left
+  through: Seg[];
+  // lines from the top edge into the dot (the commit's own thread, plus
+  // any other thread waiting for this commit)
+  ins: Array<{ from: number; color: number }>;
+  // lines from the dot to the bottom edge (one per parent)
+  outs: Array<{ to: number; color: number }>;
 }
 
 function ms(d: string | number | undefined): number {
@@ -62,69 +75,117 @@ export function topoOrder(commits: GraphCommit[]): GraphCommit[] {
   return out;
 }
 
-// draw the rails. `lanes[k]` is the sha the lane is waiting for; null is a
-// lane that ended on a root commit. a parent outside the window keeps its
-// rail to the bottom and simply stops there.
-export function graphRows(ordered: GraphCommit[]): GraphRow[] {
-  const lanes: (string | null)[] = [];
-  const rows: GraphRow[] = [];
+// a lane is a thread waiting for a sha; it keeps its color for life
+interface Thread {
+  sha: string;
+  color: number;
+}
 
-  // lanes from `hideFrom` on draw no `|`: on a connector row they are the
-  // ones sliding sideways, drawn by the overlay instead
-  const rail = (overlay: Map<number, string>, hideFrom = Infinity): string => {
-    const width = Math.max(lanes.length * 2 - 1, 0);
-    const chars = new Array<string>(width).fill(" ");
-    lanes.forEach((sha, k) => {
-      if (sha !== null && k < hideFrom) chars[k * 2] = "|";
-    });
-    overlay.forEach((ch, pos) => {
-      if (pos >= 0 && pos < width) chars[pos] = ch;
-    });
-    return chars.join("").trimEnd();
-  };
+// lays out commits already in display order. a parent outside the window
+// keeps its lane to the bottom and simply stops there.
+export function layoutRows(ordered: GraphCommit[]): LaneRow[] {
+  const lanes: Thread[] = [];
+  let nextColor = 0;
+  const rows: LaneRow[] = [];
 
   for (const c of ordered) {
-    let i = lanes.indexOf(c.sha);
-    if (i < 0) {
-      // a branch head: opens a new lane on the right
-      i = lanes.length;
-      lanes.push(c.sha);
+    const top = lanes.slice();
+    let thread = lanes.find((t) => t.sha === c.sha);
+    const isHead = !thread;
+    if (!thread) {
+      thread = { sha: c.sha, color: nextColor++ };
+      lanes.push(thread);
     }
+    const lane = lanes.indexOf(thread);
 
-    // other lanes waiting for this same commit join in, rightmost first,
-    // one `|/` row each; lanes to their right shift left with them
-    for (;;) {
-      const j = lanes.lastIndexOf(c.sha);
-      if (j === i) break;
-      const overlay = new Map<number, string>();
-      for (let k = j; k < lanes.length; k++) overlay.set(k * 2 - 1, "/");
-      rows.push({ rails: rail(overlay, j) });
-      lanes.splice(j, 1);
-    }
+    // other threads waiting for this commit join it and close
+    const joined = lanes.filter((t) => t !== thread && t.sha === c.sha);
+    for (const t of joined) lanes.splice(lanes.indexOf(t), 1);
 
-    const commit = new Map<number, string>([[i * 2, "*"]]);
-    rows.push({ rails: rail(commit), sha: c.sha });
-
+    // the first parent continues the thread; a root closes it
     const [first, ...rest] = c.parents;
-    lanes[i] = first ?? null;
+    const outThreads: Thread[] = [];
     if (first === undefined) {
-      // root: the lane ends here; trailing empty lanes are dropped
-      while (lanes.length && lanes[lanes.length - 1] === null) lanes.pop();
+      lanes.splice(lanes.indexOf(thread), 1);
+    } else {
+      thread.sha = first;
+      outThreads.push(thread);
     }
-
-    // extra parents open lanes right next to this one (`|\`), unless a
-    // lane is already waiting for that parent
+    // extra parents: merge into a thread already waiting for them, or
+    // open a new lane right next to this one
     for (const p of rest) {
-      if (lanes.includes(p)) continue;
-      lanes.splice(i + 1, 0, p);
-      const overlay = new Map<number, string>();
-      for (let k = i + 1; k < lanes.length; k++) overlay.set(k * 2 - 1, "\\");
-      rows.push({ rails: rail(overlay, i + 1) });
+      let t = lanes.find((x) => x.sha === p);
+      if (!t) {
+        t = { sha: p, color: nextColor++ };
+        lanes.splice(Math.min(lane + 1, lanes.length), 0, t);
+      }
+      outThreads.push(t);
     }
+    // indices only settle once every new lane is in place
+    const outs = outThreads.map((t) => ({ to: lanes.indexOf(t), color: t.color }));
+
+    const ins: LaneRow["ins"] = [];
+    if (!isHead) ins.push({ from: lane, color: thread.color });
+    for (const t of joined) ins.push({ from: top.indexOf(t), color: t.color });
+
+    const through: Seg[] = [];
+    top.forEach((t, from) => {
+      if (t === thread || joined.includes(t)) return;
+      const to = lanes.indexOf(t);
+      if (to >= 0) through.push({ from, to, color: t.color });
+    });
+
+    rows.push({ sha: c.sha, lane, color: thread.color, merge: c.parents.length > 1, through, ins, outs });
   }
   return rows;
 }
 
-export function graph(commits: GraphCommit[]): GraphRow[] {
-  return graphRows(topoOrder(commits));
+export function layout(commits: GraphCommit[]): LaneRow[] {
+  return layoutRows(topoOrder(commits));
+}
+
+// widest lane count across the rows, for the column width
+export function laneCount(rows: LaneRow[]): number {
+  let n = 0;
+  for (const r of rows) {
+    n = Math.max(n, r.lane + 1);
+    for (const s of r.through) n = Math.max(n, s.from + 1, s.to + 1);
+    for (const s of r.ins) n = Math.max(n, s.from + 1);
+    for (const s of r.outs) n = Math.max(n, s.to + 1);
+  }
+  return n;
+}
+
+// text rendering of the rails, `git log --graph` style, for exports. a
+// join draws a `|/` row above the commit, a fork a `|\` row below it.
+export function ascii(rows: LaneRow[]): Array<{ rails: string; sha?: string }> {
+  const out: Array<{ rails: string; sha?: string }> = [];
+  const width = laneCount(rows) * 2 - 1;
+  const blank = () => new Array<string>(Math.max(width, 0)).fill(" ");
+  for (const r of rows) {
+    const joins = r.ins.filter((i) => i.from !== r.lane);
+    if (joins.length) {
+      const chars = blank();
+      for (const s of r.through) if (s.from < r.lane) chars[s.from * 2] = "|";
+      chars[r.lane * 2] = "|";
+      for (const j of joins) chars[j.from * 2 - 1] = "/";
+      // lanes sliding left past the join
+      for (const s of r.through) if (s.from > r.lane && s.to < s.from) chars[s.from * 2 - 1] = "/";
+      out.push({ rails: chars.join("").trimEnd() });
+    }
+    const chars = blank();
+    for (const s of r.through) chars[s.from * 2] = "|";
+    chars[r.lane * 2] = r.merge ? "@" : "*";
+    out.push({ rails: chars.join("").trimEnd(), sha: r.sha });
+    const forks = r.outs.filter((o) => o.to !== r.lane);
+    if (forks.length) {
+      const chars = blank();
+      for (const s of r.through) if (s.to < r.lane) chars[s.to * 2] = "|";
+      if (r.outs.some((o) => o.to === r.lane)) chars[r.lane * 2] = "|";
+      for (const f of forks) chars[f.to * 2 - 1] = "\\";
+      for (const s of r.through) if (s.to > r.lane && s.to > s.from) chars[s.to * 2 - 1] = "\\";
+      out.push({ rails: chars.join("").trimEnd() });
+    }
+  }
+  return out;
 }

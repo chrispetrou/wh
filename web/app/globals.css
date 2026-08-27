@@ -98,6 +98,16 @@
   --wd-faint: #c8c8c8;
   --wd-sel: #eef2ff;
   --wd-accent: #4263eb;
+
+  /* the one place color goes beyond the five roles: lanes of the commit
+     graph, one per branch thread, quiet enough to sit next to the accent.
+     keep the six in sync across the three palette blocks */
+  --wd-lane-0: #4263eb;
+  --wd-lane-1: #c2255c;
+  --wd-lane-2: #099268;
+  --wd-lane-3: #e8590c;
+  --wd-lane-4: #6741d9;
+  --wd-lane-5: #0b7285;
 }
 
 .dark {
@@ -141,6 +151,13 @@
      amber with section labels and warnings. keep in sync with the media
      block below */
   --wd-accent: #91a7ff;
+
+  --wd-lane-0: #91a7ff;
+  --wd-lane-1: #f06595;
+  --wd-lane-2: #38d9a9;
+  --wd-lane-3: #ffa94d;
+  --wd-lane-4: #b197fc;
+  --wd-lane-5: #66d9e8;
 }
 
 /* follow the system like the landing page does, until a toggle exists */
@@ -183,6 +200,13 @@
     --wd-faint: #3a3a3a;
     --wd-sel: #1c2333;
     --wd-accent: #91a7ff; /* see .dark above */
+
+    --wd-lane-0: #91a7ff;
+    --wd-lane-1: #f06595;
+    --wd-lane-2: #38d9a9;
+    --wd-lane-3: #ffa94d;
+    --wd-lane-4: #b197fc;
+    --wd-lane-5: #66d9e8;
   }
 }
 
@@ -270,6 +294,93 @@
 }
 .term-scroll::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* the log block: a grid of rows with an svg lane column. rows are one
+   line tall so the rails line up; the expanded panel sits between rows */
+.log-block {
+  white-space: nowrap;
+}
+.log-row {
+  display: grid;
+  align-items: center;
+  height: 1.7em;
+  border-radius: 3px;
+  cursor: default;
+}
+.log-row:hover {
+  background: color-mix(in srgb, var(--wd-sel) 60%, transparent);
+}
+.log-row.row-sel,
+.log-row.row-sel:hover {
+  background: var(--wd-sel);
+}
+.log-head {
+  color: var(--muted-foreground);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
+}
+.log-head:hover {
+  background: transparent;
+}
+.log-cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 6px;
+}
+.log-num,
+.log-age {
+  text-align: right;
+}
+.log-num {
+  color: var(--muted-foreground);
+  padding-right: 8px;
+}
+.log-rails {
+  display: block;
+  height: 100%;
+  overflow: visible;
+}
+.chip {
+  display: inline-block;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-right: 4px;
+  line-height: 1.35;
+  font-size: 0.92em;
+  vertical-align: 1px;
+}
+.log-panel {
+  display: grid;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin: 2px 0;
+}
+.log-panel-body {
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.log-action {
+  color: var(--wd-accent);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+}
+.log-action:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--wd-faint);
+  text-underline-offset: 2px;
+}
+@media (max-width: 560px) {
+  .log-cell.log-author,
+  .log-cell.log-age {
+    display: none;
+  }
 }
 
 /* bordered paste field (setup screen): still flat, hairline, monospace */

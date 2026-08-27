@@ -198,15 +198,21 @@ against the default (the web cousin of `wd ls`; worktrees themselves
 live in the cli). Wherever a branch name belongs, the completion menu
 drops down with the repo's branches, filtered as you type.
 
-`log` draws the commit graph the way `git log --graph` does, as text in
-the transcript: rails, sha, branch and tag names, subject, author, and a
-relative time, with every commit row numbered. All branches are walked
-(the default branch first, up to 12 heads; the footer says how many were
-left out) and unioned into one graph; `log 100` shows more rows, `log on
-<branch>` scopes to one branch. The numbers are the point: `explain 3`
-explains that commit, `explain 2..5` the span of rows (from the parent
-of row 5 to row 2), and `explain <sha>` takes any sha directly. Typing
-`explain ` with a log on screen offers the rows in the completion menu.
+`log` draws the commit graph inside the transcript: colored lanes with
+curves where branches fork and join, a dot per commit (a ring for
+merges), branch and tag chips, subject, author, age, and sha, every
+row numbered. All branches are walked (the default branch first, up to
+12 heads; the footer says how many were left out) and unioned into one
+graph; `log 100` shows more rows, `log on <branch>` scopes to one
+branch. After a `log`, the arrow keys walk its rows (`›` marks the one
+selected), enter opens a commit in place (full sha, parents, author,
+message, files with their +/−, and `explain`, `changelog`, `github ↗`
+actions; a file opens `explain <sha> in <path>`, a parent jumps to its
+row), esc steps back out, and clicking a row does the same. The numbers
+still work as words: `explain 3` explains that commit, `explain 2..5`
+the span of rows (from the parent of row 5 to row 2), and `explain
+<sha>` takes any sha directly; typing `explain ` with a log on screen
+offers the rows in the completion menu.
 
 Time and people work as words: `since yesterday`, `since monday`, `this
 week`, `last week`, `since 3 days ago`, `since 2026-08-20`, or `since
@@ -227,15 +233,18 @@ tag names join branch names in the completion menu wherever a ref
 belongs (`since `, `changelog `, ranges).
 
 `prs` lists open pull requests, most recently updated first (`closed
-prs`, `my prs`): number, author, title, `head → base`, age, and `draft`,
-`merged`, or `closed` where it applies. Typing `pr ` afterwards offers
-those numbers in the completion menu, and `what changed in pr #42`
-shows the pr's state under its title: `draft`, `mergeable`, or
-`conflicts with base`.
+prs`, `my prs`): number, title, `head → base`, author, age, and `draft`,
+`merged`, or `closed` where it applies. It is the same kind of block as
+the log: arrows and enter open a pr in place (state, branches,
+description, files, and `explain` / `changelog` actions). Typing `pr `
+afterwards offers those numbers in the completion menu, and `what
+changed in pr #42` shows the pr's state under its title: `draft`,
+`mergeable`, or `conflicts with base`.
 
 Files have a history too. `history src/git.rs` (or a directory, `on
-<branch>` to scope) lists the commits touching it, numbered like the
-log so `explain 3` follows. Any explain takes `in <path>` to cut the
+<branch>` to scope) lists the commits touching it as a log block
+without lanes, numbered and navigable the same way, so `explain 3`
+follows. Any explain takes `in <path>` to cut the
 diff down to one file or directory before the model sees it: `explain
 the last 5 commits in src/`, `what changed in src/git.rs since v1.2`,
 `changelog of pr 42 in docs/`; the header says `2 of 14 files, under

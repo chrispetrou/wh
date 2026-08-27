@@ -1,6 +1,7 @@
 // per-repo chat state living outside react, so a streaming explain keeps
 // flowing while another tab is in the foreground. persisted to
 // sessionStorage (200-line cap) exactly like the old in-component state.
+import type { Block } from "./block";
 
 export interface ChatLine {
   text: string;
@@ -8,11 +9,43 @@ export interface ChatLine {
   prefix?: string;
   head?: { text: string; cls: string };
   tail?: { text: string; cls: string };
-  // a multi-column row (log graph): rendered instead of head/text/tail
-  spans?: Array<{ text: string; cls: string }>;
-  // never wrap (graph rails must stay aligned)
-  pre?: boolean;
+  // a structured entry (commit graph, history, prs) rendered as a grid
+  block?: Block;
 }
+
+// the block the arrow keys drive right now, and what is open in it
+export interface Live {
+  line: number; // index into lines
+  selected: number | null;
+  expanded: string[]; // shas or pr numbers as strings
+}
+
+// lazily fetched details for the expanded panel, keyed "commit:<sha>"
+// or "pr:<num>"; never persisted
+export interface CommitDetail {
+  kind: "commit";
+  sha: string;
+  parents: string[];
+  author: { login: string | null; name: string; date: string };
+  committer: { name: string; date: string };
+  message: string;
+  url: string;
+  files: Array<{ path: string; additions: number; deletions: number; status: string }>;
+}
+export interface PrDetail {
+  kind: "pr";
+  num: number;
+  title: string;
+  body: string;
+  author: string;
+  head: string;
+  base: string;
+  flags: string[];
+  url: string;
+  commits: number;
+  files: Array<{ path: string; additions: number; deletions: number; status: string }>;
+}
+export type Detail = CommitDetail | PrDetail;
 
 // a row of the last log, so row numbers resolve to shas client-side
 export interface LogRow {
@@ -46,6 +79,8 @@ interface Entry {
   log?: LogRow[];
   // rows of the last prs list
   prs?: PrRow[];
+  live?: Live;
+  details?: Map<string, Detail | "loading" | "failed">;
 }
 
 const MAX_CONTEXT_MESSAGES = 26;
@@ -169,6 +204,25 @@ export const chatStore = {
   },
   setPrRows(key: string, rows: PrRow[] | undefined) {
     entry(key).prs = rows;
+    emit(key);
+  },
+  live(key: string): Live | undefined {
+    return entry(key).live;
+  },
+  setLive(key: string, live: Live | undefined) {
+    entry(key).live = live;
+    emit(key);
+  },
+  detail(key: string, id: string): Detail | "loading" | "failed" | undefined {
+    return entry(key).details?.get(id);
+  },
+  details(key: string): Map<string, Detail | "loading" | "failed"> | undefined {
+    return entry(key).details;
+  },
+  setDetail(key: string, id: string, d: Detail | "loading" | "failed") {
+    const e = entry(key);
+    e.details = new Map(e.details ?? []);
+    e.details.set(id, d);
     emit(key);
   },
   setContext(key: string, firstUser: string, firstAnswer: string) {

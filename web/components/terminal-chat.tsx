@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
+import { blockText, type Block } from "@/lib/block";
 import { chatStore, type LogRow, type PrRow } from "@/lib/chat-store";
 import { commandHint, parseCommand } from "@/lib/commands";
-import { logLine, prLine, type LogLayout } from "@/lib/log-line";
+import { LogBlock } from "./log-block";
 import { relTime } from "@/lib/utils";
 import {
   DEFAULT_MODELS,
@@ -33,8 +34,7 @@ interface Line {
   prefix?: string; // muted prompt rendered before the text
   head?: Head;
   tail?: Head; // trailing span, e.g. the muted status words of a branch row
-  spans?: Head[]; // a multi-column row (log graph), instead of head/text/tail
-  pre?: boolean; // never wrap: graph rails must stay aligned
+  block?: Block; // a structured entry (log, history, prs) rendered as a grid
 }
 
 const CLS: Record<Cls, string> = {
@@ -51,7 +51,7 @@ const CLS: Record<Cls, string> = {
 
 // a line as plain text, for /copy and /export
 function flat(l: Line): string {
-  if (l.spans) return l.spans.map((s) => s.text).join("").trimEnd();
+  if (l.block) return blockText(l.block).join("\n");
   return (
     (l.prefix ? `${l.prefix} ` : "") + (l.head?.text ?? "") + l.text + (l.tail?.text ?? "")
   );
@@ -132,11 +132,8 @@ interface ExplainMeta {
   followup?: boolean;
   branches?: boolean;
   tags?: boolean;
-  prs?: boolean;
-  log?: boolean;
-  count?: number;
-  rails?: number;
-  rows?: LogRow[] | PrRow[];
+  block?: Block; // log, history, prs: rendered as a grid, no text follows
+  rows?: LogRow[] | PrRow[]; // the block's rows for `explain 3` and `pr ` completion
   empty?: string; // "nothing since yesterday": no diff, no model call
 }
 
@@ -183,7 +180,8 @@ const HELP: HelpRow[] = [
   ["/logout", "sign out"],
   "keys:",
   ["tab", "complete"],
-  ["up/down", "history"],
+  ["up/down", "history; after a log, walk its rows"],
+  ["enter / esc", "open a row, step back out"],
   ["ctrl+r", "search history"],
   ["esc", "stop, or close the menu"],
   ["cmd+k / ctrl+k", "repo picker"],
@@ -500,8 +498,7 @@ export function TerminalChat({
   const [search, setSearch] = useState<{ q: string; idx: number } | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const lastCmdRef = useRef("");
-  const streamModeRef = useRef<"text" | "diff" | "branches" | "log" | "tags" | "prs">("text");
-  const logLayoutRef = useRef<LogLayout>({ n: 0, width: 1, rails: 1 });
+  const streamModeRef = useRef<"text" | "diff" | "branches" | "tags">("text");
   const prompt = `${owner}/${repo} $`;
 
   const push = (rows: Line[]) => chatStore.push(storeKey, rows);
@@ -591,9 +588,7 @@ export function TerminalChat({
   const classify = (text: string): Line => {
     const t = text.trimEnd();
     if (streamModeRef.current === "branches") return branchLine(t);
-    if (streamModeRef.current === "log") return logLine(t, logLayoutRef.current) as Line;
     if (streamModeRef.current === "tags") return tagLine(t);
-    if (streamModeRef.current === "prs") return prLine(t) as Line;
     if (streamModeRef.current === "diff") {
       if (t.startsWith("diff --git")) return { text, cls: "c" };
       if (t.startsWith("- ")) return { text, cls: "o" }; // payload commit list
@@ -724,19 +719,22 @@ export function TerminalChat({
             streamModeRef.current = "tags";
             return;
           }
-          if (meta.prs) {
-            streamModeRef.current = "prs";
-            chatStore.setPrRows(storeKey, (meta.rows as PrRow[] | undefined) ?? []);
-            return;
-          }
-          if (meta.log) {
-            streamModeRef.current = "log";
-            logLayoutRef.current = {
-              n: 0,
-              width: String(meta.count ?? 0).length,
-              rails: meta.rails ?? 1,
-            };
-            chatStore.setLogRows(storeKey, (meta.rows as LogRow[] | undefined) ?? []);
+          if (meta.block) {
+            // the grid goes in as one line; the arrow keys drive it until
+            // the next command
+            push([{ text: "", cls: "", block: meta.block }]);
+            if (meta.block.kind === "prs") {
+              chatStore.setPrRows(storeKey, (meta.rows as PrRow[] | undefined) ?? []);
+            } else {
+              chatStore.setLogRows(storeKey, (meta.rows as LogRow[] | undefined) ?? []);
+            }
+            if (meta.block.rows.length) {
+              chatStore.setLive(storeKey, {
+                line: chatStore.lines(storeKey).length - 1,
+                selected: null,
+                expanded: [],
+              });
+            }
             return;
           }
           if (meta.empty) {
@@ -803,6 +801,7 @@ export function TerminalChat({
         chatStore.clearContext(storeKey);
         chatStore.setLogRows(storeKey, undefined); // row numbers left with the screen
         chatStore.setPrRows(storeKey, undefined);
+        chatStore.setLive(storeKey, undefined);
         break;
       case "key": {
         const usage = "usage: /key <value> adds or replaces, /key clear [provider] removes";
@@ -1041,6 +1040,7 @@ export function TerminalChat({
     setInput("");
     setHistPos(-1);
     pinnedRef.current = true;
+    chatStore.setLive(storeKey, undefined); // a new command takes the keys back
 
     if (raw.startsWith("/")) {
       if (!raw.startsWith("/key ")) historyRef.current.unshift(raw);
@@ -1275,6 +1275,40 @@ export function TerminalChat({
       setSearch({ q: "", idx: 0 });
       return;
     }
+    // an empty prompt after a log, history, or prs block: the arrows walk
+    // its rows, enter opens one, esc steps back out (then history again)
+    const live = chatStore.live(storeKey);
+    const liveBlock = live ? lines[live.line]?.block : undefined;
+    if (live && liveBlock && input === "" && !menu) {
+      const n = liveBlock.rows.length;
+      const idAt = (i: number) =>
+        liveBlock.kind === "log" ? liveBlock.rows[i].sha : String(liveBlock.rows[i].num);
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        chatStore.setLive(storeKey, { ...live, selected: Math.min((live.selected ?? -1) + 1, n - 1) });
+        return;
+      }
+      if (e.key === "ArrowUp" && live.selected !== null) {
+        e.preventDefault();
+        chatStore.setLive(storeKey, { ...live, selected: live.selected > 0 ? live.selected - 1 : null });
+        return;
+      }
+      if (e.key === "Enter" && live.selected !== null) {
+        e.preventDefault();
+        const id = idAt(live.selected);
+        const expanded = live.expanded.includes(id)
+          ? live.expanded.filter((x) => x !== id)
+          : [...live.expanded, id];
+        chatStore.setLive(storeKey, { ...live, expanded });
+        return;
+      }
+      if (e.key === "Escape" && !busy) {
+        e.preventDefault();
+        if (live.expanded.length) chatStore.setLive(storeKey, { ...live, expanded: [] });
+        else chatStore.setLive(storeKey, undefined);
+        return;
+      }
+    }
     if (menu) {
       const minSel = menu.stage === "cmd" ? 0 : -1;
       if (e.key === "ArrowDown") {
@@ -1349,19 +1383,19 @@ export function TerminalChat({
       >
         {lines.map((l, i) => (
           // a prompt line opens a block: command and its output read as one
-          <div
-            key={i}
-            className={`${l.prefix && i > 0 ? "mt-3" : ""} ${l.pre ? "whitespace-pre" : ""}`}
-          >
+          <div key={i} className={l.prefix && i > 0 ? "mt-3" : ""}>
             {l.prefix ? (
               <span className="text-muted-foreground">{l.prefix} </span>
             ) : null}
-            {l.spans ? (
-              l.spans.map((s, j) => (
-                <span key={j} className={CLS[s.cls]}>
-                  {s.text}
-                </span>
-              ))
+            {l.block ? (
+              <LogBlock
+                block={l.block}
+                line={i}
+                storeKey={storeKey}
+                owner={owner}
+                repo={repo}
+                submit={(c) => submit(c)}
+              />
             ) : (
               <>
                 {l.head ? <span className={CLS[l.head.cls]}>{l.head.text}</span> : null}

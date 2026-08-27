@@ -5,11 +5,11 @@ import {
   commitInput,
   compareRange,
   GithubError,
-  historyText,
+  historyBlock,
   lastNCommits,
-  logText,
+  logBlock,
   prInput,
-  prsText,
+  prsBlock,
   sinceInput,
   tagsText,
   whyInput,
@@ -178,10 +178,11 @@ export async function POST(req: NextRequest) {
       return githubFailure(e, destroy);
     }
   }
+  // blocks: structured rows the terminal renders as a grid, no model
   if (command.kind === "log") {
     try {
-      const log = await logText(session.token, owner, repo, command.n ?? LOG_DEFAULT, command.ref);
-      return plain({ log: true, count: log.count, rails: log.rails, rows: log.rows }, log.text);
+      const log = await logBlock(session.token, owner, repo, command.n ?? LOG_DEFAULT, command.ref);
+      return plain({ block: log.block, rows: log.rows }, "");
     } catch (e) {
       return githubFailure(e, destroy);
     }
@@ -195,16 +196,16 @@ export async function POST(req: NextRequest) {
   }
   if (command.kind === "prs") {
     try {
-      const prs = await prsText(session.token, owner, repo, command.state, session.login ?? "");
-      return plain({ prs: true, rows: prs.rows }, prs.text);
+      const prs = await prsBlock(session.token, owner, repo, command.state, session.login ?? "");
+      return plain({ block: prs.block, rows: prs.rows }, "");
     } catch (e) {
       return githubFailure(e, destroy);
     }
   }
   if (command.kind === "history") {
     try {
-      const h = await historyText(session.token, owner, repo, command.path, command.ref);
-      return plain({ log: true, count: h.count, rails: h.rails, rows: h.rows }, h.text);
+      const h = await historyBlock(session.token, owner, repo, command.path, command.ref);
+      return plain({ block: h.block, rows: h.rows }, "");
     } catch (e) {
       return githubFailure(e, destroy);
     }

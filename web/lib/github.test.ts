@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  commitDetail,
   commitInput,
-  historyText,
+  historyBlock,
   latestTag,
-  logText,
+  logBlock,
   prFlags,
   prInput,
-  prsText,
+  prsBlock,
   sinceInput,
   tagsText,
   whyInput,
@@ -79,19 +80,21 @@ describe("logText", () => {
       return new Response("{}", { status: 404 });
     });
 
-    const log = await logText("t", "o", "r", 40);
-    expect(log.text.split("\n")).toEqual([
-      `@\t${"m".repeat(7)}\tmain\tmerge feat\tchris\t2026-08-27T05:00:00Z`,
-      "|\\\t\t\t\t\t",
-      `* |\t${"a".repeat(7)}\t\tadd a\tchris\t2026-08-27T04:00:00Z`,
-      `| *\t${"f".repeat(7)}\tfeat\tadd f\tchris\t2026-08-27T03:00:00Z`,
-      "|/\t\t\t\t\t",
-      `*\t${"c".repeat(7)}\tv1\tinit\tchris\t2026-08-27T01:00:00Z`,
-      "4 commits · 2 branches",
-      "",
+    const log = await logBlock("t", "o", "r", 40);
+    const b = log.block;
+    if (b.kind !== "log") throw new Error("expected a log block");
+    expect(b.lanes).toBe(2);
+    expect(b.footer).toEqual(["4 commits · 2 branches"]);
+    expect(b.rows.map((r) => [r.sha[0], r.subject, r.author, r.graph!.lane, r.graph!.merge])).toEqual([
+      ["m", "merge feat", "chris", 0, true],
+      ["a", "add a", "chris", 0, false],
+      ["f", "add f", "chris", 1, false],
+      ["c", "init", "chris", 0, false],
     ]);
-    expect(log.count).toBe(4);
-    expect(log.rails).toBe(3);
+    expect(b.rows[0].refs).toEqual([{ name: "main", kind: "default" }]);
+    expect(b.rows[2].refs).toEqual([{ name: "feat", kind: "branch" }]);
+    expect(b.rows[3].refs).toEqual([{ name: "v1", kind: "tag" }]);
+    expect(b.rows[0].date).toBe("2026-08-27T05:00:00Z");
     expect(log.rows.map((r) => [r.sha[0], r.parent?.[0] ?? null, r.subject])).toEqual([
       ["m", "a", "merge feat"],
       ["a", "c", "add a"],
@@ -118,9 +121,10 @@ describe("logText", () => {
       }
       return new Response("{}", { status: 404 });
     });
-    const log = await logText("t", "o", "r", 10, "feat");
-    expect(log.text.split("\n").slice(-2)).toEqual(["2 commits on feat", ""]);
-    await expect(logText("t", "o", "r", 10, "nope")).rejects.toThrow("branch nope not found");
+    const log = await logBlock("t", "o", "r", 10, "feat");
+    expect(log.block.footer).toEqual(["2 commits on feat"]);
+    expect(log.block.rows).toHaveLength(2);
+    await expect(logBlock("t", "o", "r", 10, "nope")).rejects.toThrow("branch nope not found");
   });
 });
 
@@ -263,19 +267,35 @@ describe("prs", () => {
     ...extra,
   });
 
-  it("lists prs with padded columns and state words", async () => {
+  it("lists prs as a block with state words", async () => {
     const calls = stub({});
     (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
       calls.push(url);
       return Response.json([pr(12, "alice", { draft: true }), pr(7, "bob")]);
     });
-    const { text, rows } = await prsText("t", "o", "r", "open", "me");
-    expect(text.split("\n")).toEqual([
-      "#12\talice\tpr 12\tfeat/12 → main\t2026-08-27T04:00:00Z\tdraft",
-      "#7 \tbob  \tpr 7\tfeat/7 → main\t2026-08-27T04:00:00Z\t",
-      "2 open prs",
-      "",
+    const { block, rows } = await prsBlock("t", "o", "r", "open", "me");
+    if (block.kind !== "prs") throw new Error("expected a prs block");
+    expect(block.rows).toEqual([
+      {
+        num: 12,
+        title: "pr 12",
+        author: "alice",
+        head: "feat/12",
+        base: "main",
+        updated: "2026-08-27T04:00:00Z",
+        flags: ["draft"],
+      },
+      {
+        num: 7,
+        title: "pr 7",
+        author: "bob",
+        head: "feat/7",
+        base: "main",
+        updated: "2026-08-27T04:00:00Z",
+        flags: [],
+      },
     ]);
+    expect(block.footer).toEqual(["2 open prs"]);
     expect(rows).toEqual([
       { num: 12, title: "pr 12" },
       { num: 7, title: "pr 7" },
@@ -293,13 +313,12 @@ describe("prs", () => {
         pr(1, "me", { state: "closed" }),
       ])
     );
-    const { text } = await prsText("t", "o", "r", "mine", "me");
-    expect(text.split("\n")).toEqual([
-      "#3\tme\tpr 3\tfeat/3 → main\t2026-08-27T04:00:00Z\tmerged",
-      "#1\tme\tpr 1\tfeat/1 → main\t2026-08-27T04:00:00Z\tclosed",
-      "2 prs by me",
-      "",
+    const { block } = await prsBlock("t", "o", "r", "mine", "me");
+    expect(block.rows.map((r) => [(r as { num: number }).num, (r as { flags: string[] }).flags])).toEqual([
+      [3, ["merged"]],
+      [1, ["closed"]],
     ]);
+    expect(block.footer).toEqual(["2 prs by me"]);
   });
 
   it("puts the mergeable state in the pr explain note", async () => {
@@ -333,31 +352,55 @@ describe("prs", () => {
 });
 
 describe("historyText", () => {
-  it("lists the commits touching a path as rail-less log rows, authors padded", async () => {
+  it("lists the commits touching a path as a rail-less log block", async () => {
     const calls = stub({});
     (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
       calls.push(url);
       return Response.json([A, { ...C, author: { login: "bo" } }]);
     });
-    const h = await historyText("t", "o", "r", "src/a.ts", "dev");
+    const h = await historyBlock("t", "o", "r", "src/a.ts", "dev");
     expect(calls[0]).toContain("path=src%2Fa.ts");
     expect(calls[0]).toContain("sha=dev");
-    expect(h.text.split("\n")).toEqual([
-      `\t${"a".repeat(7)}\t\tadd a\tchris\t2026-08-27T04:00:00Z`,
-      `\t${"c".repeat(7)}\t\tinit\tbo   \t2026-08-27T01:00:00Z`,
-      "2 commits touching src/a.ts on dev",
-      "",
+    if (h.block.kind !== "log") throw new Error("expected a log block");
+    expect(h.block.lanes).toBe(0);
+    expect(h.block.rows.map((r) => [r.sha[0], r.subject, r.author, r.graph])).toEqual([
+      ["a", "add a", "chris", undefined],
+      ["c", "init", "bo", undefined],
     ]);
-    expect(h.rails).toBe(0);
+    expect(h.block.footer).toEqual(["2 commits touching src/a.ts on dev"]);
     expect(h.rows[1]).toEqual({ sha: SHA("c"), parent: null, subject: "init" });
   });
 
   it("says when nothing touches the path", async () => {
     stub({});
     (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () => Response.json([]));
-    const h = await historyText("t", "o", "r", "nope.txt");
-    expect(h.text).toBe("no commits touch nope.txt\n");
+    const h = await historyBlock("t", "o", "r", "nope.txt");
+    expect(h.block.rows).toEqual([]);
+    expect(h.block.footer).toEqual(["no commits touch nope.txt"]);
     expect(h.rows).toEqual([]);
+  });
+});
+
+describe("commitDetail", () => {
+  it("shapes one commit for the expanded row", async () => {
+    stub({
+      "/repos/o/r/commits/a1b2c3d": {
+        ...A,
+        html_url: "https://github.com/o/r/commit/a1b2c3d",
+        files: [{ filename: "src/a.ts", additions: 3, deletions: 1, status: "modified" }],
+      },
+    });
+    const d = await commitDetail("t", "o", "r", "a1b2c3d");
+    expect(d).toEqual({
+      kind: "commit",
+      sha: SHA("a"),
+      parents: [SHA("c")],
+      author: { login: "chris", name: "Chris", date: "2026-08-27T04:00:00Z" },
+      committer: { name: "", date: "2026-08-27T04:00:00Z" },
+      message: "add a\n\nbody",
+      url: "https://github.com/o/r/commit/a1b2c3d",
+      files: [{ path: "src/a.ts", additions: 3, deletions: 1, status: "modified" }],
+    });
   });
 });
 
