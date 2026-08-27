@@ -81,7 +81,7 @@ describe("logText", () => {
 
     const log = await logText("t", "o", "r", 40);
     expect(log.text.split("\n")).toEqual([
-      `*\t${"m".repeat(7)}\tmain\tmerge feat\tchris\t2026-08-27T05:00:00Z`,
+      `@\t${"m".repeat(7)}\tmain\tmerge feat\tchris\t2026-08-27T05:00:00Z`,
       "|\\\t\t\t\t\t",
       `* |\t${"a".repeat(7)}\t\tadd a\tchris\t2026-08-27T04:00:00Z`,
       `| *\t${"f".repeat(7)}\tfeat\tadd f\tchris\t2026-08-27T03:00:00Z`,
@@ -333,18 +333,18 @@ describe("prs", () => {
 });
 
 describe("historyText", () => {
-  it("lists the commits touching a path as rail-less log rows", async () => {
+  it("lists the commits touching a path as rail-less log rows, authors padded", async () => {
     const calls = stub({});
     (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
       calls.push(url);
-      return Response.json([A, C]);
+      return Response.json([A, { ...C, author: { login: "bo" } }]);
     });
     const h = await historyText("t", "o", "r", "src/a.ts", "dev");
     expect(calls[0]).toContain("path=src%2Fa.ts");
     expect(calls[0]).toContain("sha=dev");
     expect(h.text.split("\n")).toEqual([
       `\t${"a".repeat(7)}\t\tadd a\tchris\t2026-08-27T04:00:00Z`,
-      `\t${"c".repeat(7)}\t\tinit\tchris\t2026-08-27T01:00:00Z`,
+      `\t${"c".repeat(7)}\t\tinit\tbo   \t2026-08-27T01:00:00Z`,
       "2 commits touching src/a.ts on dev",
       "",
     ]);

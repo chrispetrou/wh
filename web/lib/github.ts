@@ -594,18 +594,20 @@ export async function historyText(
     return { text: `no commits touch ${path}${ref ? ` on ${ref}` : ""}\n`, count: 0, rails: 0, rows: [] };
   }
   const rows: LogRef[] = [];
-  const lines = commits.map((c) => {
-    const subject = c.commit.message.split("\n")[0];
-    rows.push({ sha: c.sha, parent: c.parents[0]?.sha ?? null, subject });
-    return [
-      "",
-      c.sha.slice(0, 7),
-      "",
-      subject,
-      c.author?.login ?? c.commit.author.name,
-      c.commit.committer.date,
-    ].join("\t");
-  });
+  const lines = logLines(
+    commits.map((c) => {
+      const subject = c.commit.message.split("\n")[0];
+      rows.push({ sha: c.sha, parent: c.parents[0]?.sha ?? null, subject });
+      return [
+        "",
+        c.sha.slice(0, 7),
+        "",
+        subject,
+        c.author?.login ?? c.commit.author.name,
+        c.commit.committer.date,
+      ];
+    })
+  );
   const n = commits.length;
   lines.push(
     `${n === HISTORY_ROWS ? "the latest " : ""}${n} ${n === 1 ? "commit" : "commits"} touching ${path}${ref ? ` on ${ref}` : ""}`
@@ -723,6 +725,17 @@ export interface LogResult {
   rows: LogRef[];
 }
 
+// rows as wire lines: the author padded to a column, connectors (rails
+// only) padded out to six empty fields
+function logLines(fields: string[][]): string[] {
+  const width = Math.max(0, ...fields.map((f) => (f.length > 1 ? f[4].length : 0)));
+  return fields.map((f) =>
+    f.length > 1
+      ? [f[0], f[1], f[2], f[3], f[4].padEnd(width), f[5]].join("\t")
+      : `${f[0]}\t\t\t\t\t`
+  );
+}
+
 export async function logText(
   token: string,
   owner: string,
@@ -783,32 +796,33 @@ export async function logText(
   for (const b of branches) if (b.name !== def) decorate(b.commit.sha, b.name);
   for (const t of tags) decorate(t.commit.sha, t.name);
 
-  const lines: string[] = [];
+  const fields: string[][] = [];
   const rows: LogRef[] = [];
   let rails = 1;
   for (const r of ordered) {
     if (rows.length >= n && r.sha) break;
     rails = Math.max(rails, r.rails.length);
     if (!r.sha) {
-      lines.push(`${r.rails}\t\t\t\t\t`);
+      fields.push([r.rails]);
       continue;
     }
     const c = byShaMap.get(r.sha)!;
     const subject = c.commit.message.split("\n")[0];
     rows.push({ sha: c.sha, parent: c.parents[0]?.sha ?? null, subject });
-    lines.push(
-      [
-        r.rails,
-        c.sha.slice(0, 7),
-        (refs.get(c.sha) ?? []).join(" "),
-        subject,
-        c.author?.login ?? c.commit.author.name,
-        c.commit.committer.date,
-      ].join("\t")
-    );
+    // merges get their own dot
+    const marked = c.parents.length > 1 ? r.rails.replace("*", "@") : r.rails;
+    fields.push([
+      marked,
+      c.sha.slice(0, 7),
+      (refs.get(c.sha) ?? []).join(" "),
+      subject,
+      c.author?.login ?? c.commit.author.name,
+      c.commit.committer.date,
+    ]);
   }
   // a trailing connector row leads nowhere
-  while (lines.length && lines[lines.length - 1].endsWith("\t\t\t\t\t")) lines.pop();
+  while (fields.length && fields[fields.length - 1].length === 1) fields.pop();
+  const lines = logLines(fields);
 
   const shown = rows.length;
   if (ref) {

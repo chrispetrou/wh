@@ -16,18 +16,26 @@ describe("logLine", () => {
     const foot = logLine("2 commits · 2 branches", st, NOW);
 
     expect(a.pre).toBe(true);
-    expect(flat(a).startsWith(" 1 *   a1b2c3d main v1 merge feat")).toBe(true);
-    expect(flat(a).trimEnd().endsWith(" chris 3h")).toBe(true);
+    expect(flat(a).startsWith(" 1 ●   a1b2c3d main v1 merge feat")).toBe(true);
+    expect(flat(a).trimEnd().endsWith(" chris   3h")).toBe(true);
     expect(flat(a).length).toBe(LOG_COLS);
-    expect(flat(con)).toBe("   |\\ ");
-    expect(flat(b).startsWith(" 2 * | 40cce0c second")).toBe(true);
+    expect(flat(con)).toBe("   │╲ ");
+    expect(flat(b).startsWith(" 2 ● │ 40cce0c second")).toBe(true);
     expect(foot).toEqual({ text: "2 commits · 2 branches", cls: "o" });
     expect(st.n).toBe(2);
   });
 
-  it("colors the columns: number and sha muted, rails faint, refs accent", () => {
+  it("colors the columns: number and sha muted, dot fg, rails muted, refs accent", () => {
     const l = logLine(`*\ta1b2c3d\tmain\tsubject\tme\t${T}`, { n: 0, width: 1, rails: 1 }, NOW);
-    expect(l.spans!.map((s) => s.cls)).toEqual(["o", "f", "o", "x", "", "o"]);
+    expect(l.spans!.map((s) => s.cls)).toEqual(["o", "", "o", "x", "", "o"]);
+    const m = logLine(`| @\ta1b2c3d\t\tmerge\tme\t${T}`, { n: 0, width: 1, rails: 3 }, NOW);
+    expect(m.spans!.slice(0, 3)).toEqual([
+      { text: "1 ", cls: "o" },
+      { text: "│ ", cls: "o" },
+      { text: "◉", cls: "" },
+    ]);
+    // the merge subject steps back
+    expect(m.spans![m.spans!.length - 2].cls).toBe("o");
   });
 
   it("truncates a long subject to keep the date column aligned", () => {
@@ -36,7 +44,7 @@ describe("logLine", () => {
     const s = flat(l);
     expect(s.length).toBe(LOG_COLS);
     expect(s).toContain("…");
-    expect(s.trimEnd().endsWith("me 3h")).toBe(true);
+    expect(s.trimEnd().endsWith("me   3h")).toBe(true);
   });
 
   it("lays out a pr row with an accent number and muted state", () => {
@@ -52,6 +60,6 @@ describe("logLine", () => {
   it("lets a row run on instead of squeezing the subject under 12 columns", () => {
     const refs = "r".repeat(90);
     const l = logLine(`*\ta1b2c3d\t${refs}\tsubject\tme\t${T}`, { n: 0, width: 1, rails: 1 }, NOW);
-    expect(flat(l)).toContain("subject me 3h");
+    expect(flat(l)).toContain("subject me   3h");
   });
 });

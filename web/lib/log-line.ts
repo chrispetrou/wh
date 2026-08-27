@@ -15,6 +15,24 @@ export interface LogLayout {
 // the row budget before the author and date stop lining up
 export const LOG_COLS = 100;
 
+// the wire rails are ascii (`*` commit, `@` merge, `|` `/` `\`); on
+// screen they become box drawing, the way the landing uses `·` and `−`.
+// commit dots are fg so the shape reads; the rails stay muted
+const GLYPH: Record<string, string> = { "*": "●", "@": "◉", "|": "│", "/": "╱", "\\": "╲", _: "─" };
+
+export function railSpans(rails: string): Array<{ text: string; cls: string }> {
+  const out: Array<{ text: string; cls: string }> = [];
+  for (const ch of rails) {
+    const dot = ch === "*" || ch === "@";
+    const cls = dot ? "" : "o";
+    const text = GLYPH[ch] ?? ch;
+    const last = out[out.length - 1];
+    if (last && last.cls === cls) last.text += text;
+    else out.push({ text, cls });
+  }
+  return out;
+}
+
 // a pr row: "#12 \talice\ttitle\thead → base\tiso\tflags" (number and author
 // padded by the server). the number is accent so it reads as the thing
 // to type next (`pr 12`); the title is fg; branches, age, state muted
@@ -48,10 +66,7 @@ export function logLine(text: string, st: LogLayout, now = Date.now()): ChatLine
   if (f.length < 6) return { text, cls: "o" };
   const [rails, sha, refs, subject, author, date] = f;
   const num = sha ? String(++st.n).padStart(st.width) : " ".repeat(st.width);
-  const spans = [
-    { text: `${num} `, cls: "o" },
-    { text: rails.padEnd(st.rails), cls: "f" },
-  ];
+  const spans = [{ text: `${num} `, cls: "o" }, ...railSpans(rails.padEnd(st.rails))];
   if (!sha) return { text: "", cls: "", spans, pre: true };
   spans.push({ text: ` ${sha} `, cls: "o" });
   let used = st.width + 1 + st.rails + 1 + 7 + 1;
@@ -59,7 +74,8 @@ export function logLine(text: string, st: LogLayout, now = Date.now()): ChatLine
     spans.push({ text: `${refs} `, cls: "x" });
     used += refs.length + 1;
   }
-  const meta = ` ${author} ${relTime(date, now)}`;
+  // the author column is padded by the server; the age right-aligns
+  const meta = ` ${author} ${relTime(date, now).padStart(4)}`;
   const room = LOG_COLS - used - meta.length;
   let subj = subject;
   // long refs squeeze the subject; below 12 columns the row just runs on
@@ -67,6 +83,7 @@ export function logLine(text: string, st: LogLayout, now = Date.now()): ChatLine
     if (subj.length > room) subj = subj.slice(0, room - 1) + "…";
     subj = subj.padEnd(room);
   }
-  spans.push({ text: subj, cls: "" }, { text: meta, cls: "o" });
+  // merge subjects are bookkeeping; they step back like the rails
+  spans.push({ text: subj, cls: rails.includes("@") ? "o" : "" }, { text: meta, cls: "o" });
   return { text: "", cls: "", spans, pre: true };
 }
