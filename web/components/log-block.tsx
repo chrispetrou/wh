@@ -244,11 +244,20 @@ export function LogBlock({
   const numW = String(block.rows.length).length;
   const lanes = block.kind === "log" ? block.lanes : 0;
   const railW = railWidth(lanes);
-  // the number column carries 8px of right padding (see .log-num)
+  // every row is its own grid, so the right-hand columns are sized once
+  // here from the longest value, or they would shift row by row. cells
+  // carry 6px of padding each side (.log-cell); numbers 8px (.log-num)
+  const now = Date.now();
+  const widest = (xs: string[]) => Math.max(1, ...xs.map((s) => s.length));
+  const col = (chars: number) => `calc(${chars}ch + 12px)`;
+  const authorW = col(widest(block.rows.map((r) => r.author)));
+  const ageW = col(
+    widest(block.rows.map((r) => relTime(block.kind === "log" ? (r as CommitRow).date : (r as PrRow).updated, now)))
+  );
   const cols =
     block.kind === "log"
-      ? `2ch calc(${numW}ch + 8px) ${railW}px minmax(0, 1fr) auto auto auto`
-      : `2ch calc(${numW + 1}ch + 8px) minmax(0, 1fr) auto auto auto`;
+      ? `2ch calc(${numW}ch + 8px) ${railW}px minmax(0, 1fr) ${authorW} ${ageW} ${col(7)}`
+      : `2ch calc(${numW + 1}ch + 8px) minmax(0, 1fr) ${col(widest((block.rows as PrRow[]).map((r) => `${r.head} → ${r.base}`)) + 1)} ${authorW} ${ageW}`; // the arrow is wider than a cell
   const panelCols =
     block.kind === "log"
       ? `calc(${numW + 2}ch + ${railW + 8}px) minmax(0, 1fr)`
