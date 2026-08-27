@@ -18,10 +18,19 @@ import { applyTheme, currentTheme, type Theme } from "./theme-toggle";
 
 type Cls = "p" | "c" | "o" | "g" | "a" | "x" | "r" | "";
 
+// a leading span in its own color: the green "→ verb" of a success line,
+// the amber "error:" label, or the fg command column of a help table
+interface Head {
+  text: string;
+  cls: Cls;
+}
+
 interface Line {
   text: string;
   cls: Cls;
   prefix?: string; // muted prompt rendered before the text
+  head?: Head;
+  tail?: Head; // trailing span, e.g. the muted status words of a branch row
 }
 
 const CLS: Record<Cls, string> = {
@@ -34,6 +43,28 @@ const CLS: Record<Cls, string> = {
   r: "text-destructive",
   "": "",
 };
+
+// a line as plain text, for /copy and /export
+function flat(l: Line): string {
+  return (
+    (l.prefix ? `${l.prefix} ` : "") + (l.head?.text ?? "") + l.text + (l.tail?.text ?? "")
+  );
+}
+
+// a branches row: "3  feat/web_app    behind 1". like the landing picker
+// and wd ls, the name is fg and the index and status words are muted
+const BRANCH_ROW = /^(\s*\d+\s{2})(\S+)(.*)$/;
+
+function branchLine(text: string): Line {
+  const m = BRANCH_ROW.exec(text);
+  if (!m) return { text, cls: "o" }; // the count and note lines
+  return {
+    head: { text: m[1], cls: "o" },
+    text: m[2],
+    cls: "",
+    tail: { text: m[3], cls: "o" },
+  };
+}
 
 // urls in output become quiet accent links
 const URL_RE = /\bhttps?:\/\/[^\s]+|\bgithub\.com\/[^\s]+/g;
@@ -78,45 +109,71 @@ interface ExplainMeta {
   branches?: boolean;
 }
 
-const HELP = [
+// help tables: a string ending in ":" is an amber section label, any
+// other string a muted note, a pair is fg command + muted description
+type HelpRow = string | [string, string];
+
+const HELP_COL = 20;
+
+const HELP: HelpRow[] = [
   "repo commands:",
-  "  explain the last N commits [on <branch>]",
-  "  what changed in pr #N (or in <branch>)",
-  "  diff main..dev (any two refs)",
-  "  branches          list branches with ahead/behind",
+  ["explain the last N commits [on <branch>]", ""],
+  ["what changed in pr #N (or in <branch>)", ""],
+  ["diff main..dev (any two refs)", ""],
+  ["branches", "list branches with ahead/behind"],
   "  after an explain, plain words are follow-up questions",
   "slash commands:",
-  "  /repos            switch repo",
-  "  /key <value>      add an llm key (/key clear [provider] removes)",
-  "  /model <name>     pick the model; another provider's switches to it",
-  "  /effort <level>   reasoning effort (model support varies)",
-  "  /theme <t>        auto, light, or dark",
-  "  /account          who is signed in",
-  "  /info             repo, provider, theme, font",
-  "  /font <f>         default, fira, jetbrains, or plex",
-  "  /fontsize <n>     11 to 18, or default",
-  "  /ligatures <t>    on or off",
-  "  /show             the raw payload of the last command",
-  "  /export           save this transcript as a text file",
-  "  /wd               about the wd cli",
-  "  /stop             stop a running explain (esc works too)",
-  "  /clear            clear the screen",
-  "  /logout           sign out",
-  "keys: tab completes, up/down history, ctrl+r searches it,",
-  "esc stops, cmd+k (or ctrl+k) jumps to the repo picker,",
-  "ctrl+t opens a new tab, ctrl+1..9 switches tabs.",
+  ["/repos", "switch repo"],
+  ["/key <value>", "add an llm key (/key clear [provider] removes)"],
+  ["/model <name>", "pick the model; another provider's switches to it"],
+  ["/effort <level>", "reasoning effort (model support varies)"],
+  ["/theme <t>", "auto, light, or dark"],
+  ["/account", "who is signed in"],
+  ["/info", "repo, provider, theme, font"],
+  ["/font <f>", "default, fira, jetbrains, or plex"],
+  ["/fontsize <n>", "11 to 18, or default"],
+  ["/ligatures <t>", "on or off"],
+  ["/show", "the raw payload of the last command"],
+  ["/copy", "copy the last answer to the clipboard"],
+  ["/export", "save this transcript as a text file"],
+  ["/wd", "about the wd cli"],
+  ["/stop", "stop a running explain (esc works too)"],
+  ["/clear", "clear the screen"],
+  ["/logout", "sign out"],
+  "keys:",
+  ["tab", "complete"],
+  ["up/down", "history"],
+  ["ctrl+r", "search history"],
+  ["esc", "stop, or close the menu"],
+  ["cmd+k / ctrl+k", "repo picker"],
+  ["ctrl+t", "new tab"],
+  ["ctrl+1..9", "switch tabs"],
 ];
 
-const WD_HELP = [
+const WD_HELP: HelpRow[] = [
   "wd is also a cli: one tiny binary, no telemetry.",
-  "  wd new <branch>     worktree in a sibling dir, copies .env*",
-  "  wd ls               worktrees with dirty and ahead/behind status",
-  "  wd switch [query]   picker that cd's via a shell wrapper",
-  "  wd rm [name]        prune worktrees whose branches are merged",
-  "  wd explain [range]  this, in your terminal, on the same key",
-  "  wd init zsh         the shell wrapper for switch",
+  ["wd new <branch>", "worktree in a sibling dir, copies .env*"],
+  ["wd ls", "worktrees with dirty and ahead/behind status"],
+  ["wd switch [query]", "picker that cd's via a shell wrapper"],
+  ["wd rm [name]", "prune worktrees whose branches are merged"],
+  ["wd explain [range]", "this, in your terminal, on the same key"],
+  ["wd init zsh", "the shell wrapper for switch"],
   "source: github.com/chrispetrou/wd",
 ];
+
+function helpLines(rows: HelpRow[]): Line[] {
+  return rows.map((row) => {
+    if (typeof row === "string") {
+      return { text: row, cls: row.endsWith(":") ? "a" : "o" };
+    }
+    const [cmd, desc] = row;
+    return {
+      head: { text: `  ${cmd}`.padEnd(HELP_COL), cls: "" },
+      text: desc,
+      cls: "o",
+    };
+  });
+}
 
 const FONTS = ["default", "fira", "jetbrains", "plex"];
 
@@ -165,6 +222,7 @@ const COMMANDS: CmdSpec[] = [
   { name: "/account", desc: "who is signed in" },
   { name: "/info", desc: "repo, provider, theme, font" },
   { name: "/show", desc: "raw payload of the last command" },
+  { name: "/copy", desc: "copy the last answer" },
   { name: "/export", desc: "save the transcript" },
   { name: "/wd", desc: "about the wd cli" },
   { name: "/stop", desc: "stop a running explain" },
@@ -303,7 +361,17 @@ function providerInfo(): string {
   const a = keyStore.active();
   if (!a) return "no key set";
   const override = keyStore.model(a);
-  return `${a} · ${override || DEFAULT_MODELS[a]}${override ? " (custom)" : ""}`;
+  return `${a} · ${override || DEFAULT_MODELS[a]}`;
+}
+
+// the model a request goes to right now
+function modelName(): string {
+  const a = keyStore.active();
+  return a ? keyStore.model(a) || DEFAULT_MODELS[a] : "";
+}
+
+function seconds(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 interface Note {
@@ -367,7 +435,7 @@ export function TerminalChat({
   const [search, setSearch] = useState<{ q: string; idx: number } | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const lastCmdRef = useRef("");
-  const streamModeRef = useRef<"text" | "diff">("text");
+  const streamModeRef = useRef<"text" | "diff" | "branches">("text");
   const prompt = `${owner}/${repo} $`;
 
   const push = (rows: Line[]) => chatStore.push(storeKey, rows);
@@ -375,6 +443,18 @@ export function TerminalChat({
     push(texts.map((text) => ({ text, cls: "o" as Cls })));
   const echo = (text: string) =>
     push([{ prefix: prompt, text, cls: text.startsWith("/") ? "x" : "c" }]);
+  // the landing's success line: green arrow and verb, muted detail
+  const ok = (verb: string, detail = "") =>
+    push([
+      {
+        head: { text: `→ ${verb}`, cls: "g" },
+        text: detail ? ` ${detail}` : "",
+        cls: "o",
+      },
+    ]);
+  // errors are warnings-colored, never red: amber label, fg message
+  const err = (msg: string) =>
+    push([{ head: { text: "error:", cls: "a" }, text: ` ${msg}`, cls: "" }]);
 
   useEffect(() => {
     if (initRef.current) return; // strict mode re-runs mount effects
@@ -416,9 +496,19 @@ export function TerminalChat({
     return () => clearInterval(iv);
   }, [busy, storeKey]);
 
+  // follow new output only while the view is pinned to the bottom, so
+  // scrolling up to read earlier lines is never yanked back mid-stream.
+  // a submit re-pins
+  const pinnedRef = useRef(true);
+  const onLogScroll = () => {
+    const el = logRef.current;
+    if (el) pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  };
   useEffect(() => {
-    logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
-  }, [lines]);
+    if (pinnedRef.current) {
+      logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
+    }
+  }, [lines, busy]);
 
   // cmd+k / ctrl+k jumps back to the repo picker
   useEffect(() => {
@@ -434,6 +524,7 @@ export function TerminalChat({
 
   const classify = (text: string): Line => {
     const t = text.trimEnd();
+    if (streamModeRef.current === "branches") return branchLine(t);
     if (streamModeRef.current === "diff") {
       if (t.startsWith("diff --git")) return { text, cls: "c" };
       if (t.startsWith("- ")) return { text, cls: "o" }; // payload commit list
@@ -446,7 +537,7 @@ export function TerminalChat({
     }
     if (t === "summary" || t === "watch out") return { text, cls: "a" };
     if (t.startsWith("[wd:error] "))
-      return { text: `error: ${t.slice(11)}`, cls: "o" };
+      return { head: { text: "error:", cls: "a" }, text: ` ${t.slice(11)}`, cls: "" };
     return { text, cls: "" };
   };
 
@@ -467,14 +558,19 @@ export function TerminalChat({
   // one streaming pipeline for commands, /show, and follow-up turns
   const stream = async (
     body: object,
-    opts: { raw?: boolean; onMeta?: (meta: ExplainMeta) => void }
+    opts: {
+      raw?: boolean;
+      metrics?: boolean; // close with "· 3.2s · model" (model answers only)
+      onMeta?: (meta: ExplainMeta) => void;
+    }
   ): Promise<string | null> => {
     chatStore.abort(storeKey);
     const abort = new AbortController();
     streamModeRef.current = opts.raw ? "diff" : "text";
     chatStore.setStreaming(storeKey, true, abort);
+    const t0 = Date.now();
     let full = "";
-    let ok = false;
+    let done = false;
     try {
       const res = await fetch("/api/explain", {
         method: "POST",
@@ -488,11 +584,11 @@ export function TerminalChat({
         signal: abort.signal,
       });
       if (!res.ok || !res.body) {
-        const err = (await res.json().catch(() => null)) as {
+        const fail = (await res.json().catch(() => null)) as {
           error?: string;
         } | null;
-        muted([`error: ${err?.error ?? `request failed (${res.status})`}`]);
-        if (res.status === 401 && err?.error?.includes("sign in")) {
+        err(fail?.error ?? `request failed (${res.status})`);
+        if (res.status === 401 && fail?.error?.includes("sign in")) {
           window.location.href = "/api/auth/reset";
         }
         return null;
@@ -519,16 +615,22 @@ export function TerminalChat({
         }
       }
       flushPartial();
-      ok = true;
+      done = true;
+      if (opts.metrics) muted([`· ${seconds(Date.now() - t0)} · ${modelName()}`]);
     } catch (e) {
       if ((e as Error).name !== "AbortError") {
-        muted(["error: connection interrupted"]);
+        err("connection interrupted");
+      } else if (chatStore.owns(storeKey, abort)) {
+        // esc or /stop; a stream superseded by a new command stays silent
+        muted([`· stopped after ${seconds(Date.now() - t0)}`]);
       }
     } finally {
-      streamModeRef.current = "text";
-      chatStore.setStreaming(storeKey, false);
+      if (chatStore.owns(storeKey, abort)) {
+        streamModeRef.current = "text";
+        chatStore.setStreaming(storeKey, false);
+      }
     }
-    return ok ? full : null;
+    return done ? full : null;
   };
 
   const run = async (command: string, raw = false) => {
@@ -540,8 +642,12 @@ export function TerminalChat({
       { owner, repo, input: command, raw },
       {
         raw,
+        metrics: !raw && !isBranches,
         onMeta: (meta) => {
-          if (meta.branches) return;
+          if (meta.branches) {
+            streamModeRef.current = "branches";
+            return;
+          }
           context = meta.context ?? "";
           const rows = [
             `reading ${meta.commits} ${meta.commits === 1 ? "commit" : "commits"} · ${meta.files} ${meta.files === 1 ? "file" : "files"} · +${meta.additions} −${meta.deletions}`,
@@ -568,7 +674,7 @@ export function TerminalChat({
     if (!history) return;
     const full = await stream(
       { owner, repo, followup: { history, question } },
-      {}
+      { metrics: true }
     );
     if (full?.trim()) chatStore.appendExchange(storeKey, question, full.trim());
   };
@@ -576,13 +682,11 @@ export function TerminalChat({
   const saveKey = (value: string, echoText: string) => {
     const { provider, replaced } = keyStore.addKey(value);
     setHasKey(true);
-    push([
-      { text: `${prompt} ${echoText}`, cls: "p" },
-      {
-        text: `→ key saved locally (${provider}${replaced ? ", replaced" : ""}, now active)`,
-        cls: "g",
-      },
-    ]);
+    echo(echoText);
+    ok(
+      "key saved",
+      `${provider}${replaced ? ", replaced" : ""}, now active, stored in this browser only`
+    );
   };
 
   const slash = (raw: string) => {
@@ -591,7 +695,7 @@ export function TerminalChat({
     switch (cmd.toLowerCase()) {
       case "help":
         echo(raw);
-        muted(HELP);
+        push(helpLines(HELP));
         break;
       case "repos":
         echo(raw);
@@ -643,7 +747,7 @@ export function TerminalChat({
           muted(["paste an api key first."]);
         } else if (m.toLowerCase() === "default") {
           keyStore.setModel(active, "");
-          muted([`model reset to the provider default (${providerInfo()})`]);
+          ok("model", `${modelName()} (${active} default)`);
         } else if (!MODEL_RE.test(m)) {
           muted(["that does not look like a model id."]);
         } else {
@@ -654,10 +758,13 @@ export function TerminalChat({
           } else {
             keyStore.setActive(target);
             keyStore.setModel(target, m === DEFAULT_MODELS[target] ? "" : m);
-            const lines = [
-              `model set to ${m}${target !== active ? ` (switched to ${target})` : ""}`,
-              "it is sent per request, like the key.",
-            ];
+            ok("model", `${m}${target !== active ? ` (switched to ${target})` : ""}`);
+            const lines: string[] = [];
+            // said once; after that the green line is the whole story
+            if (!pref("wd_model_hint")) {
+              setPref("wd_model_hint", "seen");
+              lines.push("it is sent per request, like the key.");
+            }
             // providers with effort levels get the /effort menu right away,
             // so model and effort are one flow; esc keeps the current level
             if (EFFORTS[target].length) {
@@ -667,7 +774,7 @@ export function TerminalChat({
               changeInput("/effort ");
               inputRef.current?.focus();
             }
-            muted(lines);
+            if (lines.length) muted(lines);
           }
         }
         break;
@@ -689,10 +796,10 @@ export function TerminalChat({
           ]);
         } else if (level === "default") {
           keyStore.setEffort(active, "");
-          muted(["effort reset to the provider default."]);
+          ok("effort", `${active} default`);
         } else if (levels.includes(level)) {
           keyStore.setEffort(active, level);
-          muted([`effort set to ${level} for ${active}`]);
+          ok("effort", `${level} for ${active}`);
         } else {
           muted([`usage: /effort ${levels.join("|")} or /effort default`]);
         }
@@ -703,7 +810,7 @@ export function TerminalChat({
         const t = arg.toLowerCase();
         if (t === "auto" || t === "light" || t === "dark") {
           applyTheme(t as Theme);
-          muted([`theme set to ${t}`]);
+          ok("theme", t);
         } else {
           muted([`theme is ${currentTheme()}. usage: /theme auto|light|dark`]);
         }
@@ -734,7 +841,7 @@ export function TerminalChat({
         echo(raw);
         if (FONTS.includes(arg.toLowerCase())) {
           applyFont(arg.toLowerCase());
-          muted([`font set to ${arg.toLowerCase()}`]);
+          ok("font", arg.toLowerCase());
         } else {
           muted([
             `font is ${pref("wd_font") || "default"}. usage: /font ${FONTS.join("|")}`,
@@ -746,10 +853,10 @@ export function TerminalChat({
         const n = parseInt(arg, 10);
         if (arg === "default") {
           applyFontSize("default");
-          muted(["font size reset."]);
+          ok("font size", "default");
         } else if (n >= 11 && n <= 18) {
           applyFontSize(String(n));
-          muted([`font size set to ${n}px`]);
+          ok("font size", `${n}px`);
         } else {
           muted(["usage: /fontsize 11..18 or default"]);
         }
@@ -760,7 +867,7 @@ export function TerminalChat({
         const lig = arg.toLowerCase();
         if (lig === "on" || lig === "off") {
           applyLigatures(lig === "on");
-          muted([`ligatures ${lig} (visible with fira or jetbrains)`]);
+          ok("ligatures", `${lig} (visible with fira or jetbrains)`);
         } else {
           muted(["usage: /ligatures on|off"]);
         }
@@ -775,23 +882,41 @@ export function TerminalChat({
           void run(lastCmdRef.current, true);
         }
         break;
+      case "copy": {
+        // the last answer: everything after the last prompt line, minus
+        // status chatter (the muted lines), so a paste is just the text
+        let start = lines.length;
+        while (start > 0 && !lines[start - 1].prefix) start--;
+        const answer = lines
+          .slice(start)
+          .filter((l) => l.cls !== "o")
+          .map(flat);
+        echo(raw);
+        if (!answer.length) {
+          muted(["nothing to copy yet."]);
+          break;
+        }
+        navigator.clipboard
+          .writeText(answer.join("\n") + "\n")
+          .then(() => ok("copied", `${answer.length} ${answer.length === 1 ? "line" : "lines"}`))
+          .catch(() => err("clipboard unavailable, select the text instead"));
+        break;
+      }
       case "export": {
         echo(raw);
-        const text = lines
-          .map((l) => (l.prefix ? `${l.prefix} ` : "") + l.text)
-          .join("\n");
+        const text = lines.map(flat).join("\n");
         const blob = new Blob([text + "\n"], { type: "text/plain" });
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
         a.download = `wd-${owner}-${repo}.txt`;
         a.click();
         URL.revokeObjectURL(a.href);
-        muted(["transcript saved."]);
+        ok("saved", a.download);
         break;
       }
       case "wd":
         echo(raw);
-        muted(WD_HELP);
+        push(helpLines(WD_HELP));
         break;
       case "stop":
         echo(raw);
@@ -816,6 +941,7 @@ export function TerminalChat({
     if (!raw) return;
     setInput("");
     setHistPos(-1);
+    pinnedRef.current = true;
 
     if (raw.startsWith("/")) {
       if (!raw.startsWith("/key ")) historyRef.current.unshift(raw);
@@ -902,6 +1028,9 @@ export function TerminalChat({
     (slot && branchRows.length
       ? { stage: "branch", rows: branchRows, prefix: slot.prefix }
       : null);
+
+  // one name column per menu, wide enough for its longest row
+  const menuCol = menu ? Math.max(...menu.rows.map((r) => r.length)) : 0;
 
   // keep the keyboard selection visible inside the scrolling menu
   useEffect(() => {
@@ -1049,23 +1178,32 @@ export function TerminalChat({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" onClick={focusInput}>
-      <div ref={logRef} role="log" aria-live="polite" className="term-scroll">
+      <div
+        ref={logRef}
+        role="log"
+        aria-live="polite"
+        className="term-scroll"
+        onScroll={onLogScroll}
+      >
         {lines.map((l, i) => (
-          <div key={i}>
+          // a prompt line opens a block: command and its output read as one
+          <div key={i} className={l.prefix && i > 0 ? "mt-3" : ""}>
             {l.prefix ? (
               <span className="text-muted-foreground">{l.prefix} </span>
             ) : null}
+            {l.head ? <span className={CLS[l.head.cls]}>{l.head.text}</span> : null}
             <span className={CLS[l.cls]}>{renderText(l.text)}</span>
+            {l.tail ? <span className={CLS[l.tail.cls]}>{l.tail.text}</span> : null}
           </div>
         ))}
         {busy ? (
           <div>
             <span className="cursor" />
-            <span className="text-wd-faint"> {(elapsed / 1000).toFixed(1)}s</span>
+            <span className="text-muted-foreground"> {seconds(elapsed)}</span>
           </div>
         ) : null}
       </div>
-      <div className="flex items-baseline gap-2 pt-2">
+      <div className="flex items-baseline gap-2 pt-3">
         <span className="shrink-0 text-muted-foreground">{prompt}</span>
         <input
           ref={inputRef}
@@ -1105,11 +1243,17 @@ export function TerminalChat({
                   type="button"
                   onClick={() => applyMenuRow(menu, row)}
                   onMouseEnter={() => setMenuSel(i)}
-                  className={`flex w-full cursor-pointer items-baseline gap-4 rounded-[3px] px-1.5 py-0.5 text-left ${
+                  className={`flex w-full cursor-pointer items-baseline gap-2 rounded-[3px] px-1.5 py-0.5 text-left ${
                     sel ? "row-sel" : ""
                   }`}
                 >
-                  <span className={sel ? "font-semibold" : "text-wd-accent"}>
+                  {/* the landing picker's marker, and one column width for
+                      the whole menu so descriptions line up */}
+                  <span className="shrink-0 text-muted-foreground">{sel ? "›" : " "}</span>
+                  <span
+                    className={`shrink-0 ${sel ? "font-semibold" : "text-wd-accent"}`}
+                    style={{ minWidth: `${menuCol}ch` }}
+                  >
                     {row}
                   </span>
                   {spec ? (
@@ -1117,7 +1261,7 @@ export function TerminalChat({
                       {spec.desc}
                     </span>
                   ) : menu.stage === "arg" && argNotes(menu.spec, row).length ? (
-                    <span className="text-wd-faint">
+                    <span className="text-muted-foreground">
                       {argNotes(menu.spec, row).map((n, j) => (
                         <span key={n.text}>
                           {j ? " · " : ""}
@@ -1126,7 +1270,7 @@ export function TerminalChat({
                       ))}
                     </span>
                   ) : menu.stage === "branch" && row === branchList?.[0] ? (
-                    <span className="text-wd-faint">default branch</span>
+                    <span className="text-muted-foreground">default branch</span>
                   ) : null}
                 </button>
               );
@@ -1138,7 +1282,7 @@ export function TerminalChat({
         </div>
       ) : null}
       <div
-        className="pt-1.5 text-wd-faint"
+        className="pt-1.5 text-muted-foreground"
         data-tip="the model runs on your key; /model changes it"
       >
         {/* localStorage reads must wait for mount or hydration breaks */}

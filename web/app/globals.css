@@ -137,7 +137,10 @@
   --wd-amber: #e0b420;
   --wd-faint: #3a3a3a;
   --wd-sel: #1c2333;
-  --wd-accent: #e0b420;
+  /* indigo, the same family as light: commands and links must never share
+     amber with section labels and warnings. keep in sync with the media
+     block below */
+  --wd-accent: #91a7ff;
 }
 
 /* follow the system like the landing page does, until a toggle exists */
@@ -179,7 +182,7 @@
     --wd-amber: #e0b420;
     --wd-faint: #3a3a3a;
     --wd-sel: #1c2333;
-    --wd-accent: #e0b420;
+    --wd-accent: #91a7ff; /* see .dark above */
   }
 }
 
@@ -199,6 +202,7 @@
 
 ::selection {
   background: var(--wd-sel);
+  color: inherit; /* accent and amber text keep their color when selected */
 }
 
 /* full-viewport app surface: the page is the terminal */
@@ -246,6 +250,7 @@
   flex: 1;
   min-width: 0;
   caret-color: var(--foreground);
+  caret-shape: block; /* matches the streaming cursor where supported */
 }
 
 .term-scroll {

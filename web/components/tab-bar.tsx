@@ -1,10 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { chatStore } from "@/lib/chat-store";
 
 const TABS_STORE = "wd_tabs";
+
+// a muted dot after the name while that tab's explain is still streaming
+function Busy({ repo }: { repo: string }) {
+  const busy = useSyncExternalStore(
+    (cb) => chatStore.subscribe(repo, cb),
+    () => chatStore.streaming(repo),
+    () => false
+  );
+  return busy ? <span className="text-muted-foreground"> ·</span> : null;
+}
 
 function readTabs(): string[] {
   try {
@@ -95,6 +106,7 @@ export function TabBar() {
         >
           <Link href={`/repos/${t}`} data-tip={i < 9 ? `${t} · ctrl+${i + 1}` : t}>
             {label(t)}
+            <Busy repo={t} />
           </Link>
           <button
             type="button"

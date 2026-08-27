@@ -123,6 +123,43 @@ option.
 Nothing is sent anywhere unless you run `wd explain`. There is no
 telemetry.
 
+## terminal or web
+
+Same tool, two surfaces. The cli is for the repo in front of you: it
+runs on your machine, reads your local git, and manages worktrees. The
+web app is for any repo you can see on GitHub, including ones you never
+cloned: sign in, pick a repo, ask. Both explain diffs from the same spec
+(`shared/prompts/`), so an answer reads the same wherever you ask.
+
+```
+                    terminal (wd)                 web
+worktrees           new, ls, switch, rm           (cli only)
+explain a range     wd explain main..dev          diff main..dev
+last N commits      wd explain HEAD~3..           explain the last 3 commits
+                                                  (on <branch> to scope it)
+a pull request      fetch the branch, then a range what changed in pr #42
+branches            wd ls (worktrees, dirty)      branches (ahead/behind)
+follow-ups          (not yet)                     plain words after an explain
+raw payload         wd explain --dry-run          /show
+keys                env: ANTHROPIC_API_KEY, ...   pasted once, kept in browser
+providers           anthropic, openai, groq,      anthropic, openai, groq
+                    ollama
+model / effort      WD_MODEL, WD_PROVIDER         /model, /effort, per provider
+private repos       whatever git can reach        github oauth, repo scope
+```
+
+Pick the terminal when the diff is local, uncommitted, or on a machine
+with no GitHub access, when you want a no-key model via Ollama, or when
+the job is worktrees. Pick the web when the repo lives on GitHub and you
+want to ask about a PR or a branch without cloning it, keep several
+repos open as tabs, or ask follow-up questions about the same diff.
+Muscle memory carries over: the web terminal accepts `wd explain
+HEAD~3..` verbatim, and `/wd` inside it lists the cli commands.
+
+Keys never cross between the two. The cli reads them from the
+environment on your machine; the web app keeps them in your browser and
+sends them per request, and its server never stores or logs them.
+
 ## web
 
 The web app (`web/`) is wd explain for any GitHub repo, in the browser:
@@ -148,26 +185,41 @@ live in the cli). Wherever a branch name belongs, the completion menu
 drops down with the repo's branches, filtered as you type.
 
 It uses the same explain spec as the CLI (`shared/prompts/`), on your own
-LLM keys: pasted into the terminal, stored only in your browser (one per
-provider, the key prefix decides which), sent per request, never stored or
-logged server-side. `/key` lists them; `/key clear groq` removes one,
-`/key clear` all of them. The provider whose key was pasted last is
-active; `/model` switches: picking another provider's model (any id
-accepted; the menu marks models you have no key for) makes that provider
-active, defaulting to claude-opus-5 for anthropic, gpt-5-mini for openai,
-and llama-3.3-70b-versatile for groq (keys start with `gsk_`; groq has a
-free tier at console.groq.com). `/effort` sets the reasoning effort where
-the provider supports it (anthropic and openai; groq ignores it). Model
-and effort are remembered per provider.
+LLM keys. The first time a repo opens with no key stored, the terminal
+asks for one: paste it as the first message and it is kept in your
+browser only (one per provider, the key prefix decides which), sent per
+request, never stored or logged server-side, and never echoed back.
+`/key <value>` adds or replaces one later; `/key` lists them; `/key
+clear groq` removes one, `/key clear` all of them. The provider whose
+key was pasted last is active; `/model` switches: picking another
+provider's model (any id accepted; the menu marks each model's provider,
+`free` where there is a no-cost tier, and `no key` where you have none)
+makes that provider active, defaulting to claude-opus-5 for anthropic,
+gpt-5-mini for openai, and llama-3.3-70b-versatile for groq (keys start
+with `gsk_`; groq has a free tier at console.groq.com). `/effort` sets
+the reasoning effort where the provider supports it (anthropic: low to
+max, openai: minimal to high; groq ignores it), and switching to such a
+provider opens the effort menu right away. Model and effort are
+remembered per provider.
 
 Typing `/` opens a completion menu of every slash command with its
-options: `/help`, `/repos`, `/key`, `/model`, `/effort`, `/theme`, `/font`
-(fira, jetbrains, plex, or the system default), `/fontsize`,
-`/ligatures`, `/show` (the raw diff payload, pager-colored), `/export`
-(save the transcript), `/account`, `/info`, `/wd`, `/stop`, `/clear`,
-`/logout`. Arrows navigate the menu, tab completes, enter uses, esc
-closes; up/down recalls history, ctrl+r searches it, esc stops a running
-explain, and cmd+k jumps back to the repo picker.
+options: `/help`, `/repos`, `/key`, `/model`, `/effort`, `/theme` (auto,
+light, or dark), `/font` (fira, jetbrains, plex, or the system default),
+`/fontsize`, `/ligatures`, `/show` (the raw diff payload, pager-colored),
+`/copy` (the last answer to the clipboard), `/export` (save the
+transcript), `/account`, `/info`, `/wd`, `/stop`, `/clear`, `/logout`.
+Arrows navigate the menu, tab completes, enter uses, esc closes; up/down
+recalls history, ctrl+r searches it, esc stops a running explain, and
+cmd+k jumps back to the repo picker.
+
+The transcript reads like the cli: your command in the accent color,
+`summary` and `watch out` in amber, a green `→` line when something
+changed (`→ model claude-sonnet-5`, `→ saved wd-owner-repo.txt`), an
+amber `error:` label when something failed, and muted gray for status
+(`reading 3 commits · 14 files · +212 −87`). Each answer closes with its
+elapsed time and model (`· 8.4s · claude-opus-5`; `· stopped after 2.1s`
+if you pressed esc), commands and their output group into blocks, and
+scrolling up to read earlier output is never interrupted by new lines.
 
 After an explain, plain words are follow-up questions: "why is that
 risky?", "which files touch auth?". Answers stay grounded in the same
@@ -180,8 +232,9 @@ several repos at once, each with its own history. A streaming explain
 keeps going while you are on another tab. ctrl+t opens a new tab via
 the picker, ctrl+1..9 switches, × closes.
 
-Hover any control for its purpose and shortcut, and a faint status
-line under the prompt shows the provider, model, and effort in use.
+Hover any control for its purpose and shortcut, and a status line under
+the prompt shows the provider, model, and effort in use. A tab whose
+explain is still streaming shows a dot after its name.
 
 Notes:
 

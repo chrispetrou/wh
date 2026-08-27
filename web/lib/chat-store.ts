@@ -6,6 +6,8 @@ export interface ChatLine {
   text: string;
   cls: string;
   prefix?: string;
+  head?: { text: string; cls: string };
+  tail?: { text: string; cls: string };
 }
 
 export interface ChatMessage {
@@ -118,6 +120,11 @@ export const chatStore = {
   },
   abort(key: string) {
     entry(key).abort?.abort();
+  },
+  // whether this controller still belongs to the live stream: a superseded
+  // stream must not clear the state of the one that replaced it
+  owns(key: string, abort: AbortController): boolean {
+    return entry(key).abort === abort;
   },
   context(key: string): ChatMessage[] | undefined {
     return entry(key).context;
