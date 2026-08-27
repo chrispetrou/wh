@@ -18,6 +18,7 @@ import {
   MODEL_RE,
   sseToText,
   type ChatMessage,
+  type ProviderName,
   type ProviderRequest,
 } from "@/lib/explain/providers";
 import { getSession } from "@/lib/session";
@@ -48,7 +49,7 @@ function validHistory(history: unknown): history is ChatMessage[] {
 
 async function streamProvider(
   request: ProviderRequest,
-  provider: "anthropic" | "openai",
+  provider: ProviderName,
   meta: string
 ): Promise<NextResponse> {
   const upstream = await fetch(request.url, {
@@ -99,12 +100,16 @@ export async function POST(req: NextRequest) {
   const key = req.headers.get("x-wd-provider-key") ?? "";
   const model = req.headers.get("x-wd-model") ?? "";
   if (model && !MODEL_RE.test(model)) return err(400, "invalid model name");
-  const effort = req.headers.get("x-wd-effort") ?? "";
-  if (effort && key && !EFFORTS[detectProvider(key)].includes(effort)) {
-    return err(
-      400,
-      `effort '${effort}' is not valid for ${detectProvider(key)} (${EFFORTS[detectProvider(key)].join(", ")})`
-    );
+  const provider = key ? detectProvider(key) : null;
+  let effort = req.headers.get("x-wd-effort") ?? "";
+  if (effort && provider) {
+    const levels = EFFORTS[provider];
+    // a level left over from another provider's key is dropped, not
+    // rejected, so switching keys never locks the user out
+    if (levels.length === 0) effort = "";
+    else if (!levels.includes(effort)) {
+      return err(400, `effort '${effort}' is not valid for ${provider} (${levels.join(", ")})`);
+    }
   }
 
   const { owner, repo, input, raw, followup } = (await req.json()) as {
@@ -118,13 +123,12 @@ export async function POST(req: NextRequest) {
 
   // follow-up turn: relay the client-held conversation, no github fetch
   if (followup) {
-    if (!key) return err(401, "paste an api key first");
+    if (!key || !provider) return err(401, "paste an api key first");
     const question = followup.question;
     if (typeof question !== "string" || !question.trim() || question.length > MAX_QUESTION) {
       return err(400, "bad question");
     }
     if (!validHistory(followup.history)) return err(400, "bad conversation history");
-    const provider = detectProvider(key);
     const request = buildFollowupRequest(
       provider,
       key,
@@ -199,9 +203,8 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  if (!key) return err(401, "paste an api key first");
+  if (!key || !provider) return err(401, "paste an api key first");
   const { system, user } = prompt(payload);
-  const provider = detectProvider(key);
   const request = buildRequest(provider, key, system, user, model || undefined, effort || undefined);
   // context lets the client hold the conversation for follow-up turns
   const meta = JSON.stringify({ ...metaBase, context: user }) + "\n";

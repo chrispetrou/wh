@@ -4,6 +4,16 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { chatStore } from "@/lib/chat-store";
 import { commandHint, parseCommand } from "@/lib/commands";
+import {
+  DEFAULT_MODELS,
+  EFFORTS,
+  FREE_TIER,
+  MODEL_RE,
+  modelFamily,
+  SUGGESTED_MODELS,
+  type ProviderName,
+} from "@/lib/explain/providers";
+import { keyStore } from "@/lib/key-store";
 import { applyTheme, currentTheme, type Theme } from "./theme-toggle";
 
 type Cls = "p" | "c" | "o" | "g" | "a" | "x" | "r" | "";
@@ -53,7 +63,6 @@ function renderText(text: string) {
   return out;
 }
 
-const KEY_STORE = "wd_key";
 const RECENT_STORE = "wd_recent";
 
 interface ExplainMeta {
@@ -78,8 +87,8 @@ const HELP = [
   "  after an explain, plain words are follow-up questions",
   "slash commands:",
   "  /repos            switch repo",
-  "  /key <value>      set the llm key (/key clear removes it)",
-  "  /model <name>     pick the model (/model default resets)",
+  "  /key <value>      add an llm key (/key clear [provider] removes)",
+  "  /model <name>     pick the model; another provider's switches to it",
   "  /effort <level>   reasoning effort (model support varies)",
   "  /theme <t>        auto, light, or dark",
   "  /account          who is signed in",
@@ -111,30 +120,25 @@ const WD_HELP = [
 
 const FONTS = ["default", "fira", "jetbrains", "plex"];
 
-const ANTHROPIC_MODELS = ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"];
-const OPENAI_MODELS = ["gpt-5-mini", "gpt-5"];
+const PROVIDERS = Object.keys(SUGGESTED_MODELS) as ProviderName[];
 
-// suggestions follow the stored key's provider; no key shows both
+// every provider's models, the active provider's first. no "default"
+// row: each provider's default is labeled, and picking it resets the
+// override (typing /model default still works)
 function modelArgs(): string[] {
-  const key = readKey();
-  if (!key) return ["default", ...ANTHROPIC_MODELS, ...OPENAI_MODELS];
-  return [
-    "default",
-    ...(key.startsWith("sk-ant-") ? ANTHROPIC_MODELS : OPENAI_MODELS),
-  ];
+  const a = keyStore.active();
+  const order = a ? [a, ...PROVIDERS.filter((p) => p !== a)] : PROVIDERS;
+  return order.flatMap((p) => SUGGESTED_MODELS[p]);
 }
 
-const ANTHROPIC_EFFORTS = ["low", "medium", "high", "xhigh", "max"];
-const OPENAI_EFFORTS = ["minimal", "low", "medium", "high"];
-
 function effortArgs(): string[] {
-  const key = readKey();
-  const levels = !key
-    ? [...new Set([...ANTHROPIC_EFFORTS, ...OPENAI_EFFORTS])]
-    : key.startsWith("sk-ant-")
-      ? ANTHROPIC_EFFORTS
-      : OPENAI_EFFORTS;
+  const a = keyStore.active();
+  const levels = a ? EFFORTS[a] : [...new Set(Object.values(EFFORTS).flat())];
   return ["default", ...levels];
+}
+
+function keyArgs(): string[] {
+  return ["clear", ...keyStore.providers().map((p) => `clear ${p}`)];
 }
 
 // the completion menu: commands, their descriptions, and their options
@@ -147,7 +151,7 @@ interface CmdSpec {
 const COMMANDS: CmdSpec[] = [
   { name: "/help", desc: "all commands and keys" },
   { name: "/repos", desc: "switch repo" },
-  { name: "/key", desc: "set the llm key", args: ["clear"] },
+  { name: "/key", desc: "add an llm key", args: keyArgs },
   { name: "/model", desc: "pick the model", args: modelArgs },
   { name: "/effort", desc: "reasoning effort", args: effortArgs },
   { name: "/theme", desc: "light or dark", args: ["auto", "light", "dark"] },
@@ -251,60 +255,75 @@ function applyLigatures(on: boolean) {
   setPref("wd_lig", on ? "" : "off");
 }
 
-function readKey(): string {
-  try {
-    return localStorage.getItem(KEY_STORE) ?? "";
-  } catch {
-    return "";
-  }
+function modelList(p: ProviderName): string {
+  const [first, ...rest] = SUGGESTED_MODELS[p];
+  return [`${first} (default)`, ...rest].join(", ");
 }
 
-function writeKey(v: string) {
-  try {
-    if (v) localStorage.setItem(KEY_STORE, v);
-    else localStorage.removeItem(KEY_STORE);
-  } catch {
-    // private windows may block storage; the key just won't persist
-  }
-}
-
-const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
-
+// one line per provider; the ones without a key say so
 function modelSuggestionLines(): string[] {
-  const key = readKey();
-  if (!key) {
-    return [
-      "anthropic keys: claude-opus-5 (default), claude-sonnet-5, claude-haiku-4-5",
-      "openai keys: gpt-5-mini (default), gpt-5",
-    ];
-  }
-  return key.startsWith("sk-ant-")
-    ? ["your key is anthropic: claude-opus-5 (default), claude-sonnet-5, claude-haiku-4-5"]
-    : ["your key is openai: gpt-5-mini (default), gpt-5"];
+  return PROVIDERS.map(
+    (p) =>
+      `${p}${FREE_TIER.includes(p) ? " (free tier)" : ""}: ${modelList(p)}${keyStore.hasKey(p) ? "" : " · no key"}`
+  );
 }
 
-// heuristic guard: a model from the other provider's family will be
-// rejected upstream, better to say so at set time
-function modelMismatch(m: string): string | null {
-  const key = readKey();
-  if (!key) return null;
-  const anthropicKey = key.startsWith("sk-ant-");
-  if (anthropicKey && m.toLowerCase().startsWith("gpt")) {
-    return "note: that looks like an openai model, but your key is anthropic.";
-  }
-  if (!anthropicKey && m.toLowerCase().startsWith("claude")) {
-    return "note: that looks like an anthropic model, but your key is openai.";
-  }
-  return null;
+// one line per provider for /key
+function keyLines(): string[] {
+  const a = keyStore.active();
+  return PROVIDERS.map((p) => {
+    const state = keyStore.hasKey(p)
+      ? p === a
+        ? "set (active)"
+        : "set"
+      : FREE_TIER.includes(p)
+        ? "none (free tier at console.groq.com)"
+        : "none";
+    return `${p.padEnd(10)}${state}`;
+  });
+}
+
+function activeModel(): string {
+  const a = keyStore.active();
+  return a ? keyStore.model(a) : "";
+}
+
+function activeEffort(): string {
+  const a = keyStore.active();
+  return a ? keyStore.effort(a) : "";
+}
+
+// true when the active provider takes no effort level
+function effortIgnored(): boolean {
+  const a = keyStore.active();
+  return a !== null && EFFORTS[a].length === 0;
 }
 
 function providerInfo(): string {
-  const key = readKey();
-  if (!key) return "no key set";
-  const provider = key.startsWith("sk-ant-") ? "anthropic" : "openai";
-  const fallback = provider === "anthropic" ? "claude-opus-5" : "gpt-5-mini";
-  const override = pref("wd_model");
-  return `${provider} · ${override || fallback}${override ? " (custom)" : ""}`;
+  const a = keyStore.active();
+  if (!a) return "no key set";
+  const override = keyStore.model(a);
+  return `${a} · ${override || DEFAULT_MODELS[a]}${override ? " (custom)" : ""}`;
+}
+
+interface Note {
+  text: string;
+  cls?: string;
+}
+
+// notes beside a completion row: for /model, the provider, whether it
+// is free, whether the row is that provider's default, and a warning
+// when no key for it is stored
+function argNotes(spec: CmdSpec | undefined, row: string): Note[] {
+  if (row === "default") return [{ text: "provider default" }];
+  if (spec?.name !== "/model") return [];
+  const p = modelFamily(row);
+  if (!p) return [];
+  const notes: Note[] = [{ text: p }];
+  if (FREE_TIER.includes(p)) notes.push({ text: "free", cls: "text-wd-green" });
+  if (DEFAULT_MODELS[p] === row) notes.push({ text: "default", cls: "text-muted-foreground" });
+  if (!keyStore.hasKey(p)) notes.push({ text: "no key", cls: "text-wd-amber" });
+  return notes;
 }
 
 export function TerminalChat({
@@ -360,7 +379,7 @@ export function TerminalChat({
   useEffect(() => {
     if (initRef.current) return; // strict mode re-runs mount effects
     initRef.current = true;
-    const present = readKey() !== "";
+    const present = keyStore.providers().length > 0;
     setHasKey(present);
     // remember this repo for the picker's recent-first ordering
     try {
@@ -375,7 +394,7 @@ export function TerminalChat({
     push([{ text: `▜ wd · ${owner}/${repo}`, cls: "o" }]);
     if (!present) {
       muted([
-        "paste an anthropic or openai api key to enable explanations.",
+        "paste an api key to enable explanations: anthropic, openai, or groq (free tier at console.groq.com).",
         "it is stored only in this browser and sent per request.",
       ]);
     } else {
@@ -461,8 +480,9 @@ export function TerminalChat({
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-wd-provider-key": readKey(),
-          "x-wd-model": pref("wd_model"),
+          "x-wd-provider-key": keyStore.activeKey(),
+          "x-wd-model": activeModel(),
+          "x-wd-effort": activeEffort(),
         },
         body: JSON.stringify(body),
         signal: abort.signal,
@@ -554,18 +574,15 @@ export function TerminalChat({
   };
 
   const saveKey = (value: string, echoText: string) => {
-    writeKey(value);
+    const { provider, replaced } = keyStore.addKey(value);
     setHasKey(true);
     push([
       { text: `${prompt} ${echoText}`, cls: "p" },
-      { text: "→ key saved locally", cls: "g" },
+      {
+        text: `→ key saved locally (${provider}${replaced ? ", replaced" : ""}, now active)`,
+        cls: "g",
+      },
     ]);
-    const override = pref("wd_model");
-    if (override && modelMismatch(override)) {
-      muted([
-        `your saved model (${override}) does not match this key; /model default resets it.`,
-      ]);
-    }
   };
 
   const slash = (raw: string) => {
@@ -584,41 +601,74 @@ export function TerminalChat({
         chatStore.setAll(storeKey, []);
         chatStore.clearContext(storeKey);
         break;
-      case "key":
+      case "key": {
+        const usage = "usage: /key <value> adds or replaces, /key clear [provider] removes";
+        const [verb, which] = arg.split(/\s+/);
         if (!arg) {
           echo(raw);
-          muted([hasKey ? `key set (${providerInfo()})` : "no key set", "usage: /key <value> or /key clear"]);
-        } else if (arg === "clear") {
-          writeKey("");
+          muted([...keyLines(), usage]);
+        } else if (verb === "clear" && !which) {
+          keyStore.removeKey();
           setHasKey(false);
           echo(raw);
-          muted(["key removed from this browser."]);
+          muted(["all keys removed from this browser."]);
+        } else if (verb === "clear") {
+          echo(raw);
+          const target = PROVIDERS.find((p) => p === which);
+          if (!target) {
+            muted([usage]);
+          } else if (!keyStore.hasKey(target)) {
+            muted([`no ${target} key stored.`]);
+          } else {
+            keyStore.removeKey(target);
+            setHasKey(keyStore.providers().length > 0);
+            muted([`${target} key removed from this browser.`, `now: ${providerInfo()}`]);
+          }
         } else {
-          saveKey(arg, "/key sk-***");
+          saveKey(arg, "/key ***");
         }
         break;
+      }
       case "model": {
         echo(raw);
         const m = arg.trim();
+        const active = keyStore.active();
         if (!m) {
           muted([
             `model: ${providerInfo()}`,
-            "usage: /model <name> or /model default",
+            "usage: /model <name> or /model default; another provider's model switches to it",
             ...modelSuggestionLines(),
           ]);
+        } else if (!active) {
+          muted(["paste an api key first."]);
         } else if (m.toLowerCase() === "default") {
-          setPref("wd_model", "");
+          keyStore.setModel(active, "");
           muted([`model reset to the provider default (${providerInfo()})`]);
-        } else if (MODEL_RE.test(m)) {
-          setPref("wd_model", m);
-          const warn = modelMismatch(m);
-          muted([
-            `model set to ${m}`,
-            "it is sent per request, like the key.",
-            ...(warn ? [warn] : []),
-          ]);
-        } else {
+        } else if (!MODEL_RE.test(m)) {
           muted(["that does not look like a model id."]);
+        } else {
+          // ids of unknown family (llama-*, mixtral-*) stay on the active provider
+          const target = modelFamily(m) ?? active;
+          if (!keyStore.hasKey(target)) {
+            muted([`no ${target} key yet; /key <value> adds one.`]);
+          } else {
+            keyStore.setActive(target);
+            keyStore.setModel(target, m === DEFAULT_MODELS[target] ? "" : m);
+            const lines = [
+              `model set to ${m}${target !== active ? ` (switched to ${target})` : ""}`,
+              "it is sent per request, like the key.",
+            ];
+            // providers with effort levels get the /effort menu right away,
+            // so model and effort are one flow; esc keeps the current level
+            if (EFFORTS[target].length) {
+              lines.push(
+                `effort: ${keyStore.effort(target) || "provider default"} · pick a level below, esc keeps it`
+              );
+              changeInput("/effort ");
+              inputRef.current?.focus();
+            }
+            muted(lines);
+          }
         }
         break;
       }
@@ -626,18 +676,23 @@ export function TerminalChat({
         echo(raw);
         const level = arg.toLowerCase();
         const levels = effortArgs().slice(1);
-        if (!level) {
+        const active = keyStore.active();
+        if (!active) {
+          muted(["paste an api key first."]);
+        } else if (effortIgnored() && level !== "default") {
+          muted([`your key is ${active}: its models take no effort level.`]);
+        } else if (!level) {
           muted([
-            `effort: ${pref("wd_effort") || "provider default"}`,
+            `effort: ${keyStore.effort(active) || "provider default"} (${active})`,
             `usage: /effort ${levels.join("|")} or /effort default`,
             "higher levels think longer; not every model accepts effort.",
           ]);
         } else if (level === "default") {
-          setPref("wd_effort", "");
+          keyStore.setEffort(active, "");
           muted(["effort reset to the provider default."]);
         } else if (levels.includes(level)) {
-          setPref("wd_effort", level);
-          muted([`effort set to ${level}`]);
+          keyStore.setEffort(active, level);
+          muted([`effort set to ${level} for ${active}`]);
         } else {
           muted([`usage: /effort ${levels.join("|")} or /effort default`]);
         }
@@ -668,6 +723,7 @@ export function TerminalChat({
         muted([
           `repo      ${owner}/${repo}`,
           `provider  ${providerInfo()}`,
+          `keys      ${keyStore.providers().join(", ") || "none"}`,
           `theme     ${currentTheme()}`,
           `font      ${pref("wd_font") || "default"} · ${pref("wd_fontsize") || "13"}px · ligatures ${pref("wd_lig") === "off" ? "off" : "on"}`,
           `context   ${ctx ? `active (${ctx.length} messages), follow-ups on` : "none, run a command first"}`,
@@ -769,7 +825,7 @@ export function TerminalChat({
 
     if (!hasKey) {
       // gated: whatever was typed is the key; never store or echo it
-      saveKey(raw, "sk-***");
+      saveKey(raw, "***");
       muted([commandHint]);
       return;
     }
@@ -1060,8 +1116,15 @@ export function TerminalChat({
                     <span className="min-w-0 flex-1 truncate text-muted-foreground">
                       {spec.desc}
                     </span>
-                  ) : menu.stage === "arg" && row === "default" ? (
-                    <span className="text-wd-faint">provider default</span>
+                  ) : menu.stage === "arg" && argNotes(menu.spec, row).length ? (
+                    <span className="text-wd-faint">
+                      {argNotes(menu.spec, row).map((n, j) => (
+                        <span key={n.text}>
+                          {j ? " · " : ""}
+                          <span className={n.cls}>{n.text}</span>
+                        </span>
+                      ))}
+                    </span>
                   ) : menu.stage === "branch" && row === branchList?.[0] ? (
                     <span className="text-wd-faint">default branch</span>
                   ) : null}
@@ -1080,7 +1143,7 @@ export function TerminalChat({
       >
         {/* localStorage reads must wait for mount or hydration breaks */}
         {mounted ? providerInfo() : " "}
-        {mounted && pref("wd_effort") ? ` · effort ${pref("wd_effort")}` : ""}
+        {mounted && activeEffort() && !effortIgnored() ? ` · effort ${activeEffort()}` : ""}
       </div>
     </div>
   );

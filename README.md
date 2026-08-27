@@ -7,8 +7,8 @@ branch-switching never touches your working state, and explaining diffs in
 plain English so review starts with understanding, not archaeology.
 
 It is local-first and telemetry-free. Explanations run on your own key:
-Anthropic, OpenAI, or a local model via Ollama. Everything else needs nothing
-but git.
+Anthropic, OpenAI, Groq (free tier), or a local model via Ollama. Everything
+else needs nothing but git.
 
 Written in Rust. One binary, no runtime.
 
@@ -107,11 +107,18 @@ Environment only, no config files:
 ```
 ANTHROPIC_API_KEY   used if set (model: claude-opus-5)
 OPENAI_API_KEY      used if no anthropic key (model: gpt-5-mini)
-                    neither set: local ollama (model: llama3.2)
-WD_PROVIDER         force one of: anthropic, openai, ollama
+GROQ_API_KEY        used if neither (model: llama-3.3-70b-versatile)
+                    none set: local ollama (model: llama3.2)
+WD_PROVIDER         force one of: anthropic, openai, groq, ollama
 WD_MODEL            override the model for any provider
 WD_OLLAMA_URL       default http://localhost:11434
+WD_GROQ_URL         default https://api.groq.com/openai
 ```
+
+Paid keys win the auto-detect so nobody is silently downgraded;
+`WD_PROVIDER=groq` opts into the free one. Groq's free tier
+(console.groq.com) is the no-cost hosted option; Ollama is the no-key
+option.
 
 Nothing is sent anywhere unless you run `wd explain`. There is no
 telemetry.
@@ -141,12 +148,17 @@ live in the cli). Wherever a branch name belongs, the completion menu
 drops down with the repo's branches, filtered as you type.
 
 It uses the same explain spec as the CLI (`shared/prompts/`), on your own
-LLM key: pasted once into the terminal, stored only in your browser, sent
-per request, never stored or logged server-side. `/model` picks the model
-the same way (any id accepted, stored in your browser, sent per request);
-its suggestions follow your key's provider, defaulting to claude-opus-5
-for anthropic keys and gpt-5-mini for openai keys. `/effort` sets the
-reasoning effort when the model supports it.
+LLM keys: pasted into the terminal, stored only in your browser (one per
+provider, the key prefix decides which), sent per request, never stored or
+logged server-side. `/key` lists them; `/key clear groq` removes one,
+`/key clear` all of them. The provider whose key was pasted last is
+active; `/model` switches: picking another provider's model (any id
+accepted; the menu marks models you have no key for) makes that provider
+active, defaulting to claude-opus-5 for anthropic, gpt-5-mini for openai,
+and llama-3.3-70b-versatile for groq (keys start with `gsk_`; groq has a
+free tier at console.groq.com). `/effort` sets the reasoning effort where
+the provider supports it (anthropic and openai; groq ignores it). Model
+and effort are remembered per provider.
 
 Typing `/` opens a completion menu of every slash command with its
 options: `/help`, `/repos`, `/key`, `/model`, `/effort`, `/theme`, `/font`

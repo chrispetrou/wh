@@ -35,7 +35,11 @@ pub enum Cmd {
         /// zsh, bash, or fish
         shell: String,
     },
-    /// explain a diff range in plain english (BYO llm key)
+    /// explain a diff range in plain english (byo llm key, or local ollama)
+    #[command(after_help = "\
+keys via env: ANTHROPIC_API_KEY, OPENAI_API_KEY, or GROQ_API_KEY (free tier
+at console.groq.com). none set: local ollama. WD_PROVIDER forces one,
+WD_MODEL overrides the model.")]
     Explain {
         /// range like main..dev or HEAD~3.. (default HEAD~1..); a bare
         /// ref means <ref>..HEAD

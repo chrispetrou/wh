@@ -1,33 +1,74 @@
 // provider request shapes and stream decoding; mirrors cli/src/llm.rs.
 // keys arrive per request and are never stored or logged.
 
-export type ProviderName = "anthropic" | "openai";
+export type ProviderName = "anthropic" | "openai" | "groq";
 
+// key prefixes are disjoint; openai stays the fallback, so any future
+// provider needs its own prefix here
 export function detectProvider(key: string): ProviderName {
-  return key.startsWith("sk-ant-") ? "anthropic" : "openai";
+  if (key.startsWith("sk-ant-")) return "anthropic";
+  if (key.startsWith("gsk_")) return "groq";
+  return "openai";
 }
 
 export const DEFAULT_MODELS: Record<ProviderName, string> = {
   anthropic: "claude-opus-5",
   openai: "gpt-5-mini",
+  groq: "llama-3.3-70b-versatile",
 };
 
-// model ids as accepted by providers; also guards the request body
-export const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
+// providers with a no-cost tier, for the "free" note in the terminal
+export const FREE_TIER: ProviderName[] = ["groq"];
+
+// what the terminal suggests for /model; the default comes first
+export const SUGGESTED_MODELS: Record<ProviderName, string[]> = {
+  anthropic: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"],
+  openai: ["gpt-5-mini", "gpt-5"],
+  groq: ["llama-3.3-70b-versatile", "openai/gpt-oss-120b"],
+};
+
+// which provider a model id belongs to, when that can be told: exact
+// suggestion hits first (openai/gpt-oss-120b is groq's), then the
+// family prefix; null for ids like llama-* that several hosts serve
+export function modelFamily(id: string): ProviderName | null {
+  for (const p of Object.keys(SUGGESTED_MODELS) as ProviderName[]) {
+    if (SUGGESTED_MODELS[p].includes(id)) return p;
+  }
+  const lower = id.toLowerCase();
+  if (lower.startsWith("claude")) return "anthropic";
+  if (lower.startsWith("gpt")) return "openai";
+  return null;
+}
+
+// model ids as accepted by providers; also guards the request body. the
+// slash is for groq ids like openai/gpt-oss-120b; ids only ever land in
+// a json body, never a url.
+export const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$/;
 
 // reasoning effort levels each provider understands (anthropic:
-// output_config.effort; openai: reasoning_effort). model support varies;
-// an unsupported combination surfaces as a provider error.
+// output_config.effort; openai: reasoning_effort; groq: none, its llama
+// models take no effort level). model support varies; an unsupported
+// combination surfaces as a provider error.
 export const EFFORTS: Record<ProviderName, string[]> = {
   anthropic: ["low", "medium", "high", "xhigh", "max"],
   openai: ["minimal", "low", "medium", "high"],
+  groq: [],
 };
 
 function effortBody(provider: ProviderName, effort?: string) {
-  if (!effort) return {};
+  if (!effort || EFFORTS[provider].length === 0) return {};
   return provider === "anthropic"
     ? { output_config: { effort } }
     : { reasoning_effort: effort };
+}
+
+// groq speaks the openai chat-completions dialect at its own host
+function chatCompletionsUrl(provider: "openai" | "groq"): string {
+  const base =
+    provider === "groq"
+      ? (process.env.WD_GROQ_URL ?? "https://api.groq.com/openai")
+      : (process.env.WD_OPENAI_URL ?? "https://api.openai.com");
+  return `${base}/v1/chat/completions`;
 }
 
 export interface ProviderRequest {
@@ -64,7 +105,7 @@ export function buildRequest(
     };
   }
   return {
-    url: `${process.env.WD_OPENAI_URL ?? "https://api.openai.com"}/v1/chat/completions`,
+    url: chatCompletionsUrl(provider),
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${key}`,
@@ -132,7 +173,7 @@ export function buildFollowupRequest(
     };
   }
   return {
-    url: `${process.env.WD_OPENAI_URL ?? "https://api.openai.com"}/v1/chat/completions`,
+    url: chatCompletionsUrl(provider),
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${key}`,
@@ -155,7 +196,8 @@ interface AnthropicEvent {
   delta?: { text?: string };
 }
 
-interface OpenAiEvent {
+// openai and groq share this shape
+interface ChatCompletionsEvent {
   choices?: Array<{ delta?: { content?: string | null } }>;
 }
 
@@ -165,7 +207,7 @@ export function extractText(provider: ProviderName, json: string): string {
       const ev = JSON.parse(json) as AnthropicEvent;
       return ev.type === "content_block_delta" ? (ev.delta?.text ?? "") : "";
     }
-    const ev = JSON.parse(json) as OpenAiEvent;
+    const ev = JSON.parse(json) as ChatCompletionsEvent;
     return ev.choices?.[0]?.delta?.content ?? "";
   } catch {
     return "";
