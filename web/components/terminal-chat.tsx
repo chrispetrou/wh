@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { chatStore } from "@/lib/chat-store";
+import { chatStore, type LogRow } from "@/lib/chat-store";
 import { commandHint, parseCommand } from "@/lib/commands";
+import { logLine, type LogLayout } from "@/lib/log-line";
 import {
   DEFAULT_MODELS,
   EFFORTS,
@@ -16,7 +17,7 @@ import {
 import { keyStore } from "@/lib/key-store";
 import { applyTheme, currentTheme, type Theme } from "./theme-toggle";
 
-type Cls = "p" | "c" | "o" | "g" | "a" | "x" | "r" | "";
+type Cls = "p" | "c" | "o" | "g" | "a" | "x" | "r" | "f" | "";
 
 // a leading span in its own color: the green "→ verb" of a success line,
 // the amber "error:" label, or the fg command column of a help table
@@ -31,6 +32,8 @@ interface Line {
   prefix?: string; // muted prompt rendered before the text
   head?: Head;
   tail?: Head; // trailing span, e.g. the muted status words of a branch row
+  spans?: Head[]; // a multi-column row (log graph), instead of head/text/tail
+  pre?: boolean; // never wrap: graph rails must stay aligned
 }
 
 const CLS: Record<Cls, string> = {
@@ -41,15 +44,18 @@ const CLS: Record<Cls, string> = {
   a: "text-wd-amber",
   x: "text-wd-accent",
   r: "text-destructive",
+  f: "text-wd-faint",
   "": "",
 };
 
 // a line as plain text, for /copy and /export
 function flat(l: Line): string {
+  if (l.spans) return l.spans.map((s) => s.text).join("").trimEnd();
   return (
     (l.prefix ? `${l.prefix} ` : "") + (l.head?.text ?? "") + l.text + (l.tail?.text ?? "")
   );
 }
+
 
 // a branches row: "3  feat/web_app    behind 1". like the landing picker
 // and wd ls, the name is fg and the index and status words are muted
@@ -107,6 +113,11 @@ interface ExplainMeta {
   context?: string;
   followup?: boolean;
   branches?: boolean;
+  log?: boolean;
+  count?: number;
+  rails?: number;
+  rows?: LogRow[];
+  empty?: string; // "nothing since yesterday": no diff, no model call
 }
 
 // help tables: a string ending in ":" is an amber section label, any
@@ -120,6 +131,9 @@ const HELP: HelpRow[] = [
   ["explain the last N commits [on <branch>]", ""],
   ["what changed in pr #N (or in <branch>)", ""],
   ["diff main..dev (any two refs)", ""],
+  ["log [N] [on <branch>]", "the commit graph, rows numbered"],
+  ["explain 3, explain 2..5", "rows of the last log"],
+  ["explain <sha>", "one commit"],
   ["branches", "list branches with ahead/behind"],
   "  after an explain, plain words are follow-up questions",
   "slash commands:",
@@ -231,10 +245,10 @@ const COMMANDS: CmdSpec[] = [
 ];
 
 interface Menu {
-  stage: "cmd" | "arg" | "branch";
+  stage: "cmd" | "arg" | "branch" | "row";
   rows: string[];
   spec?: CmdSpec;
-  prefix?: string; // branch stage: the text before the branch slot
+  prefix?: string; // branch and row stages: the text before the slot
 }
 
 // where a branch name belongs in a repo command being typed
@@ -251,11 +265,19 @@ function branchSlot(input: string): BranchSlot | null {
     input
   );
   if (m) return { prefix: m[1], partial: m[2] };
+  m = /^((?:wd\s+)?(?:git\s+)?(?:log|graph|history)(?:\s+\d{1,3})?\s+on\s+)(\S*)$/i.exec(input);
+  if (m) return { prefix: m[1], partial: m[2] };
   m = /^((?:(?:wd\s+)?(?:diff|compare|explain)\s+)?\S*?\.{2,3})(\S*)$/i.exec(input);
   if (m && m[1].includes("..")) return { prefix: m[1], partial: m[2] };
   m = /^((?:wd\s+)?(?:diff|compare)\s+)([^\s.]*)$/i.exec(input);
   if (m) return { prefix: m[1], partial: m[2] };
   return null;
+}
+
+// "explain " with a log on screen offers its row numbers
+function rowSlot(input: string): BranchSlot | null {
+  const m = /^((?:wd\s+)?(?:explain|show)\s+)(\d{0,3})$/i.exec(input);
+  return m ? { prefix: m[1], partial: m[2] } : null;
 }
 
 function menuFor(input: string): Menu | null {
@@ -435,7 +457,8 @@ export function TerminalChat({
   const [search, setSearch] = useState<{ q: string; idx: number } | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const lastCmdRef = useRef("");
-  const streamModeRef = useRef<"text" | "diff" | "branches">("text");
+  const streamModeRef = useRef<"text" | "diff" | "branches" | "log">("text");
+  const logLayoutRef = useRef<LogLayout>({ n: 0, width: 1, rails: 1 });
   const prompt = `${owner}/${repo} $`;
 
   const push = (rows: Line[]) => chatStore.push(storeKey, rows);
@@ -525,6 +548,7 @@ export function TerminalChat({
   const classify = (text: string): Line => {
     const t = text.trimEnd();
     if (streamModeRef.current === "branches") return branchLine(t);
+    if (streamModeRef.current === "log") return logLine(t, logLayoutRef.current) as Line;
     if (streamModeRef.current === "diff") {
       if (t.startsWith("diff --git")) return { text, cls: "c" };
       if (t.startsWith("- ")) return { text, cls: "o" }; // payload commit list
@@ -579,6 +603,7 @@ export function TerminalChat({
           "x-wd-provider-key": keyStore.activeKey(),
           "x-wd-model": activeModel(),
           "x-wd-effort": activeEffort(),
+          "x-wd-tz": String(new Date().getTimezoneOffset()),
         },
         body: JSON.stringify(body),
         signal: abort.signal,
@@ -634,18 +659,35 @@ export function TerminalChat({
   };
 
   const run = async (command: string, raw = false) => {
-    const isBranches = parseCommand(command)?.kind === "branches";
+    const kind = parseCommand(command)?.kind;
+    const lookup = kind === "branches" || kind === "log";
     // a new diff command starts a new context; lookups leave it alone
-    if (!raw && !isBranches) chatStore.clearContext(storeKey);
+    if (!raw && !lookup) chatStore.clearContext(storeKey);
     let context = "";
+    let empty = false;
     const full = await stream(
       { owner, repo, input: command, raw },
       {
         raw,
-        metrics: !raw && !isBranches,
+        metrics: !raw && !lookup,
         onMeta: (meta) => {
           if (meta.branches) {
             streamModeRef.current = "branches";
+            return;
+          }
+          if (meta.log) {
+            streamModeRef.current = "log";
+            logLayoutRef.current = {
+              n: 0,
+              width: String(meta.count ?? 0).length,
+              rails: meta.rails ?? 1,
+            };
+            chatStore.setLogRows(storeKey, meta.rows ?? []);
+            return;
+          }
+          if (meta.empty) {
+            empty = true;
+            muted([meta.empty]);
             return;
           }
           context = meta.context ?? "";
@@ -660,6 +702,7 @@ export function TerminalChat({
         },
       }
     );
+    if (empty) return;
     if (!raw && context && full?.trim()) {
       chatStore.setContext(storeKey, context, full.trim());
       if (!pref("wd_fu_hint")) {
@@ -704,6 +747,7 @@ export function TerminalChat({
       case "clear":
         chatStore.setAll(storeKey, []);
         chatStore.clearContext(storeKey);
+        chatStore.setLogRows(storeKey, undefined); // row numbers left with the screen
         break;
       case "key": {
         const usage = "usage: /key <value> adds or replaces, /key clear [provider] removes";
@@ -988,6 +1032,35 @@ export function TerminalChat({
       ]);
       return;
     }
+    // rows of the last log become shas here; the server never sees numbers
+    if (cmd.kind === "row") {
+      const rows = chatStore.logRows(storeKey);
+      if (!rows) {
+        muted(["run log first, then explain a row: explain 3, or explain 2..5"]);
+        return;
+      }
+      const a = rows[cmd.from - 1];
+      const b = cmd.to ? rows[cmd.to - 1] : a;
+      if (!a || !b) {
+        muted([`the log has ${rows.length} ${rows.length === 1 ? "row" : "rows"}`]);
+        return;
+      }
+      let resolved: string;
+      if (!cmd.to) {
+        resolved = a.sha;
+        muted([`row ${cmd.from}: ${a.sha.slice(0, 7)} ${a.subject}`]);
+      } else {
+        if (!b.parent) {
+          muted([`row ${cmd.to} is the first commit; try explain ${cmd.from}..${cmd.to - 1}`]);
+          return;
+        }
+        resolved = `${b.parent}..${a.sha}`;
+        muted([`rows ${cmd.from}..${cmd.to}: ${b.sha.slice(0, 7)} to ${a.sha.slice(0, 7)}`]);
+      }
+      lastCmdRef.current = resolved;
+      void run(resolved);
+      return;
+    }
     lastCmdRef.current = raw;
     void run(raw);
   };
@@ -1010,6 +1083,11 @@ export function TerminalChat({
     () => undefined
   );
   const branchFetchRef = useRef(false);
+  const logRows = useSyncExternalStore(
+    (cb) => chatStore.subscribe(storeKey, cb),
+    () => chatStore.logRows(storeKey),
+    () => undefined
+  );
 
   const slot = menuDismissed ? null : branchSlot(input);
   const slashMenu = menuDismissed ? null : menuFor(input);
@@ -1023,11 +1101,20 @@ export function TerminalChat({
           )
           .slice(0, 12)
       : [];
+  const rslot = menuDismissed || !logRows?.length ? null : rowSlot(input);
+  const rowRows = rslot
+    ? logRows!
+        .map((_, i) => String(i + 1))
+        .filter((r) => r.startsWith(rslot.partial) && r !== rslot.partial)
+        .slice(0, 12)
+    : [];
   const menu: Menu | null =
     slashMenu ??
     (slot && branchRows.length
       ? { stage: "branch", rows: branchRows, prefix: slot.prefix }
-      : null);
+      : rslot && rowRows.length
+        ? { stage: "row", rows: rowRows, prefix: rslot.prefix }
+        : null);
 
   // one name column per menu, wide enough for its longest row
   const menuCol = menu ? Math.max(...menu.rows.map((r) => r.length)) : 0;
@@ -1052,7 +1139,7 @@ export function TerminalChat({
   }, [slot, branchList, owner, repo, storeKey]);
 
   const stageOf = (v: string): Menu["stage"] | undefined =>
-    menuFor(v)?.stage ?? (branchSlot(v) ? "branch" : undefined);
+    menuFor(v)?.stage ?? (branchSlot(v) ? "branch" : rowSlot(v) ? "row" : undefined);
 
   const changeInput = (v: string) => {
     setInput(v);
@@ -1060,7 +1147,7 @@ export function TerminalChat({
     // value stages default to "what you typed" so custom refs are never
     // hijacked by a listed suggestion; arrows opt into the list
     const st = stageOf(v);
-    setMenuSel(st === "arg" || st === "branch" ? -1 : 0);
+    setMenuSel(st === "arg" || st === "branch" || st === "row" ? -1 : 0);
   };
 
   const applyMenuRow = (m: Menu, row: string) => {
@@ -1073,6 +1160,9 @@ export function TerminalChat({
         changeInput("");
         submit(row);
       }
+    } else if (m.stage === "row") {
+      changeInput("");
+      submit(`${m.prefix ?? ""}${row}`);
     } else if (m.stage === "branch") {
       const full = `${m.prefix ?? ""}${row}`;
       if (parseCommand(full)) {
@@ -1131,7 +1221,7 @@ export function TerminalChat({
         if (menu.stage === "cmd") {
           const spec = COMMANDS.find((c) => c.name === row);
           changeInput(spec?.args ? `${row} ` : row);
-        } else if (menu.stage === "branch") {
+        } else if (menu.stage === "branch" || menu.stage === "row") {
           changeInput(`${menu.prefix ?? ""}${row}`);
         } else {
           changeInput(`${menu.spec?.name} ${row}`);
@@ -1187,13 +1277,26 @@ export function TerminalChat({
       >
         {lines.map((l, i) => (
           // a prompt line opens a block: command and its output read as one
-          <div key={i} className={l.prefix && i > 0 ? "mt-3" : ""}>
+          <div
+            key={i}
+            className={`${l.prefix && i > 0 ? "mt-3" : ""} ${l.pre ? "whitespace-pre" : ""}`}
+          >
             {l.prefix ? (
               <span className="text-muted-foreground">{l.prefix} </span>
             ) : null}
-            {l.head ? <span className={CLS[l.head.cls]}>{l.head.text}</span> : null}
-            <span className={CLS[l.cls]}>{renderText(l.text)}</span>
-            {l.tail ? <span className={CLS[l.tail.cls]}>{l.tail.text}</span> : null}
+            {l.spans ? (
+              l.spans.map((s, j) => (
+                <span key={j} className={CLS[s.cls]}>
+                  {s.text}
+                </span>
+              ))
+            ) : (
+              <>
+                {l.head ? <span className={CLS[l.head.cls]}>{l.head.text}</span> : null}
+                <span className={CLS[l.cls]}>{renderText(l.text)}</span>
+                {l.tail ? <span className={CLS[l.tail.cls]}>{l.tail.text}</span> : null}
+              </>
+            )}
           </div>
         ))}
         {busy ? (
@@ -1271,6 +1374,10 @@ export function TerminalChat({
                     </span>
                   ) : menu.stage === "branch" && row === branchList?.[0] ? (
                     <span className="text-muted-foreground">default branch</span>
+                  ) : menu.stage === "row" ? (
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                      {logRows?.[Number(row) - 1]?.subject}
+                    </span>
                   ) : null}
                 </button>
               );

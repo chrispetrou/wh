@@ -256,6 +256,7 @@
 .term-scroll {
   flex: 1;
   overflow-y: auto;
+  overflow-x: auto; /* graph rows never wrap; only this box scrolls sideways */
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: var(--wd-faint) transparent;

@@ -102,6 +102,70 @@ describe("parseCommand", () => {
     expect(parseCommand("v1.2..HEAD")).toEqual({ kind: "range", base: "v1.2", head: "" });
   });
 
+  it("parses log shapes", () => {
+    expect(parseCommand("log")).toEqual({ kind: "log" });
+    expect(parseCommand("graph")).toEqual({ kind: "log" });
+    expect(parseCommand("git log")).toEqual({ kind: "log" });
+    expect(parseCommand("show the log")).toBeNull(); // "the" is not a ref
+    expect(parseCommand("show log")).toEqual({ kind: "log" });
+    expect(parseCommand("log 50")).toEqual({ kind: "log", n: 50 });
+    expect(parseCommand("log 999")).toEqual({ kind: "log", n: 200 });
+    expect(parseCommand("log on dev")).toEqual({ kind: "log", ref: "dev" });
+    expect(parseCommand("graph 20 on feat/x")).toEqual({ kind: "log", n: 20, ref: "feat/x" });
+    expect(parseCommand("history")).toEqual({ kind: "log" });
+  });
+
+  it("parses commits by sha and by log row", () => {
+    expect(parseCommand("explain a1b2c3d")).toEqual({ kind: "commit", sha: "a1b2c3d" });
+    expect(parseCommand("A1B2C3D")).toEqual({ kind: "commit", sha: "a1b2c3d" });
+    expect(parseCommand("show me 40cce0c2a1")).toEqual({ kind: "commit", sha: "40cce0c2a1" });
+    expect(parseCommand("explain 3")).toEqual({ kind: "row", from: 3 });
+    expect(parseCommand("3")).toEqual({ kind: "row", from: 3 });
+    expect(parseCommand("explain 2..5")).toEqual({ kind: "row", from: 2, to: 5 });
+    expect(parseCommand("5..2")).toEqual({ kind: "row", from: 2, to: 5 });
+    // six hex chars is too short to be a sha, and not a row either
+    expect(parseCommand("abc123")).toBeNull();
+    // sha ranges are plain ranges
+    expect(parseCommand("a1b2c3d..40cce0c")).toEqual({
+      kind: "range",
+      base: "a1b2c3d",
+      head: "40cce0c",
+    });
+  });
+
+  it("parses periods, refs, and authors", () => {
+    expect(parseCommand("since yesterday")).toEqual({ kind: "since", period: "yesterday" });
+    expect(parseCommand("what changed since Monday")).toEqual({
+      kind: "since",
+      period: "monday",
+    });
+    expect(parseCommand("explain this week")).toEqual({ kind: "since", period: "this week" });
+    expect(parseCommand("yesterday")).toEqual({ kind: "since", period: "yesterday" });
+    expect(parseCommand("since 2026-08-20")).toEqual({ kind: "since", period: "2026-08-20" });
+    expect(parseCommand("since v1.2")).toEqual({ kind: "since", period: "v1.2" });
+    expect(parseCommand("commits since last week by alice")).toEqual({
+      kind: "since",
+      period: "last week",
+      author: "alice",
+    });
+    expect(parseCommand("what did i do this week")).toEqual({
+      kind: "since",
+      period: "this week",
+      author: "me",
+    });
+    expect(parseCommand("my commits since v1.2")).toEqual({
+      kind: "since",
+      period: "v1.2",
+      author: "me",
+    });
+    expect(parseCommand("standup")).toEqual({ kind: "since", period: "standup", author: "me" });
+    expect(parseCommand("since 3 days ago")).toEqual({ kind: "since", period: "3 days ago" });
+    // a bare ref is not a command, and "since" wants one word for a ref
+    expect(parseCommand("main")).toBeNull();
+    expect(parseCommand("since the merge")).toBeNull();
+    expect(parseCommand("since main..dev")).toBeNull();
+  });
+
   it("rejects everything else", () => {
     expect(parseCommand("")).toBeNull();
     expect(parseCommand("hello")).toBeNull();

@@ -8,6 +8,17 @@ export interface ChatLine {
   prefix?: string;
   head?: { text: string; cls: string };
   tail?: { text: string; cls: string };
+  // a multi-column row (log graph): rendered instead of head/text/tail
+  spans?: Array<{ text: string; cls: string }>;
+  // never wrap (graph rails must stay aligned)
+  pre?: boolean;
+}
+
+// a row of the last log, so row numbers resolve to shas client-side
+export interface LogRow {
+  sha: string;
+  parent: string | null;
+  subject: string;
 }
 
 export interface ChatMessage {
@@ -25,6 +36,8 @@ interface Entry {
   context?: ChatMessage[];
   // branch names for completion, default branch first
   branches?: string[];
+  // rows of the last log, numbered from 1
+  log?: LogRow[];
 }
 
 const MAX_CONTEXT_MESSAGES = 26;
@@ -134,6 +147,13 @@ export const chatStore = {
   },
   setBranches(key: string, branches: string[]) {
     entry(key).branches = branches;
+    emit(key);
+  },
+  logRows(key: string): LogRow[] | undefined {
+    return entry(key).log;
+  },
+  setLogRows(key: string, rows: LogRow[] | undefined) {
+    entry(key).log = rows;
     emit(key);
   },
   setContext(key: string, firstUser: string, firstAnswer: string) {

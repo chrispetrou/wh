@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { parseCommand } from "@/lib/commands";
+import { LOG_DEFAULT, parseCommand } from "@/lib/commands";
 import {
   branchesText,
+  commitInput,
   compareRange,
   GithubError,
   lastNCommits,
+  logText,
   prInput,
+  sinceInput,
   type ExplainInput,
 } from "@/lib/github";
 import { defaultCaps, defaultRules, preprocess, stats } from "@/lib/explain/preprocess";
@@ -32,6 +35,21 @@ const MAX_TOTAL_CHARS = 400_000;
 
 function err(status: number, message: string): NextResponse {
   return NextResponse.json({ error: message }, { status });
+}
+
+// a lookup answer: meta line, then text, no model
+function plain(meta: object, text: string): NextResponse {
+  return new NextResponse(JSON.stringify(meta) + "\n" + text, {
+    headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+  });
+}
+
+function githubFailure(e: unknown, destroy: () => void): NextResponse {
+  if (e instanceof GithubError) {
+    if (e.status === 401) destroy();
+    return err(e.status, e.message);
+  }
+  return err(502, "github request failed");
 }
 
 function validHistory(history: unknown): history is ChatMessage[] {
@@ -145,36 +163,54 @@ export async function POST(req: NextRequest) {
   const command = parseCommand(input);
   if (!command) return err(400, "unknown command");
 
-  // branches is a plain lookup: no diff, no model
+  const destroy = () => session.destroy();
+
+  // lookups: no diff, no model
   if (command.kind === "branches") {
     try {
-      const text = await branchesText(session.token, owner, repo);
-      return new NextResponse(JSON.stringify({ branches: true }) + "\n" + text, {
-        headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
-      });
+      return plain({ branches: true }, await branchesText(session.token, owner, repo));
     } catch (e) {
-      if (e instanceof GithubError) {
-        if (e.status === 401) session.destroy();
-        return err(e.status, e.message);
-      }
-      return err(502, "github request failed");
+      return githubFailure(e, destroy);
     }
   }
+  if (command.kind === "log") {
+    try {
+      const log = await logText(session.token, owner, repo, command.n ?? LOG_DEFAULT, command.ref);
+      return plain({ log: true, count: log.count, rails: log.rails, rows: log.rows }, log.text);
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
+  // row numbers only mean something next to the client's last log
+  if (command.kind === "row") return err(400, "run log first, then explain a row number");
+
+  // the browser's utc offset, so "today" is the user's day
+  const tz = Math.max(-840, Math.min(840, Number(req.headers.get("x-wd-tz") ?? 0) || 0));
 
   let data: ExplainInput;
   try {
-    data =
-      command.kind === "last"
-        ? await lastNCommits(session.token, owner, repo, command.n, command.ref)
-        : command.kind === "pr"
-          ? await prInput(session.token, owner, repo, command.num)
-          : await compareRange(session.token, owner, repo, command.base, command.head);
-  } catch (e) {
-    if (e instanceof GithubError) {
-      if (e.status === 401) session.destroy();
-      return err(e.status, e.message);
+    if (command.kind === "since") {
+      const r = await sinceInput(session.token, owner, repo, {
+        period: command.period,
+        author: command.author,
+        login: session.login ?? "",
+        now: Date.now(),
+        tz,
+      });
+      if ("empty" in r) return plain({ empty: r.empty }, "");
+      data = r;
+    } else {
+      data =
+        command.kind === "last"
+          ? await lastNCommits(session.token, owner, repo, command.n, command.ref)
+          : command.kind === "pr"
+            ? await prInput(session.token, owner, repo, command.num)
+            : command.kind === "commit"
+              ? await commitInput(session.token, owner, repo, command.sha)
+              : await compareRange(session.token, owner, repo, command.base, command.head);
     }
-    return err(502, "github request failed");
+  } catch (e) {
+    return githubFailure(e, destroy);
   }
 
   const { files, added, deleted } = stats(data.numstat);

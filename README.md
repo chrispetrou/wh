@@ -138,6 +138,9 @@ explain a range     wd explain main..dev          diff main..dev
 last N commits      wd explain HEAD~3..           explain the last 3 commits
                                                   (on <branch> to scope it)
 a pull request      fetch the branch, then a range what changed in pr #42
+one commit          wd explain <sha>~1..<sha>     explain <sha>
+the graph           git log --graph               log, then explain 3
+time and people     git log --since, --author     since yesterday by me, standup
 branches            wd ls (worktrees, dirty)      branches (ahead/behind)
 follow-ups          (not yet)                     plain words after an explain
 raw payload         wd explain --dry-run          /show
@@ -169,6 +172,9 @@ sign in with GitHub, pick a repo, and ask in a full-page terminal:
 explain the last 5 commits [on <branch>]
 what changed in pr #42
 diff main..release
+log [N] [on <branch>]
+explain 3 (a row of the log), explain 2..5, explain <sha>
+since yesterday | this week | v1.2 [by <login>], standup
 branches
 ```
 
@@ -183,6 +189,24 @@ branch, and `branches` lists branches numbered with ahead/behind
 against the default (the web cousin of `wd ls`; worktrees themselves
 live in the cli). Wherever a branch name belongs, the completion menu
 drops down with the repo's branches, filtered as you type.
+
+`log` draws the commit graph the way `git log --graph` does, as text in
+the transcript: rails, sha, branch and tag names, subject, author, and a
+relative time, with every commit row numbered. All branches are walked
+(the default branch first, up to 12 heads; the footer says how many were
+left out) and unioned into one graph; `log 100` shows more rows, `log on
+<branch>` scopes to one branch. The numbers are the point: `explain 3`
+explains that commit, `explain 2..5` the span of rows (from the parent
+of row 5 to row 2), and `explain <sha>` takes any sha directly. Typing
+`explain ` with a log on screen offers the rows in the completion menu.
+
+Time and people work as words: `since yesterday`, `since monday`, `this
+week`, `last week`, `since 3 days ago`, `since 2026-08-20`, or `since
+v1.2` for a ref. Add `by <login>` for one person's commits, `by me` (or
+`what did i do this week`, `my commits since v1.2`) for your own, and
+`standup` for your commits since the last working day. Days follow your
+browser's clock. An empty window says `nothing since yesterday` and
+costs no model call.
 
 It uses the same explain spec as the CLI (`shared/prompts/`), on your own
 LLM keys. The first time a repo opens with no key stored, the terminal
