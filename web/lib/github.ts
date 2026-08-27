@@ -2,6 +2,7 @@
 // (unified diff + numstat lines + commit lines) so the shared preprocess
 // spec applies unchanged.
 
+import { LATEST_TAG } from "./commands";
 import { graph } from "./graph";
 import { resolvePeriod } from "./time";
 
@@ -301,13 +302,23 @@ export async function sinceInput(
 ): Promise<SinceResult> {
   const author = opts.author === "me" ? opts.login : opts.author;
   const period = resolvePeriod(opts.period, opts.now, opts.tz);
+  const base = `/repos/${owner}/${repo}`;
+
+  // bare changelog: since the newest tag
+  let tagNote: string | undefined;
+  if (opts.period === LATEST_TAG) {
+    const latest = await latestTag(token, owner, repo);
+    if (!latest) throw new GithubError(404, "no tags in this repo; try changelog since <ref>");
+    opts = { ...opts, period: latest };
+    tagNote = `since ${latest}, the latest tag`;
+  }
 
   if (!period && !author) {
     // a ref: everything on the default branch since it
-    return compareRange(token, owner, repo, opts.period, "");
+    const input = await compareRange(token, owner, repo, opts.period, "");
+    if (tagNote) input.note = tagNote;
+    return input;
   }
-
-  const base = `/repos/${owner}/${repo}`;
   const info = await gh(token, base);
   const def = ((await info.json()) as { default_branch: string }).default_branch;
 
@@ -377,6 +388,73 @@ export async function sinceInput(
   if (!parent) notes.push("the first commit of the repo is not included");
   if (notes.length) input.note = notes.join(" · ");
   return input;
+}
+
+// tags, newest first by commit date (github lists them by name); dates
+// need one commit lookup each, so they are capped like branch counts
+const TAG_DATES_CAP = 15;
+
+interface TagJson {
+  name: string;
+  commit: { sha: string };
+}
+
+async function tagDates(
+  token: string,
+  owner: string,
+  repo: string,
+  tags: TagJson[]
+): Promise<Array<TagJson & { date: string }>> {
+  return Promise.all(
+    tags.slice(0, TAG_DATES_CAP).map(async (t) => {
+      try {
+        const res = await gh(token, `/repos/${owner}/${repo}/commits/${t.commit.sha}`);
+        const c = (await res.json()) as CommitJson;
+        return { ...t, date: c.commit.committer.date };
+      } catch {
+        return { ...t, date: "" };
+      }
+    })
+  );
+}
+
+export async function latestTag(token: string, owner: string, repo: string): Promise<string | null> {
+  const res = await gh(token, `/repos/${owner}/${repo}/tags?per_page=${TAG_DATES_CAP}`);
+  const tags = (await res.json()) as TagJson[];
+  if (!tags.length) return null;
+  const dated = await tagDates(token, owner, repo, tags);
+  dated.sort((a, b) => b.date.localeCompare(a.date));
+  return dated[0].name;
+}
+
+// rows travel as `num\tname\tsha\tiso` so the client renders the relative
+// time; undated tags (past the cap) and the footer carry no tabs
+export async function tagsText(token: string, owner: string, repo: string): Promise<string> {
+  const res = await gh(token, `/repos/${owner}/${repo}/tags?per_page=100`);
+  const tags = (await res.json()) as TagJson[];
+  if (!tags.length) return "no tags\n";
+  const dated = await tagDates(token, owner, repo, tags);
+  dated.sort((a, b) => b.date.localeCompare(a.date));
+  const rest = tags.slice(TAG_DATES_CAP);
+  const width = Math.max(...tags.map((t) => t.name.length)) + 2;
+  const numWidth = String(tags.length).length;
+  let i = 0;
+  const lines = dated.map(
+    (t) =>
+      `${String(++i).padStart(numWidth)}\t${t.name.padEnd(width)}\t${t.commit.sha.slice(0, 7)}\t${t.date}`
+  );
+  for (const t of rest) {
+    lines.push(`${String(++i).padStart(numWidth)}\t${t.name.padEnd(width)}\t${t.commit.sha.slice(0, 7)}\t`);
+  }
+  lines.push(`${tags.length} ${tags.length === 1 ? "tag" : "tags"}`);
+  if (rest.length) lines.push(`(dates shown for the newest ${TAG_DATES_CAP})`);
+  return lines.join("\n") + "\n";
+}
+
+// tag names for completion menus
+export async function tagNames(token: string, owner: string, repo: string): Promise<string[]> {
+  const res = await gh(token, `/repos/${owner}/${repo}/tags?per_page=100`);
+  return ((await res.json()) as TagJson[]).map((t) => t.name);
 }
 
 // the ascii graph: one walk per branch head (capped), unioned by sha,

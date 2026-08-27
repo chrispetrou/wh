@@ -34,7 +34,7 @@ interface Entry {
   abort?: AbortController;
   // follow-up context: alternating user/assistant, [0] is the payload
   context?: ChatMessage[];
-  // branch names for completion, default branch first
+  // branch names for completion, default branch first, then tags
   branches?: string[];
   // rows of the last log, numbered from 1
   log?: LogRow[];

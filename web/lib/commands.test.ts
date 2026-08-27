@@ -166,6 +166,39 @@ describe("parseCommand", () => {
     expect(parseCommand("since main..dev")).toBeNull();
   });
 
+  it("parses changelog mode and tags", () => {
+    expect(parseCommand("changelog")).toEqual({
+      kind: "since",
+      period: "latest tag",
+      mode: "changelog",
+    });
+    expect(parseCommand("changelog v1.1..v1.2")).toEqual({
+      kind: "range",
+      base: "v1.1",
+      head: "v1.2",
+      mode: "changelog",
+    });
+    expect(parseCommand("release notes for pr 42")).toEqual({
+      kind: "pr",
+      num: 42,
+      mode: "changelog",
+    });
+    expect(parseCommand("changelog since v1.2")).toEqual({
+      kind: "since",
+      period: "v1.2",
+      mode: "changelog",
+    });
+    expect(parseCommand("changelog of the last 10 commits")).toEqual({
+      kind: "last",
+      n: 10,
+      mode: "changelog",
+    });
+    // a lookup cannot be framed as release notes
+    expect(parseCommand("changelog branches")).toBeNull();
+    expect(parseCommand("tags")).toEqual({ kind: "tags" });
+    expect(parseCommand("list tags")).toEqual({ kind: "tags" });
+  });
+
   it("rejects everything else", () => {
     expect(parseCommand("")).toBeNull();
     expect(parseCommand("hello")).toBeNull();

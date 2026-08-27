@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { chatStore, type LogRow } from "@/lib/chat-store";
 import { commandHint, parseCommand } from "@/lib/commands";
 import { logLine, type LogLayout } from "@/lib/log-line";
+import { relTime } from "@/lib/utils";
 import {
   DEFAULT_MODELS,
   EFFORTS,
@@ -72,6 +73,23 @@ function branchLine(text: string): Line {
   };
 }
 
+// a tags row: "2\tv1.10  \ta1b2c3d\t<iso>"; the name is fg, the rest muted,
+// the date relative like the picker
+function tagLine(text: string): Line {
+  const f = text.split("\t");
+  if (f.length < 4) return { text, cls: "o" };
+  const [num, name, sha, iso] = f;
+  return {
+    head: { text: `${num}  `, cls: "o" },
+    text: name,
+    cls: "",
+    tail: { text: `${sha}${iso ? `  ${relTime(iso)}` : ""}`, cls: "o" },
+  };
+}
+
+// the section labels of both output contracts, painted amber
+const LABELS = new Set(["summary", "watch out", "added", "changed", "fixed", "removed"]);
+
 // urls in output become quiet accent links
 const URL_RE = /\bhttps?:\/\/[^\s]+|\bgithub\.com\/[^\s]+/g;
 
@@ -113,6 +131,7 @@ interface ExplainMeta {
   context?: string;
   followup?: boolean;
   branches?: boolean;
+  tags?: boolean;
   log?: boolean;
   count?: number;
   rails?: number;
@@ -134,7 +153,10 @@ const HELP: HelpRow[] = [
   ["log [N] [on <branch>]", "the commit graph, rows numbered"],
   ["explain 3, explain 2..5", "rows of the last log"],
   ["explain <sha>", "one commit"],
+  ["since yesterday [by me]", "a period, a ref, one author; standup"],
+  ["changelog [range]", "release notes: added, changed, fixed, removed"],
   ["branches", "list branches with ahead/behind"],
+  ["tags", "list tags, newest first"],
   "  after an explain, plain words are follow-up questions",
   "slash commands:",
   ["/repos", "switch repo"],
@@ -266,6 +288,11 @@ function branchSlot(input: string): BranchSlot | null {
   );
   if (m) return { prefix: m[1], partial: m[2] };
   m = /^((?:wd\s+)?(?:git\s+)?(?:log|graph|history)(?:\s+\d{1,3})?\s+on\s+)(\S*)$/i.exec(input);
+  if (m) return { prefix: m[1], partial: m[2] };
+  // "since <ref>" anywhere at the end, and the first side of a changelog range
+  m = /^((?:wd\s+)?(?:.*\s)?since\s+)([^\s.]*)$/i.exec(input);
+  if (m) return { prefix: m[1], partial: m[2] };
+  m = /^((?:wd\s+)?(?:changelog|release\s+notes)\s+)([^\s.]*)$/i.exec(input);
   if (m) return { prefix: m[1], partial: m[2] };
   m = /^((?:(?:wd\s+)?(?:diff|compare|explain)\s+)?\S*?\.{2,3})(\S*)$/i.exec(input);
   if (m && m[1].includes("..")) return { prefix: m[1], partial: m[2] };
@@ -457,7 +484,7 @@ export function TerminalChat({
   const [search, setSearch] = useState<{ q: string; idx: number } | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const lastCmdRef = useRef("");
-  const streamModeRef = useRef<"text" | "diff" | "branches" | "log">("text");
+  const streamModeRef = useRef<"text" | "diff" | "branches" | "log" | "tags">("text");
   const logLayoutRef = useRef<LogLayout>({ n: 0, width: 1, rails: 1 });
   const prompt = `${owner}/${repo} $`;
 
@@ -549,6 +576,7 @@ export function TerminalChat({
     const t = text.trimEnd();
     if (streamModeRef.current === "branches") return branchLine(t);
     if (streamModeRef.current === "log") return logLine(t, logLayoutRef.current) as Line;
+    if (streamModeRef.current === "tags") return tagLine(t);
     if (streamModeRef.current === "diff") {
       if (t.startsWith("diff --git")) return { text, cls: "c" };
       if (t.startsWith("- ")) return { text, cls: "o" }; // payload commit list
@@ -559,7 +587,7 @@ export function TerminalChat({
       if (t.startsWith("...")) return { text, cls: "o" };
       return { text, cls: "" };
     }
-    if (t === "summary" || t === "watch out") return { text, cls: "a" };
+    if (LABELS.has(t)) return { text, cls: "a" };
     if (t.startsWith("[wd:error] "))
       return { head: { text: "error:", cls: "a" }, text: ` ${t.slice(11)}`, cls: "" };
     return { text, cls: "" };
@@ -660,7 +688,7 @@ export function TerminalChat({
 
   const run = async (command: string, raw = false) => {
     const kind = parseCommand(command)?.kind;
-    const lookup = kind === "branches" || kind === "log";
+    const lookup = kind === "branches" || kind === "log" || kind === "tags";
     // a new diff command starts a new context; lookups leave it alone
     if (!raw && !lookup) chatStore.clearContext(storeKey);
     let context = "";
@@ -673,6 +701,10 @@ export function TerminalChat({
         onMeta: (meta) => {
           if (meta.branches) {
             streamModeRef.current = "branches";
+            return;
+          }
+          if (meta.tags) {
+            streamModeRef.current = "tags";
             return;
           }
           if (meta.log) {
@@ -1057,6 +1089,7 @@ export function TerminalChat({
         resolved = `${b.parent}..${a.sha}`;
         muted([`rows ${cmd.from}..${cmd.to}: ${b.sha.slice(0, 7)} to ${a.sha.slice(0, 7)}`]);
       }
+      if (cmd.mode === "changelog") resolved = `changelog ${resolved}`;
       lastCmdRef.current = resolved;
       void run(resolved);
       return;
@@ -1132,8 +1165,8 @@ export function TerminalChat({
     branchFetchRef.current = true;
     fetch(`/api/branches?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`)
       .then((r) => r.json())
-      .then((j: { branches?: string[] }) =>
-        chatStore.setBranches(storeKey, j.branches ?? [])
+      .then((j: { branches?: string[]; tags?: string[] }) =>
+        chatStore.setBranches(storeKey, [...(j.branches ?? []), ...(j.tags ?? [])])
       )
       .catch(() => chatStore.setBranches(storeKey, []));
   }, [slot, branchList, owner, repo, storeKey]);

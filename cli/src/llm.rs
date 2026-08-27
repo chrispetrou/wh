@@ -80,19 +80,23 @@ fn valid_url(url: &str) -> bool {
 }
 
 /// (system, user) parts of shared/prompts/explain.md, split on the
-/// [system]/[user] marker lines. {{payload}} substitution happens here.
-pub fn prompt(payload: &str) -> (String, String) {
+/// [section] marker lines. {{payload}} substitution happens here. In
+/// changelog mode the [changelog] section is the system prompt.
+pub fn prompt(payload: &str, changelog: bool) -> (String, String) {
     let template = include_str!("../../shared/prompts/explain.md");
     let mut system = String::new();
     let mut user = String::new();
     let mut target: Option<&mut String> = None;
+    let system_marker = if changelog { "[changelog]" } else { "[system]" };
     for line in template.lines() {
         // any [section] line switches sections; unknown ones are skipped
         if line.starts_with('[') && line.ends_with(']') {
-            target = match line {
-                "[system]" => Some(&mut system),
-                "[user]" => Some(&mut user),
-                _ => None,
+            target = if line == system_marker {
+                Some(&mut system)
+            } else if line == "[user]" {
+                Some(&mut user)
+            } else {
+                None
             };
         } else if let Some(t) = target.as_deref_mut() {
             t.push_str(line);
@@ -464,10 +468,20 @@ mod tests {
 
     #[test]
     fn splits_prompt_template() {
-        let (system, user) = prompt("PAYLOAD");
+        let (system, user) = prompt("PAYLOAD", false);
         assert!(system.contains("summary"));
         assert!(system.contains("watch out"));
         assert!(!system.contains("{{payload}}"));
+        assert_eq!(user, "PAYLOAD");
+    }
+
+    #[test]
+    fn changelog_mode_swaps_the_system_prompt() {
+        let (system, user) = prompt("PAYLOAD", true);
+        for label in ["added", "changed", "fixed", "removed"] {
+            assert!(system.contains(&format!("\n{label}\n")), "{label}");
+        }
+        assert!(!system.contains("watch out"));
         assert_eq!(user, "PAYLOAD");
     }
 }

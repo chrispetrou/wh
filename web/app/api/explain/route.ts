@@ -9,6 +9,7 @@ import {
   logText,
   prInput,
   sinceInput,
+  tagsText,
   type ExplainInput,
 } from "@/lib/github";
 import { defaultCaps, defaultRules, preprocess, stats } from "@/lib/explain/preprocess";
@@ -181,6 +182,13 @@ export async function POST(req: NextRequest) {
       return githubFailure(e, destroy);
     }
   }
+  if (command.kind === "tags") {
+    try {
+      return plain({ tags: true }, await tagsText(session.token, owner, repo));
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
   // row numbers only mean something next to the client's last log
   if (command.kind === "row") return err(400, "run log first, then explain a row number");
 
@@ -222,6 +230,7 @@ export async function POST(req: NextRequest) {
     truncated: data.truncated,
     title: data.title ?? null,
     note: data.note ?? null,
+    mode: command.mode ?? null,
   };
 
   if (!data.diff.trim()) {
@@ -240,7 +249,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!key || !provider) return err(401, "paste an api key first");
-  const { system, user } = prompt(payload);
+  const { system, user } = prompt(payload, command.mode ?? "explain");
   const request = buildRequest(provider, key, system, user, model || undefined, effort || undefined);
   // context lets the client hold the conversation for follow-up turns
   const meta = JSON.stringify({ ...metaBase, context: user }) + "\n";

@@ -13,6 +13,10 @@ implementations must produce the same payloads and the same output shape.
   `watch out` section, as shown in the landing demo (`site/index.html`).
   `[followup]` is the system prompt for continuing the conversation about
   the same diff (web today; a cli explain repl may use it later).
+  `[changelog]` replaces `[system]` in changelog mode (`wd explain
+  --changelog`, `changelog <range>` on the web): the output contract is up
+  to four sections, `added`, `changed`, `fixed`, `removed`, empty ones
+  left out, or the single line `nothing user-visible`.
 - `preprocess.md`: the deterministic diff-to-payload transformation
   (section splitting, exclusion, sorting, size caps, payload layout).
 - `exclude.txt`: machine-readable exclusion rules (lockfiles, vendored

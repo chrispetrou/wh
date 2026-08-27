@@ -4,7 +4,10 @@
 
 import { isPeriod } from "./time";
 
-export type Command =
+// changelog mode frames the same diff as release notes
+export type Command = Shape & { mode?: "changelog" };
+
+type Shape =
   | { kind: "last"; n: number; ref?: string }
   | { kind: "pr"; num: number }
   | { kind: "range"; base: string; head: string }
@@ -17,7 +20,18 @@ export type Command =
   | { kind: "row"; from: number; to?: number }
   // a period ("yesterday", "this week", "2026-08-20") or a ref ("v1.2"),
   // optionally one author's commits only ("me" is the signed-in user)
-  | { kind: "since"; period: string; author?: string };
+  | { kind: "since"; period: string; author?: string }
+  | { kind: "tags" };
+
+// "changelog", "changelog v1.1..v1.2", "release notes for pr 42",
+// "changelog since v1.2"; bare means since the latest tag
+const CHANGELOG = /^(?:changelog|release\s+notes)(?:\s+(?:for|of))?(?:\s+(.*))?$/i;
+export const LATEST_TAG = "latest tag";
+
+// lookups have no diff to frame
+function isDiff(c: Command): boolean {
+  return c.kind !== "branches" && c.kind !== "log" && c.kind !== "tags";
+}
 
 // log rows shown by default and at most
 export const LOG_DEFAULT = 40;
@@ -90,6 +104,15 @@ export function parseCommand(raw: string): Command | null {
   input = input.replace(/^wd\s+/i, "").replace(/\s*\?+$/, "");
   if (/^explain$/i.test(input)) return { kind: "last", n: 1 }; // cli default
   if (/^(?:list\s+)?branches$/i.test(input)) return { kind: "branches" };
+  if (/^(?:list\s+)?tags$/i.test(input)) return { kind: "tags" };
+
+  const changelog = CHANGELOG.exec(input);
+  if (changelog) {
+    const rest = (changelog[1] ?? "").trim();
+    if (!rest) return { kind: "since", period: LATEST_TAG, mode: "changelog" };
+    const inner = parseCommand(rest);
+    return inner && isDiff(inner) ? { ...inner, mode: "changelog" } : null;
+  }
 
   const phrase = input.replace(VERB, "");
 
@@ -157,7 +180,8 @@ export const commandHint = [
   "  log [N] [on <branch>], then explain 3 or explain 2..5",
   "  explain <sha>",
   "  since yesterday | this week | v1.2 [by <login>], standup",
-  "  branches",
+  "  changelog [v1.1..v1.2 | since v1.2 | pr #N] (release notes)",
+  "  branches, tags",
   "  cli-style works too: wd explain HEAD~3..",
   "  /help for everything else",
 ].join("\n");

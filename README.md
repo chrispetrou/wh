@@ -86,6 +86,10 @@ means `<ref>..HEAD`) and streams a plain-English summary with a
 "watch out" section. Lockfiles, vendored paths, and binaries are
 excluded, and large diffs are truncated (see `shared/prompts/`).
 `--dry-run` prints the preprocessed payload instead of asking the model.
+`--changelog` asks for release notes instead of a review: `added`,
+`changed`, `fixed`, `removed` sections (empty ones left out), one line
+per user-visible change, so `wd explain --changelog v1.1..v1.2` drafts
+the notes for a tag.
 
 ```
 $ wd rm
@@ -141,7 +145,8 @@ a pull request      fetch the branch, then a range what changed in pr #42
 one commit          wd explain <sha>~1..<sha>     explain <sha>
 the graph           git log --graph               log, then explain 3
 time and people     git log --since, --author     since yesterday by me, standup
-branches            wd ls (worktrees, dirty)      branches (ahead/behind)
+release notes       wd explain --changelog v1..   changelog v1.1..v1.2
+branches            wd ls (worktrees, dirty)      branches (ahead/behind), tags
 follow-ups          (not yet)                     plain words after an explain
 raw payload         wd explain --dry-run          /show
 keys                env: ANTHROPIC_API_KEY, ...   pasted once, kept in browser
@@ -175,7 +180,8 @@ diff main..release
 log [N] [on <branch>]
 explain 3 (a row of the log), explain 2..5, explain <sha>
 since yesterday | this week | v1.2 [by <login>], standup
-branches
+changelog [v1.1..v1.2 | since v1.2 | pr #42]
+branches, tags
 ```
 
 Phrasing is flexible: `summarize`, `show me`, and `what changed in` work
@@ -207,6 +213,16 @@ v1.2` for a ref. Add `by <login>` for one person's commits, `by me` (or
 `standup` for your commits since the last working day. Days follow your
 browser's clock. An empty window says `nothing since yesterday` and
 costs no model call.
+
+`changelog` frames any of those as release notes instead of a review:
+`changelog v1.1..v1.2`, `changelog since v1.2`, `release notes for pr
+#42`, `changelog of the last 10 commits`, or bare `changelog` for
+everything since the newest tag. The answer comes as `added`,
+`changed`, `fixed`, `removed` sections (empty ones left out), one line
+per user-visible change, the same contract as `wd explain --changelog`
+in the cli. `tags` lists tags newest first with their sha and age, and
+tag names join branch names in the completion menu wherever a ref
+belongs (`since `, `changelog `, ranges).
 
 It uses the same explain spec as the CLI (`shared/prompts/`), on your own
 LLM keys. The first time a repo opens with no key stored, the terminal

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { commitInput, logText, sinceInput } from "./github";
+import { commitInput, latestTag, logText, sinceInput, tagsText } from "./github";
 
 // a tiny github: main = M(A, F) > A > C, feat = F > C, tag v1 on C
 const SHA = (c: string) => c.repeat(40);
@@ -209,6 +209,32 @@ describe("sinceInput", () => {
     });
     await sinceInput("t", "o", "r", { period: "v1.2", login: "me", now: NOW, tz: 0 });
     expect(calls.some((c) => c.includes("/compare/v1.2...main"))).toBe(true);
+  });
+});
+
+describe("tagsText", () => {
+  it("orders tags by commit date and pads the name column", async () => {
+    stub({});
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+      if (url.includes("/tags"))
+        return Response.json([
+          { name: "v1.10", commit: { sha: SHA("a") } },
+          { name: "v1.9", commit: { sha: SHA("c") } },
+          { name: "v2.0", commit: { sha: SHA("m") } },
+        ]);
+      if (url.includes(`/commits/${SHA("a")}`)) return Response.json(A);
+      if (url.includes(`/commits/${SHA("c")}`)) return Response.json(C);
+      if (url.includes(`/commits/${SHA("m")}`)) return Response.json(M);
+      return new Response("{}", { status: 404 });
+    });
+    expect((await tagsText("t", "o", "r")).split("\n")).toEqual([
+      `1\tv2.0   \t${"m".repeat(7)}\t2026-08-27T05:00:00Z`,
+      `2\tv1.10  \t${"a".repeat(7)}\t2026-08-27T04:00:00Z`,
+      `3\tv1.9   \t${"c".repeat(7)}\t2026-08-27T01:00:00Z`,
+      "3 tags",
+      "",
+    ]);
+    expect(await latestTag("t", "o", "r")).toBe("v2.0");
   });
 });
 
