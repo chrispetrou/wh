@@ -41,8 +41,9 @@ keys via env: ANTHROPIC_API_KEY, OPENAI_API_KEY, or GROQ_API_KEY (free tier
 at console.groq.com). none set: local ollama. WD_PROVIDER forces one,
 WD_MODEL overrides the model.")]
     Explain {
-        /// range like main..dev or HEAD~3.. (default HEAD~1..); a bare
-        /// ref means <ref>..HEAD
+        /// range like main..dev or HEAD~3.. (default HEAD~1..; with
+        /// --describe, the default branch...HEAD); a bare ref means
+        /// <ref>..HEAD
         range: Option<String>,
         /// print the preprocessed payload instead of querying the model
         #[arg(long)]
@@ -50,6 +51,10 @@ WD_MODEL overrides the model.")]
         /// release notes (added, changed, fixed, removed) instead of a review
         #[arg(long)]
         changelog: bool,
+        /// a pull request title and description to paste, instead of a
+        /// review
+        #[arg(long, conflicts_with = "changelog")]
+        describe: bool,
     },
     /// remove worktrees whose branches are merged
     Rm {

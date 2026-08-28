@@ -454,11 +454,20 @@ describe("prs", () => {
           state: "open",
           merged: false,
           mergeable: false,
+          body: "  the body\n",
+          head: { ref: "feat/x" },
+          base: { ref: "main" },
         });
       }
     );
     const input = await prInput("t", "o", "r", 5);
     expect(input.note).toBe("draft · conflicts with base");
+    // what describe mode relays after the payload
+    expect(input.describe).toEqual({
+      base: "main",
+      head: "feat/x",
+      pr: { num: 5, title: "t", body: "  the body\n" },
+    });
     expect(prFlags({ draft: false, state: "open", merged: false, mergeable: null })).toEqual([]);
     expect(prFlags({ draft: false, state: "open", merged: false, mergeable: true })).toEqual([
       "mergeable",

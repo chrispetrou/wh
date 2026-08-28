@@ -218,6 +218,36 @@ describe("parseCommand", () => {
     expect(parseCommand("since main..dev")).toBeNull();
   });
 
+  it("parses describe mode", () => {
+    expect(parseCommand("describe pr 42")).toEqual({ kind: "pr", num: 42, mode: "describe" });
+    expect(parseCommand("pr description for #42")).toEqual({ kind: "pr", num: 42, mode: "describe" });
+    expect(parseCommand("wd describe pr 42")).toEqual({ kind: "pr", num: 42, mode: "describe" });
+    expect(parseCommand("describe feat/auth")).toEqual({
+      kind: "range",
+      base: "",
+      head: "feat/auth",
+      mode: "describe",
+    });
+    expect(parseCommand("draft a pr for main..dev")).toEqual({
+      kind: "range",
+      base: "main",
+      head: "dev",
+      mode: "describe",
+    });
+    expect(parseCommand("describe the last 3 commits")).toEqual({ kind: "last", n: 3, mode: "describe" });
+    expect(parseCommand("describe pr 42 in docs/")).toEqual({
+      kind: "pr",
+      num: 42,
+      path: "docs/",
+      mode: "describe",
+    });
+    expect(parseCommand("describe 3")).toEqual({ kind: "row", from: 3, mode: "describe" });
+    // needs a target, and lookups have no diff to draft from
+    expect(parseCommand("describe")).toBeNull();
+    expect(parseCommand("describe branches")).toBeNull();
+    expect(parseCommand("describe log")).toBeNull();
+  });
+
   it("parses changelog mode and tags", () => {
     expect(parseCommand("changelog")).toEqual({
       kind: "since",

@@ -15,6 +15,7 @@ import {
   whyInput,
   type ExplainInput,
 } from "@/lib/github";
+import { describeTurn } from "@/lib/explain/context";
 import { filterDiff } from "@/lib/explain/filter";
 import { defaultCaps, defaultRules, preprocess, stats } from "@/lib/explain/preprocess";
 import { prompt, type PromptMode } from "@/lib/explain/prompt";
@@ -275,7 +276,8 @@ export async function POST(req: NextRequest) {
   if (command.kind === "row") return err(400, "run log first, then explain a row number");
 
   let data: ExplainInput;
-  let question = ""; // why: the line itself, after the payload
+  // after the payload: why sends the line itself, describe its context block
+  let question = "";
   let mode: PromptMode = command.mode ?? "explain";
   try {
     if (command.kind === "why") {
@@ -327,6 +329,8 @@ export async function POST(req: NextRequest) {
         .join(" · "),
     };
   }
+
+  if (mode === "describe") question = describeTurn(data.describe);
 
   const { files, added, deleted } = stats(data.numstat);
   const metaBase = {

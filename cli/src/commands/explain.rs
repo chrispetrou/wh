@@ -3,16 +3,32 @@ use std::env;
 use std::io::Write;
 use std::time::Instant;
 
-pub fn run(range: Option<&str>, dry_run: bool, changelog: bool) -> Result<(), WdError> {
+pub fn run(range: Option<&str>, dry_run: bool, mode: llm::Mode) -> Result<(), WdError> {
     let cwd = env::current_dir()?;
-    let range = normalize(range);
+    let describe = mode == llm::Mode::Describe;
+    // a pr draft with no explicit range is judged against the default
+    // branch; resolved only then, so every other call stays local to cwd
+    let base_default = if describe && range.is_none_or(|r| !r.contains("..")) {
+        git::default_ref(&cwd).map_err(|_| {
+            WdError::Msg("cannot determine default branch, pass a range like main..".into())
+        })?
+    } else {
+        String::new()
+    };
+    let ranges = normalize(range, &base_default, describe);
 
-    let diff = git::run(&cwd, &["diff", "-M", "--no-color", "--no-ext-diff", &range])?;
+    let diff = git::run(
+        &cwd,
+        &["diff", "-M", "--no-color", "--no-ext-diff", &ranges.diff],
+    )?;
     if diff.trim().is_empty() {
-        return Err(WdError::Msg(format!("nothing to explain in {range}")));
+        return Err(WdError::Msg(format!(
+            "nothing to explain in {}",
+            ranges.diff
+        )));
     }
-    let numstat = git::run(&cwd, &["diff", "-M", "--numstat", &range])?;
-    let commits = git::run(&cwd, &["log", "--format=%h %s", &range])?;
+    let numstat = git::run(&cwd, &["diff", "-M", "--numstat", &ranges.diff])?;
+    let commits = git::run(&cwd, &["log", "--format=%h %s", &ranges.log])?;
 
     let rules = preprocess::default_rules();
     let payload = preprocess::preprocess(&diff, &commits, &numstat, &Default::default(), &rules);
@@ -34,7 +50,16 @@ pub fn run(range: Option<&str>, dry_run: bool, changelog: bool) -> Result<(), Wd
     let getenv = |k: &str| env::var(k).ok();
     let provider = llm::choose(&getenv)?;
     let model = llm::model_for(&provider, &getenv);
-    let (system, user) = llm::prompt(&payload, changelog);
+    let (system, mut user) = llm::prompt(&payload, mode);
+    if describe {
+        // the branch and its base, after the payload (shared/prompts/README.md)
+        let head = ranges.head.clone().or_else(|| git::current_branch(&cwd));
+        user.push_str("\n\ncontext:\n");
+        match head {
+            Some(h) => user.push_str(&format!("branch {h} into {}", ranges.base)),
+            None => user.push_str(&format!("into {}", ranges.base)),
+        }
+    }
 
     let mut printer = LinePrinter::new(output::color());
     let started = Instant::now();
@@ -65,23 +90,61 @@ pub fn run(range: Option<&str>, dry_run: bool, changelog: bool) -> Result<(), Wd
     Ok(())
 }
 
-/// Default HEAD~1..; a bare ref becomes <ref>..HEAD.
-fn normalize(range: Option<&str>) -> String {
-    match range {
-        None => "HEAD~1..HEAD".to_string(),
-        Some(r) if r.contains("..") => r.to_string(),
-        Some(r) => format!("{r}..HEAD"),
+/// The range as git diff and git log want it, plus its two sides for the
+/// describe context. `A...B` stays three-dot for the diff (merge base) but
+/// the log gets `A..B`: three-dot log is the symmetric difference.
+struct Ranges {
+    diff: String,
+    log: String,
+    base: String,
+    head: Option<String>,
+}
+
+/// Default HEAD~1..; a bare ref becomes <ref>..HEAD. In describe mode the
+/// default is <base_default>...HEAD and a bare ref becomes <ref>...HEAD.
+fn normalize(range: Option<&str>, base_default: &str, describe: bool) -> Ranges {
+    let (base, head) = match range {
+        None if describe => (base_default.to_string(), "HEAD".to_string()),
+        None => ("HEAD~1".to_string(), "HEAD".to_string()),
+        Some(r) => match r.find("..") {
+            Some(i) => {
+                let rest = &r[i..];
+                let dots = if rest.starts_with("...") { 3 } else { 2 };
+                (r[..i].to_string(), r[i + dots..].to_string())
+            }
+            None => (r.to_string(), "HEAD".to_string()),
+        },
+    };
+    // a typed range is passed on as written (git reads an empty side as
+    // HEAD); only the log loses the third dot
+    let (diff, log) = match range {
+        Some(r) if r.contains("..") => (r.to_string(), r.replacen("...", "..", 1)),
+        _ => (
+            format!("{base}{}{head}", if describe { "..." } else { ".." }),
+            format!("{base}..{head}"),
+        ),
+    };
+    let head = Some(head).filter(|h| !h.is_empty() && h != "HEAD");
+    Ranges {
+        diff,
+        log,
+        base,
+        head,
     }
 }
 
-/// The section labels of both output contracts (review and changelog).
-const LABELS: [&str; 6] = [
+/// The section labels of the three output contracts (review, changelog,
+/// describe).
+const LABELS: [&str; 9] = [
     "summary",
     "watch out",
     "added",
     "changed",
     "fixed",
     "removed",
+    "title",
+    "description",
+    "testing",
 ];
 
 /// Streams chunks to stdout line by line, painting the contract's section
@@ -131,11 +194,42 @@ impl LinePrinter {
 mod tests {
     use super::*;
 
+    fn n(range: Option<&str>, describe: bool) -> (String, String, String, Option<String>) {
+        let r = normalize(range, "main", describe);
+        (r.diff, r.log, r.base, r.head)
+    }
+
     #[test]
     fn normalizes_ranges() {
-        assert_eq!(normalize(None), "HEAD~1..HEAD");
-        assert_eq!(normalize(Some("main..dev")), "main..dev");
-        assert_eq!(normalize(Some("HEAD~3..")), "HEAD~3..");
-        assert_eq!(normalize(Some("main")), "main..HEAD");
+        assert_eq!(n(None, false).0, "HEAD~1..HEAD");
+        assert_eq!(n(None, false).1, "HEAD~1..HEAD");
+        assert_eq!(n(Some("main..dev"), false).0, "main..dev");
+        assert_eq!(n(Some("main..dev"), false).3.as_deref(), Some("dev"));
+        assert_eq!(n(Some("HEAD~3.."), false).0, "HEAD~3..");
+        assert_eq!(n(Some("HEAD~3.."), false).3, None);
+        assert_eq!(n(Some("main"), false).0, "main..HEAD");
+    }
+
+    #[test]
+    fn three_dot_diff_keeps_the_merge_base_and_the_log_drops_it() {
+        let (diff, log, base, head) = n(Some("main...dev"), false);
+        assert_eq!(diff, "main...dev");
+        assert_eq!(log, "main..dev");
+        assert_eq!(base, "main");
+        assert_eq!(head.as_deref(), Some("dev"));
+    }
+
+    #[test]
+    fn describe_defaults_to_the_default_branch() {
+        let (diff, log, base, head) = n(None, true);
+        assert_eq!(diff, "main...HEAD");
+        assert_eq!(log, "main..HEAD");
+        assert_eq!(base, "main");
+        assert_eq!(head, None);
+        let (diff, log, _, _) = n(Some("dev"), true);
+        assert_eq!(diff, "dev...HEAD");
+        assert_eq!(log, "dev..HEAD");
+        // an explicit two-dot range is taken as written
+        assert_eq!(n(Some("HEAD~3.."), true).0, "HEAD~3..");
     }
 }

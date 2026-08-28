@@ -143,15 +143,35 @@ fn valid_url(url: &str) -> bool {
     (url.starts_with("http://") || url.starts_with("https://")) && !url.contains(['"', '\n', '\r'])
 }
 
+/// Which section of the template frames the payload: the review shape
+/// (summary, watch out), release notes (added, changed, fixed, removed),
+/// or a pull request draft (title, description, testing).
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Mode {
+    Explain,
+    Changelog,
+    Describe,
+}
+
+impl Mode {
+    fn marker(self) -> &'static str {
+        match self {
+            Mode::Explain => "[system]",
+            Mode::Changelog => "[changelog]",
+            Mode::Describe => "[describe]",
+        }
+    }
+}
+
 /// (system, user) parts of shared/prompts/explain.md, split on the
-/// [section] marker lines. {{payload}} substitution happens here. In
-/// changelog mode the [changelog] section is the system prompt.
-pub fn prompt(payload: &str, changelog: bool) -> (String, String) {
+/// [section] marker lines. {{payload}} substitution happens here. The
+/// mode picks which section is the system prompt.
+pub fn prompt(payload: &str, mode: Mode) -> (String, String) {
     let template = include_str!("../../shared/prompts/explain.md");
     let mut system = String::new();
     let mut user = String::new();
     let mut target: Option<&mut String> = None;
-    let system_marker = if changelog { "[changelog]" } else { "[system]" };
+    let system_marker = mode.marker();
     for line in template.lines() {
         // any [section] line switches sections; unknown ones are skipped
         if line.starts_with('[') && line.ends_with(']') {
@@ -920,7 +940,7 @@ mod tests {
 
     #[test]
     fn splits_prompt_template() {
-        let (system, user) = prompt("PAYLOAD", false);
+        let (system, user) = prompt("PAYLOAD", Mode::Explain);
         assert!(system.contains("summary"));
         assert!(system.contains("watch out"));
         assert!(!system.contains("{{payload}}"));
@@ -1258,11 +1278,23 @@ mod tests {
 
     #[test]
     fn changelog_mode_swaps_the_system_prompt() {
-        let (system, user) = prompt("PAYLOAD", true);
+        let (system, user) = prompt("PAYLOAD", Mode::Changelog);
         for label in ["added", "changed", "fixed", "removed"] {
             assert!(system.contains(&format!("\n{label}\n")), "{label}");
         }
         assert!(!system.contains("watch out"));
+        assert_eq!(user, "PAYLOAD");
+    }
+
+    #[test]
+    fn describe_mode_swaps_the_system_prompt() {
+        let (system, user) = prompt("PAYLOAD", Mode::Describe);
+        for label in ["title", "description", "testing"] {
+            assert!(system.contains(&format!("\n{label}\n")), "{label}");
+        }
+        assert!(system.contains("pull request"));
+        assert!(!system.contains("watch out"));
+        assert!(!system.contains("release notes"));
         assert_eq!(user, "PAYLOAD");
     }
 }

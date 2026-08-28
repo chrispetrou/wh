@@ -50,7 +50,17 @@ fn main() {
             range,
             dry_run,
             changelog,
-        } => commands::explain::run(range.as_deref(), *dry_run, *changelog),
+            describe,
+        } => {
+            let mode = if *describe {
+                llm::Mode::Describe
+            } else if *changelog {
+                llm::Mode::Changelog
+            } else {
+                llm::Mode::Explain
+            };
+            commands::explain::run(range.as_deref(), *dry_run, mode)
+        }
         cli::Cmd::Rm {
             name,
             dry_run,

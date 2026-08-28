@@ -90,7 +90,16 @@ excluded, and large diffs are truncated (see `shared/prompts/`).
 `--changelog` asks for release notes instead of a review: `added`,
 `changed`, `fixed`, `removed` sections (empty ones left out), one line
 per user-visible change, so `wd explain --changelog v1.1..v1.2` drafts
-the notes for a tag.
+the notes for a tag. `--describe` drafts a pull request to paste: a
+`title` line in the repo's own commit-subject style, a `description`,
+and `testing` when the diff shows how to verify. With no range it
+compares the current branch against the default branch from their
+merge base (`main...HEAD`), so a base that moved on never leaks into
+the draft, and it tells the model the branch names after the diff
+(`branch feat/auth into main`). A bare ref means `<ref>...HEAD` there,
+and in every mode a three-dot range now diffs from the merge base and
+logs only the head side. `wd explain --describe > body.md` holds only
+the draft; nothing is written to GitHub.
 
 The closing line is the elapsed time, the model, and what the answer
 cost in tokens when the provider says (all four do). Those two muted
@@ -165,6 +174,7 @@ one commit          wd explain <sha>~1..<sha>     explain <sha>
 the graph           git log --graph               log, then explain 3
 time and people     git log --since, --author     since yesterday by me, standup
 release notes       wd explain --changelog v1..   changelog v1.1..v1.2
+a pr description    wd explain --describe         describe pr #42, describe <branch>
 a file's story      git log -p -- <path>          history <path>, why <path>:<line>
 branches            wd ls (worktrees, dirty)      branches (ahead/behind), tags
 follow-ups          (not yet)                     plain words after an explain
@@ -201,6 +211,7 @@ log [N] [on <branch>] [since <period>] [by <login>]
 explain 3 (a row of the log), explain 2..5, explain <sha>
 since yesterday | this week | v1.2 [by <login>], standup
 changelog [v1.1..v1.2 | since v1.2 | pr #42]
+describe pr #42 | <branch> | main..dev
 history src/git.rs, explain the last 5 commits in src/, why src/git.rs:42
 branches, tags, prs [open | closed | mine]
 ```
@@ -231,8 +242,8 @@ is drawn flat, without lanes, since its rows are no longer a contiguous
 walk (so `explain 2..5` asks for one row at a time). After a `log`,
 the arrow keys walk its rows (`›` marks the one
 selected), enter opens a commit in place (full sha, parents, author,
-message, files with their +/−, and `explain`, `changelog`, `github ↗`
-actions; hovering a file offers `explain` (that commit, cut to the
+message, files with their +/−, and `explain`, `changelog`, `describe`,
+`github ↗` actions; hovering a file offers `explain` (that commit, cut to the
 file), `history` (the file's story), and `copy` (its path); a parent
 jumps to its row), esc steps back out, and clicking a row does the
 same. A command launched from an open panel leaves the panel open, so
@@ -268,11 +279,22 @@ in the cli. `tags` lists tags newest first with their sha and age, and
 tag names join branch names in the completion menu wherever a ref
 belongs (`since `, `changelog `, ranges).
 
+`describe` frames any of those as a pull request draft instead:
+`describe pr #42` rewrites an existing pr (the model sees its current
+title and description and keeps their intent where the diff still
+supports it), `describe feat/auth` (or `draft a pr for feat/auth`)
+drafts one for a branch against the default branch, and ranges,
+`the last N commits`, a log row, or a sha work too. The answer is a
+`title` line in the repo's own commit-subject style, a `description`,
+and `testing` when the diff shows how to verify, plain text ready for
+`/copy`; the same contract as `wd explain --describe`. Nothing is
+written to GitHub: the draft is yours to paste.
+
 `prs` lists open pull requests, most recently updated first (`closed
 prs`, `my prs`): number, title, `head → base`, author, age, and `draft`,
 `merged`, or `closed` where it applies. It is the same kind of block as
 the log: arrows and enter open a pr in place (state, branches,
-description, files, and `explain` / `changelog` actions). Typing `pr `
+description, files, and `explain` / `changelog` / `describe` actions). Typing `pr `
 afterwards offers those numbers in the completion menu, and `what
 changed in pr #42` shows the pr's state under its title: `draft`,
 `mergeable`, or `conflicts with base`.

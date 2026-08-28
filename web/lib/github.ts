@@ -125,6 +125,15 @@ export interface ExplainInput {
   truncated: boolean;
   title?: string;
   note?: string;
+  // what describe mode tells the model after the payload: the branch and
+  // its base, and an existing pr's title and body
+  describe?: DescribeContext;
+}
+
+export interface DescribeContext {
+  base?: string;
+  head?: string;
+  pr?: { num: number; title: string; body: string };
 }
 
 interface CompareJson {
@@ -180,6 +189,7 @@ export async function compareRange(
     numstat: numstatLines(files),
     commitCount: json.total_commits,
     truncated: json.total_commits > 250 || files.length >= 300,
+    describe: { base, head },
   };
 }
 
@@ -209,6 +219,8 @@ export async function lastNCommits(
   const input = await compareRange(token, owner, repo, base, head);
   const shown = Math.min(n, commits.length - 1);
   if (shown < n) input.note = `showing last ${shown} of ${n}`;
+  // a sha pair says nothing to a pr draft; the branch, when given, does
+  input.describe = ref ? { head: ref } : undefined;
   return input;
 }
 
@@ -222,6 +234,9 @@ interface PrJson {
   state: "open" | "closed";
   merged: boolean;
   mergeable: boolean | null; // null while github is still computing it
+  body: string | null;
+  head: { ref: string };
+  base: { ref: string };
 }
 
 // the state words shown under a pr's title
@@ -274,6 +289,11 @@ export async function prInput(
     truncated: pr.commits > 100 || pr.changed_files >= 300,
     title: pr.title,
     note: flags.length ? flags.join(" · ") : undefined,
+    describe: {
+      base: pr.base?.ref,
+      head: pr.head?.ref,
+      pr: { num, title: pr.title, body: pr.body ?? "" },
+    },
   };
 }
 

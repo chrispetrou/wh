@@ -4,9 +4,9 @@
 
 import { isPeriod } from "./time";
 
-// changelog mode frames the same diff as release notes; a path cuts the
-// diff down to one file or directory
-export type Command = Shape & { mode?: "changelog"; path?: string };
+// changelog mode frames the same diff as release notes, describe mode as
+// a pull request draft; a path cuts the diff down to one file or directory
+export type Command = Shape & { mode?: "changelog" | "describe"; path?: string };
 
 type Shape =
   | { kind: "last"; n: number; ref?: string }
@@ -51,6 +51,11 @@ const PRS =
 // "changelog since v1.2"; bare means since the latest tag
 const CHANGELOG = /^(?:changelog|release\s+notes)(?:\s+(?:for|of))?(?:\s+(.*))?$/i;
 export const LATEST_TAG = "latest tag";
+
+// "describe pr 42", "describe feat/auth", "draft pr for main..dev",
+// "pr description for #42"; a bare ref is the branch against the default.
+// no bare form: the web has no current branch
+const DESCRIBE = /^(?:describe|draft\s+(?:a\s+)?pr|pr\s+description)(?:\s+(?:for|of))?(?:\s+(.*))?$/i;
 
 // lookups have no diff to frame
 function isDiff(c: Command): boolean {
@@ -177,6 +182,18 @@ export function parseCommand(raw: string): Command | null {
     return inner && isDiff(inner) ? { ...inner, mode: "changelog" } : null;
   }
 
+  const describe = DESCRIBE.exec(input);
+  if (describe) {
+    const rest = (describe[1] ?? "").trim();
+    if (!rest) return null;
+    const inner = parseCommand(rest);
+    if (inner) return isDiff(inner) ? { ...inner, mode: "describe" } : null;
+    if (/^\S+$/.test(rest) && !rest.includes("..")) {
+      return { kind: "range", base: "", head: rest, mode: "describe" };
+    }
+    return null;
+  }
+
   const why = WHY_COLON.exec(input);
   if (why) {
     const out: Command = { kind: "why", path: why[1], line: parseInt(why[2], 10) };
@@ -275,6 +292,7 @@ export const commandHint = [
   "  explain <sha>",
   "  since yesterday | this week | v1.2 [by <login>], standup",
   "  changelog [v1.1..v1.2 | since v1.2 | pr #N] (release notes)",
+  "  describe pr #N | <branch> | main..dev (a pr title and description to paste)",
   "  history <path>, any command + in <path>, why <path>:<line>",
   "  branches, tags, prs [open | closed | mine]",
   "  cli-style works too: wd explain HEAD~3..",

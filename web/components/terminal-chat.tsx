@@ -91,8 +91,19 @@ function tagLine(text: string): Line {
   };
 }
 
-// the section labels of both output contracts, painted amber
-const LABELS = new Set(["summary", "watch out", "added", "changed", "fixed", "removed", "why"]);
+// the section labels of every output contract, painted amber
+const LABELS = new Set([
+  "summary",
+  "watch out",
+  "added",
+  "changed",
+  "fixed",
+  "removed",
+  "title",
+  "description",
+  "testing",
+  "why",
+]);
 
 // urls in output become quiet accent links
 const URL_RE = /\bhttps?:\/\/[^\s]+|\bgithub\.com\/[^\s]+/g;
@@ -159,6 +170,7 @@ const HELP: HelpRow[] = [
   ["explain <sha>", "one commit"],
   ["since yesterday [by me]", "a period, a ref, one author; standup"],
   ["changelog [range]", "release notes: added, changed, fixed, removed"],
+  ["describe pr #N | <branch> | range", "a pr title and description, ready to paste (/copy)"],
   ["history <path>", "commits touching a file or dir, numbered"],
   ["... in <path>", "any explain, cut down to a file or dir"],
   ["why <path>:<line>", "why a line exists (blame, in plain words)"],
@@ -309,7 +321,7 @@ function branchSlot(input: string): BranchSlot | null {
   // "since <ref>" anywhere at the end, and the first side of a changelog range
   m = /^((?:wd\s+)?(?:.*\s)?since\s+)([^\s.]*)$/i.exec(input);
   if (m) return { prefix: m[1], partial: m[2] };
-  m = /^((?:wd\s+)?(?:changelog|release\s+notes)\s+)([^\s.]*)$/i.exec(input);
+  m = /^((?:wd\s+)?(?:changelog|release\s+notes|describe)\s+)([^\s.]*)$/i.exec(input);
   if (m) return { prefix: m[1], partial: m[2] };
   m = /^((?:(?:wd\s+)?(?:diff|compare|explain)\s+)?\S*?\.{2,3})(\S*)$/i.exec(input);
   if (m && m[1].includes("..")) return { prefix: m[1], partial: m[2] };
@@ -327,7 +339,7 @@ function rowSlot(input: string): BranchSlot | null {
 // "pr " with a prs list on screen offers its numbers
 function prSlot(input: string): BranchSlot | null {
   const m =
-    /^((?:wd\s+)?(?:(?:explain|changelog|release\s+notes)\s+(?:for\s+)?|what\s+changed\s+in\s+)?(?:pr|pull\s+request)\s*#?)(\d{0,6})$/i.exec(
+    /^((?:wd\s+)?(?:(?:explain|changelog|release\s+notes|describe|draft\s+pr|pr\s+description)\s+(?:for\s+)?|what\s+changed\s+in\s+)?(?:pr|pull\s+request)\s*#?)(\d{0,6})$/i.exec(
       input
     );
   return m ? { prefix: m[1], partial: m[2] } : null;
@@ -1288,7 +1300,7 @@ export function TerminalChat({
         muted([`rows ${cmd.from}..${cmd.to}: ${b.sha.slice(0, 7)} to ${a.sha.slice(0, 7)}`]);
       }
       if (cmd.path) resolved = `${resolved} in ${cmd.path}`;
-      if (cmd.mode === "changelog") resolved = `changelog ${resolved}`;
+      if (cmd.mode) resolved = `${cmd.mode} ${resolved}`;
       lastCmdRef.current = resolved;
       void run(resolved);
       return;

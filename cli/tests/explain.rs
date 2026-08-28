@@ -230,6 +230,102 @@ fn changelog_flag_sends_the_release_notes_prompt() {
     );
 }
 
+/// main with one commit, feat branched off it with a.txt, then a commit
+/// on main (b.txt) that a merge-base diff must not see; ends on feat
+fn forked() -> TestRepo {
+    let t = TestRepo::new();
+    t.commit("root");
+    t.git(&["checkout", "-b", "feat"]);
+    t.write("a.txt", "one\n");
+    t.commit("feature work");
+    t.git(&["checkout", "main"]);
+    t.write("b.txt", "base moved on\n");
+    t.commit("main moved on");
+    t.git(&["checkout", "feat"]);
+    t
+}
+
+#[test]
+fn describe_defaults_to_the_default_branch_with_merge_base() {
+    let t = forked();
+    t.wd()
+        .args(["explain", "--describe", "--dry-run"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("commits: 1"))
+        .stdout(predicate::str::contains("feature work"))
+        .stdout(predicate::str::contains("diff --git a/a.txt"))
+        .stdout(predicate::str::contains("b.txt").not())
+        .stdout(predicate::str::contains("main moved on").not());
+}
+
+#[test]
+fn three_dot_range_logs_only_the_head_side() {
+    let t = forked();
+    t.wd()
+        .args(["explain", "--dry-run", "main...feat"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("commits: 1"))
+        .stdout(predicate::str::contains("main moved on").not())
+        .stdout(predicate::str::contains("b.txt").not());
+}
+
+#[test]
+fn describe_flag_sends_the_pr_prompt_and_branch_context() {
+    let t = forked();
+    let (url, server) = fake_server(ok("application/x-ndjson"), &[
+        "{\"message\":{\"role\":\"assistant\",\"content\":\"title\\nadd a.txt\\n\"},\"done\":false}\n",
+        "{\"message\":{\"role\":\"assistant\",\"content\":\"\\ndescription\\nthe feature.\\n\"},\"done\":false}\n",
+        "{\"done\":true}\n",
+    ]);
+    t.wd()
+        .env("WD_PROVIDER", "ollama")
+        .env("WD_OLLAMA_URL", &url)
+        .env("WD_MODEL", "test-model")
+        .args(["explain", "--describe"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("title\nadd a.txt"))
+        .stdout(predicate::str::contains("description\nthe feature."))
+        .stdout(predicate::str::contains("reading").not())
+        .stderr(predicate::str::contains("reading 1 commit"));
+    let request = server.join().unwrap();
+    assert!(
+        request.contains("pull request"),
+        "describe system prompt should be sent"
+    );
+    assert!(
+        request.contains("context:\\nbranch feat into main"),
+        "branch context should follow the payload: {request}"
+    );
+    assert!(
+        !request.contains("watch out"),
+        "review prompt must not be sent"
+    );
+}
+
+#[test]
+fn describe_and_changelog_conflict() {
+    let t = two_commits();
+    t.wd()
+        .args(["explain", "--describe", "--changelog"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("cannot be used with"));
+}
+
+#[test]
+fn describe_without_a_default_branch_says_so() {
+    let t = two_commits();
+    t.git(&["branch", "-m", "main", "trunk"]);
+    t.wd()
+        .args(["explain", "--describe", "--dry-run"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot determine default branch"));
+}
+
 #[test]
 fn provider_error_body_is_surfaced() {
     let t = two_commits();
