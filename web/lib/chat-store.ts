@@ -65,7 +65,7 @@ export interface LogRow {
 }
 
 // a row of the last prs list, for the completion menu after `pr `
-export interface PrRow {
+export interface PrPick {
   num: number;
   title: string;
 }
@@ -88,7 +88,7 @@ interface Entry {
   // rows of the last log, numbered from 1
   log?: LogRow[];
   // rows of the last prs list
-  prs?: PrRow[];
+  prs?: PrPick[];
   live?: Live;
   // open rows per block line: shas, or pr numbers as strings
   expanded?: Map<number, string[]>;
@@ -213,10 +213,10 @@ export const chatStore = {
     entry(key).log = rows;
     emit(key);
   },
-  prRows(key: string): PrRow[] | undefined {
+  prRows(key: string): PrPick[] | undefined {
     return entry(key).prs;
   },
-  setPrRows(key: string, rows: PrRow[] | undefined) {
+  setPrRows(key: string, rows: PrPick[] | undefined) {
     entry(key).prs = rows;
     emit(key);
   },

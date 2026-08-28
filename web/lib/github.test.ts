@@ -49,7 +49,7 @@ function stub(routes: Record<string, unknown>) {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("logText", () => {
+describe("logBlock", () => {
   it("unions branch walks, draws the graph, decorates heads and tags", async () => {
     const calls = stub({
       "/repos/o/r": { default_branch: "main" },
@@ -351,7 +351,7 @@ describe("prs", () => {
   });
 });
 
-describe("historyText", () => {
+describe("historyBlock", () => {
   it("lists the commits touching a path as a rail-less log block", async () => {
     const calls = stub({});
     (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {

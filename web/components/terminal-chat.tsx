@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { blockText, type Block } from "@/lib/block";
-import { chatStore, type LogRow, type PrRow } from "@/lib/chat-store";
+import { chatStore, type LogRow, type PrPick } from "@/lib/chat-store";
 import { commandHint, parseCommand } from "@/lib/commands";
 import { signInAgain, takeResume } from "@/lib/signin";
 import { LogBlock } from "./log-block";
@@ -135,7 +135,7 @@ interface ExplainMeta {
   branches?: boolean;
   tags?: boolean;
   block?: Block; // log, history, prs: rendered as a grid, no text follows
-  rows?: LogRow[] | PrRow[]; // the block's rows for `explain 3` and `pr ` completion
+  rows?: LogRow[] | PrPick[]; // the block's rows for `explain 3` and `pr ` completion
   empty?: string; // "nothing since yesterday": no diff, no model call
 }
 
@@ -758,7 +758,7 @@ export function TerminalChat({
             // the next command
             enter([{ text: "", cls: "", block: meta.block }]);
             if (meta.block.kind === "prs") {
-              chatStore.setPrRows(storeKey, (meta.rows as PrRow[] | undefined) ?? []);
+              chatStore.setPrRows(storeKey, (meta.rows as PrPick[] | undefined) ?? []);
             } else {
               chatStore.setLogRows(storeKey, (meta.rows as LogRow[] | undefined) ?? []);
             }
