@@ -213,7 +213,8 @@ jumps to its row), esc steps back out, and clicking a row does the
 same. A command launched from an open panel leaves the panel open, so
 the answer below it still shows where it came from; only /clear closes
 them all. The session slides: every request renews it, so it only ends
-after a week of silence (or when the token is revoked). If it has
+after a week of silence, with a hard ceiling of 30 days from sign-in
+(or when the token is revoked). If it has
 ended, an opened row or a command says `your github session ended` and
 offers `sign in again →`: the page goes to GitHub and comes straight
 back to the same repo, transcript intact, prints `→ signed in as you`

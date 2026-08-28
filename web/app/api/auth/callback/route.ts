@@ -51,6 +51,7 @@ export async function GET(req: NextRequest) {
   const session = await getSession();
   session.token = token.access_token;
   session.login = user.login ?? "";
+  session.since = Date.now();
   await session.save();
 
   // back to the transcript the session ended in, else the picker
