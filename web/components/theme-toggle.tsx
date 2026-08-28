@@ -18,6 +18,18 @@ export function applyTheme(theme: Theme) {
   window.dispatchEvent(new CustomEvent("wd-theme", { detail: theme }));
 }
 
+// cross-fade the whole page where the browser can (see globals.css);
+// a plain flip elsewhere and under reduced motion. the header toggle
+// and /theme both go through here
+export function switchTheme(next: Theme) {
+  const doc = document as Document & {
+    startViewTransition?: (cb: () => void) => unknown;
+  };
+  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (doc.startViewTransition && !still) doc.startViewTransition(() => applyTheme(next));
+  else applyTheme(next);
+}
+
 export function currentTheme(): Theme {
   try {
     const stored = localStorage.getItem("wd_theme");
@@ -41,7 +53,7 @@ export function ThemeToggle() {
   const cycle = () => {
     const next = ORDER[(ORDER.indexOf(theme) + 1) % ORDER.length];
     setTheme(next);
-    applyTheme(next);
+    switchTheme(next);
   };
 
   return (

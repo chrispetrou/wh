@@ -63,7 +63,7 @@ export function RepoPicker({ repos }: { repos: RepoItem[] }) {
 
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col"
+      className="page-in flex min-h-0 flex-1 flex-col"
       onClick={() => {
         if (!window.getSelection()?.toString()) inputRef.current?.focus();
       }}

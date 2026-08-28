@@ -84,18 +84,22 @@ export function TabBar() {
     }
   };
 
-  if (tabs.length === 0) return null;
+  // the repo being viewed is known before the stored tabs load, so the
+  // strip is there from the first paint instead of pushing the page down
+  // after hydration; the other tabs fill in a moment later
+  const shown = tabs.length ? tabs : active ? [active] : [];
+  if (shown.length === 0) return null;
 
   // repo name alone, unless two open tabs share it
   const label = (t: string) => {
     const name = t.split("/")[1] ?? t;
-    const dupes = tabs.filter((x) => (x.split("/")[1] ?? x) === name);
+    const dupes = shown.filter((x) => (x.split("/")[1] ?? x) === name);
     return dupes.length > 1 ? t : name;
   };
 
   return (
     <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-border px-4 py-1.5 text-[12px]">
-      {tabs.map((t, i) => (
+      {shown.map((t, i) => (
         <span
           key={t}
           className={`flex shrink-0 items-center gap-2 rounded-[3px] px-2 py-0.5 ${

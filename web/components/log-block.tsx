@@ -193,6 +193,7 @@ export function LogBlock({
   owner,
   repo,
   submit,
+  fresh = false,
 }: {
   block: Block;
   line: number;
@@ -200,6 +201,7 @@ export function LogBlock({
   owner: string;
   repo: string;
   submit: (command: string) => void;
+  fresh?: boolean; // just arrived in this session: enters with a fade
 }) {
   const live = useSyncExternalStore(
     (cb) => chatStore.subscribe(storeKey, cb),
@@ -289,7 +291,7 @@ export function LogBlock({
       : `calc(${numW + 3}ch + 8px) minmax(0, 1fr)`;
 
   return (
-    <div ref={rootRef} className="log-block">
+    <div ref={rootRef} className={`log-block ${fresh ? "block-in" : ""}`}>
       {block.rows.length ? (
       <div className="log-row log-head" style={{ gridTemplateColumns: cols }}>
         <span />
@@ -324,32 +326,47 @@ export function LogBlock({
               )}
             </div>
             {isOpen ? (
-              <div className="log-panel" style={{ gridTemplateColumns: panelCols }}>
-                <div className="flex justify-end">
-                  {block.kind === "log" && (row as CommitRow).graph && lanes ? (
-                    <Through g={(row as CommitRow).graph!} lanes={lanes} />
-                  ) : null}
-                </div>
-                <div className="log-panel-body">
-                  {detail === undefined || detail === "loading" ? (
-                    block.kind === "log" ? (
-                      <CommitSkeleton row={row as CommitRow} />
-                    ) : (
-                      <PrSkeleton row={row as PrRow} />
-                    )
-                  ) : "failed" in detail ? (
-                    <div>
-                      <div>
-                        <span className="text-wd-amber">error:</span>{" "}
-                        {detail.auth ? "your github session ended" : detail.failed}
-                      </div>
-                      {detail.auth ? <SignInAgain storeKey={storeKey} line={line} id={id} /> : null}
+              <div className="log-panel-wrap">
+                <div>
+                  <div className="log-panel" style={{ gridTemplateColumns: panelCols }}>
+                    <div className="flex justify-end">
+                      {block.kind === "log" && (row as CommitRow).graph && lanes ? (
+                        <Through g={(row as CommitRow).graph!} lanes={lanes} />
+                      ) : null}
                     </div>
-                  ) : detail.kind === "commit" ? (
-                    <CommitPanel d={detail} block={block} submit={submit} jump={(sha) => jumpTo(block, sha, line, storeKey, submit)} />
-                  ) : (
-                    <PrPanel d={detail} submit={submit} />
-                  )}
+                    <div className="log-panel-body">
+                      {detail === undefined || detail === "loading" ? (
+                        block.kind === "log" ? (
+                          <CommitSkeleton row={row as CommitRow} />
+                        ) : (
+                          <PrSkeleton row={row as PrRow} />
+                        )
+                      ) : "failed" in detail ? (
+                        <div className="detail-in">
+                          <div>
+                            <span className="text-wd-amber">error:</span>{" "}
+                            {detail.auth ? "your github session ended" : detail.failed}
+                          </div>
+                          {detail.auth ? (
+                            <SignInAgain storeKey={storeKey} line={line} id={id} />
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="detail-in">
+                          {detail.kind === "commit" ? (
+                            <CommitPanel
+                              d={detail}
+                              block={block}
+                              submit={submit}
+                              jump={(sha) => jumpTo(block, sha, line, storeKey, submit)}
+                            />
+                          ) : (
+                            <PrPanel d={detail} submit={submit} />
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             ) : null}

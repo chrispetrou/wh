@@ -306,6 +306,11 @@ for status
 elapsed time and model (`· 8.4s · claude-opus-5`; `· stopped after 2.1s`
 if you pressed esc), commands and their output group into blocks, and
 scrolling up to read earlier output is never interrupted by new lines.
+Motion is quiet and short: state changes ease in (an error, a `→` line,
+a panel opening, a block landing, a page settling after navigation,
+the theme cross-fading), streamed text and anything driven by the
+keyboard never animate, and everything stops under
+`prefers-reduced-motion`.
 
 After an explain, plain words are follow-up questions: "why is that
 risky?", "which files touch auth?". Answers stay grounded in the same

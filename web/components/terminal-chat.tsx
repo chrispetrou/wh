@@ -18,7 +18,7 @@ import {
   type ProviderName,
 } from "@/lib/explain/providers";
 import { keyStore } from "@/lib/key-store";
-import { applyTheme, currentTheme, type Theme } from "./theme-toggle";
+import { currentTheme, switchTheme, type Theme } from "./theme-toggle";
 
 type Cls = "p" | "c" | "o" | "g" | "a" | "x" | "r" | "f" | "";
 
@@ -504,13 +504,20 @@ export function TerminalChat({
   const prompt = `${owner}/${repo} $`;
 
   const push = (rows: Line[]) => chatStore.push(storeKey, rows);
+  // lines that mark a state change (not streamed text, not the echo)
+  // enter with a short fade; restored lines never animate
+  const freshRef = useRef(new WeakSet<Line>());
+  const enter = (rows: Line[]) => {
+    rows.forEach((r) => freshRef.current.add(r));
+    push(rows);
+  };
   const muted = (texts: string[]) =>
-    push(texts.map((text) => ({ text, cls: "o" as Cls })));
+    enter(texts.map((text) => ({ text, cls: "o" as Cls })));
   const echo = (text: string) =>
     push([{ prefix: prompt, text, cls: text.startsWith("/") ? "x" : "c" }]);
   // the landing's success line: green arrow and verb, muted detail
   const ok = (verb: string, detail = "") =>
-    push([
+    enter([
       {
         head: { text: `→ ${verb}`, cls: "g" },
         text: detail ? ` ${detail}` : "",
@@ -519,7 +526,7 @@ export function TerminalChat({
     ]);
   // errors are warnings-colored, never red: amber label, fg message
   const err = (msg: string) =>
-    push([{ head: { text: "error:", cls: "a" }, text: ` ${msg}`, cls: "" }]);
+    enter([{ head: { text: "error:", cls: "a" }, text: ` ${msg}`, cls: "" }]);
 
   useEffect(() => {
     if (initRef.current) return; // strict mode re-runs mount effects
@@ -678,7 +685,7 @@ export function TerminalChat({
           // the github session ended: say so, offer to sign in without
           // leaving the page, and rerun what failed once it is back
           err("your github session ended");
-          push([{ text: "", cls: "", action: "signin" }]);
+          enter([{ text: "", cls: "", action: "signin" }]);
           return null;
         }
         err(fail?.error ?? `request failed (${res.status})`);
@@ -749,7 +756,7 @@ export function TerminalChat({
           if (meta.block) {
             // the grid goes in as one line; the arrow keys drive it until
             // the next command
-            push([{ text: "", cls: "", block: meta.block }]);
+            enter([{ text: "", cls: "", block: meta.block }]);
             if (meta.block.kind === "prs") {
               chatStore.setPrRows(storeKey, (meta.rows as PrRow[] | undefined) ?? []);
             } else {
@@ -938,7 +945,7 @@ export function TerminalChat({
         echo(raw);
         const t = arg.toLowerCase();
         if (t === "auto" || t === "light" || t === "dark") {
-          applyTheme(t as Theme);
+          switchTheme(t as Theme);
           ok("theme", t);
         } else {
           muted([`theme is ${currentTheme()}. usage: /theme auto|light|dark`]);
@@ -1410,7 +1417,7 @@ export function TerminalChat({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col" onClick={focusInput}>
+    <div className="page-in flex min-h-0 flex-1 flex-col" onClick={focusInput}>
       <div
         ref={logRef}
         role="log"
@@ -1420,7 +1427,12 @@ export function TerminalChat({
       >
         {lines.map((l, i) => (
           // a prompt line opens a block: command and its output read as one
-          <div key={i} className={l.prefix && i > 0 ? "mt-3" : ""}>
+          <div
+            key={i}
+            className={`${l.prefix && i > 0 ? "mt-3" : ""} ${
+              !l.block && freshRef.current.has(l) ? "line-in" : ""
+            }`}
+          >
             {l.prefix ? (
               <span className="text-muted-foreground">{l.prefix} </span>
             ) : null}
@@ -1432,6 +1444,7 @@ export function TerminalChat({
                 owner={owner}
                 repo={repo}
                 submit={(c) => submit(c)}
+                fresh={freshRef.current.has(l)}
               />
             ) : l.action === "signin" ? (
               <button type="button" className="log-action" onClick={reauth}>
