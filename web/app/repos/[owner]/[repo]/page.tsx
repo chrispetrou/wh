@@ -19,7 +19,8 @@ export default async function ChatPage({
   params: Promise<{ owner: string; repo: string }>;
 }) {
   const session = await getSession();
-  if (!session.token) redirect("/");
+  // nobody types this url cold: a missing session here is an expired one
+  if (!session.token) redirect("/?error=session");
   const { owner, repo } = await params;
 
   return (

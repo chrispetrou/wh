@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "repos · wd" };
 
 export default async function ReposPage() {
   const session = await getSession();
-  if (!session.token) redirect("/");
+  if (!session.token) redirect("/?error=session");
 
   let repos;
   try {

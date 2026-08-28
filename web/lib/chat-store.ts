@@ -48,6 +48,13 @@ export interface PrDetail {
 }
 export type Detail = CommitDetail | PrDetail;
 
+// why a detail fetch failed; `auth` means the github session is gone
+export interface DetailFailure {
+  failed: string;
+  auth: boolean;
+}
+export type DetailState = Detail | "loading" | DetailFailure;
+
 // a row of the last log, so row numbers resolve to shas client-side
 export interface LogRow {
   sha: string;
@@ -83,7 +90,7 @@ interface Entry {
   live?: Live;
   // open rows per block line: shas, or pr numbers as strings
   expanded?: Map<number, string[]>;
-  details?: Map<string, Detail | "loading" | "failed">;
+  details?: Map<string, DetailState>;
 }
 
 const NONE: string[] = [];
@@ -231,13 +238,13 @@ export const chatStore = {
     entry(key).expanded = undefined;
     emit(key);
   },
-  detail(key: string, id: string): Detail | "loading" | "failed" | undefined {
+  detail(key: string, id: string): DetailState | undefined {
     return entry(key).details?.get(id);
   },
-  details(key: string): Map<string, Detail | "loading" | "failed"> | undefined {
+  details(key: string): Map<string, DetailState> | undefined {
     return entry(key).details;
   },
-  setDetail(key: string, id: string, d: Detail | "loading" | "failed") {
+  setDetail(key: string, id: string, d: DetailState) {
     const e = entry(key);
     e.details = new Map(e.details ?? []);
     e.details.set(id, d);

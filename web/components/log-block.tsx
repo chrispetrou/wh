@@ -7,7 +7,13 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Block, CommitRow, PrRow } from "@/lib/block";
-import { chatStore, type CommitDetail, type Detail, type PrDetail } from "@/lib/chat-store";
+import {
+  chatStore,
+  type CommitDetail,
+  type Detail,
+  type DetailFailure,
+  type PrDetail,
+} from "@/lib/chat-store";
 import type { LaneRow } from "@/lib/graph";
 import { relTime } from "@/lib/utils";
 
@@ -226,9 +232,22 @@ export function LogBlock({
       fetch(
         `/api/detail?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&kind=${kind}&id=${encodeURIComponent(id)}`
       )
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-        .then((d: Detail) => chatStore.setDetail(storeKey, key, d))
-        .catch(() => chatStore.setDetail(storeKey, key, "failed"));
+        .then(async (r) => {
+          if (r.ok) return (await r.json()) as Detail;
+          // the server's words, and whether the github session is gone
+          const j = (await r.json().catch(() => null)) as { error?: string } | null;
+          throw { failed: j?.error ?? `request failed (${r.status})`, auth: r.status === 401 };
+        })
+        .then((d) => chatStore.setDetail(storeKey, key, d))
+        .catch((e: unknown) =>
+          chatStore.setDetail(
+            storeKey,
+            key,
+            typeof e === "object" && e && "failed" in e
+              ? (e as DetailFailure)
+              : { failed: "connection interrupted", auth: false }
+          )
+        );
     });
   }, [expanded, block.kind, owner, repo, storeKey]);
 
@@ -317,10 +336,18 @@ export function LogBlock({
                     ) : (
                       <PrSkeleton row={row as PrRow} />
                     )
-                  ) : detail === "failed" ? (
-                    <span>
-                      <span className="text-wd-amber">error:</span> could not fetch this one
-                    </span>
+                  ) : "failed" in detail ? (
+                    <div>
+                      <div>
+                        <span className="text-wd-amber">error:</span>{" "}
+                        {detail.auth ? "your github session ended" : detail.failed}
+                      </div>
+                      {detail.auth ? (
+                        <a className="log-action" href="/api/auth/reset">
+                          sign in again <span className="text-wd-green">→</span>
+                        </a>
+                      ) : null}
+                    </div>
                   ) : detail.kind === "commit" ? (
                     <CommitPanel d={detail} block={block} submit={submit} jump={(sha) => jumpTo(block, sha, line, storeKey, submit)} />
                   ) : (

@@ -212,7 +212,9 @@ file), `history` (the file's story), and `copy` (its path); a parent
 jumps to its row), esc steps back out, and clicking a row does the
 same. A command launched from an open panel leaves the panel open, so
 the answer below it still shows where it came from; only /clear closes
-them all. The numbers
+them all. If the GitHub session has ended, an opened row says so and
+offers `sign in again →` in place; a command says the same and takes
+you to the sign-in page. The numbers
 still work as words: `explain 3` explains that commit, `explain 2..5`
 the span of rows (from the parent of row 5 to row 2), and `explain
 <sha>` takes any sha directly; typing `explain ` with a log on screen
