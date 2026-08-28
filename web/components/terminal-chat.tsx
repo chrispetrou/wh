@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { blockText, type Block } from "@/lib/block";
 import { chatStore, type LogRow, type PrRow } from "@/lib/chat-store";
 import { commandHint, parseCommand } from "@/lib/commands";
-import { signInAgain } from "@/lib/signin";
+import { signInAgain, takeResume } from "@/lib/signin";
 import { LogBlock } from "./log-block";
 import { relTime } from "@/lib/utils";
 import {
@@ -534,6 +534,25 @@ export function TerminalChat({
     } catch {
       // ignore
     }
+    // back from a sign-in that a dead session forced: say so under the
+    // error, drop the button, and pick up where it stopped
+    const resume = takeResume(storeKey);
+    if (resume) {
+      chatStore.setAll(
+        storeKey,
+        chatStore.lines(storeKey).filter((l) => (l as Line).action !== "signin")
+      );
+      ok("signed in", login ? `as ${login}` : "");
+      if (resume.line !== undefined && resume.open) {
+        chatStore.setExpanded(storeKey, resume.line, [resume.open]);
+        chatStore.setLive(storeKey, { line: resume.line, selected: null });
+      }
+      if (resume.cmd) {
+        lastCmdRef.current = resume.cmd;
+        submit(resume.cmd);
+      }
+      return;
+    }
     // a restored or still-live log means no boot lines
     if (chatStore.lines(storeKey).length) return;
     push([{ text: `▜ wd · ${owner}/${repo}`, cls: "o" }]);
@@ -781,18 +800,9 @@ export function TerminalChat({
     if (full?.trim()) chatStore.appendExchange(storeKey, question, full.trim());
   };
 
-  // sign in again in a popup, then rerun the command that hit the wall
-  const reauth = async () => {
-    muted(["signing in with github in the other window"]);
-    const signed = await signInAgain();
-    if (!signed) {
-      muted(["the sign-in window closed first"]);
-      return;
-    }
-    ok("signed in");
-    chatStore.dropAuthFailures(storeKey);
-    if (lastCmdRef.current) submit(lastCmdRef.current);
-  };
+  // sign in again via github and come back here; the command that hit
+  // the wall reruns on return (see the mount effect)
+  const reauth = () => signInAgain(storeKey, { cmd: lastCmdRef.current || undefined });
 
   const saveKey = (value: string, echoText: string) => {
     const { provider, replaced } = keyStore.addKey(value);
@@ -1424,7 +1434,7 @@ export function TerminalChat({
                 submit={(c) => submit(c)}
               />
             ) : l.action === "signin" ? (
-              <button type="button" className="log-action" onClick={() => void reauth()}>
+              <button type="button" className="log-action" onClick={reauth}>
                 sign in again <span className="text-wd-green">→</span>
               </button>
             ) : (

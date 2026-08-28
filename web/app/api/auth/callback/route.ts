@@ -53,20 +53,8 @@ export async function GET(req: NextRequest) {
   session.login = user.login ?? "";
   await session.save();
 
-  // a popup sign-in reports back to the page that opened it and closes
-  if (jar.get("wd_oauth_popup")?.value === "1") {
-    jar.delete("wd_oauth_popup");
-    return new NextResponse(POPUP_DONE, {
-      headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
-    });
-  }
-  return NextResponse.redirect(new URL("/repos", url));
+  // back to the transcript the session ended in, else the picker
+  const back = jar.get("wd_oauth_return")?.value;
+  jar.delete("wd_oauth_return");
+  return NextResponse.redirect(new URL(back && back.startsWith("/repos/") ? back : "/repos", url));
 }
-
-const POPUP_DONE = `<!doctype html><meta charset="utf-8"><title>wd</title>
-<body style="margin:0;padding:24px;font:13px/1.7 ui-monospace,'SF Mono',Menlo,monospace;color:#1a1a1a;background:#fff">
-signed in, you can close this window.
-<script>
-try { if (window.opener) window.opener.postMessage({ wd: "signed-in" }, location.origin); } catch (e) {}
-window.close();
-</script>`;

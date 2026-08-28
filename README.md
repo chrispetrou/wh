@@ -215,11 +215,10 @@ the answer below it still shows where it came from; only /clear closes
 them all. The session slides: every request renews it, so it only ends
 after a week of silence (or when the token is revoked). If it has
 ended, an opened row or a command says `your github session ended` and
-offers `sign in again →`: GitHub opens in a small window, the page you
-are on stays put, and once the window reports back the row fetches
-again or the command reruns. (GitHub's consent page cannot be shown
-inside the app, so a popup is as close as it gets; if the browser
-blocks it, the plain sign-in page is used.) The numbers
+offers `sign in again →`: the page goes to GitHub and comes straight
+back to the same repo, transcript intact, prints `→ signed in as you`
+under the error, and reruns the command or reopens the row that
+failed. The numbers
 still work as words: `explain 3` explains that commit, `explain 2..5`
 the span of rows (from the parent of row 5 to row 2), and `explain
 <sha>` takes any sha directly; typing `explain ` with a log on screen

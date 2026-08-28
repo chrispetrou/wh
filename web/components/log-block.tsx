@@ -343,7 +343,7 @@ export function LogBlock({
                         <span className="text-wd-amber">error:</span>{" "}
                         {detail.auth ? "your github session ended" : detail.failed}
                       </div>
-                      {detail.auth ? <SignInAgain storeKey={storeKey} /> : null}
+                      {detail.auth ? <SignInAgain storeKey={storeKey} line={line} id={id} /> : null}
                     </div>
                   ) : detail.kind === "commit" ? (
                     <CommitPanel d={detail} block={block} submit={submit} jump={(sha) => jumpTo(block, sha, line, storeKey, submit)} />
@@ -430,27 +430,13 @@ function PrCells({ row }: { row: PrRow }) {
   );
 }
 
-// sign in again in a popup; once it reports back, the rows that died
-// with the old session fetch again on their own
-function SignInAgain({ storeKey }: { storeKey: string }) {
-  const [state, setState] = useState<"idle" | "waiting" | "closed">("idle");
-  if (state === "waiting") {
-    return <div className="text-muted-foreground">signing in with github in the other window</div>;
-  }
+// sign in again via github and come back to this row, reopened
+function SignInAgain({ storeKey, line, id }: { storeKey: string; line: number; id: string }) {
   return (
     <div>
-      <Action
-        onClick={() => {
-          setState("waiting");
-          void signInAgain().then((ok) => {
-            if (ok) chatStore.dropAuthFailures(storeKey);
-            else setState("closed");
-          });
-        }}
-      >
+      <Action onClick={() => signInAgain(storeKey, { line, open: id })}>
         sign in again <span className="text-wd-green">→</span>
       </Action>
-      {state === "closed" ? <span className="text-muted-foreground"> (the window closed first)</span> : null}
     </div>
   );
 }

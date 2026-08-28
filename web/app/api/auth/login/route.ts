@@ -2,9 +2,9 @@ import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
-// ?popup=1: the sign-in runs in a small window opened from a page whose
-// session ended; the callback then reports back and closes instead of
-// navigating, so that page keeps its transcript
+// ?return=/repos/o/r: where to land after github, so a session that
+// ended mid-transcript comes back to that transcript. same-site paths
+// only; anything else lands on the repo picker
 export async function GET(req: NextRequest) {
   if (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET) {
     return NextResponse.redirect(new URL("/?error=config", process.env.APP_URL));
@@ -19,8 +19,9 @@ export async function GET(req: NextRequest) {
     maxAge: 600,
   };
   jar.set("wd_oauth_state", state, cookie);
-  if (req.nextUrl.searchParams.get("popup") === "1") jar.set("wd_oauth_popup", "1", cookie);
-  else jar.delete("wd_oauth_popup");
+  const back = req.nextUrl.searchParams.get("return") ?? "";
+  if (/^\/repos\/[^/?#]+\/[^/?#]+$/.test(back)) jar.set("wd_oauth_return", back, cookie);
+  else jar.delete("wd_oauth_return");
   const params = new URLSearchParams({
     client_id: process.env.GITHUB_CLIENT_ID ?? "",
     redirect_uri: `${process.env.APP_URL}/api/auth/callback`,
