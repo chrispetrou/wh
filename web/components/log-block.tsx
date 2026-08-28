@@ -254,6 +254,25 @@ export function LogBlock({
     });
   }, [expanded, block.kind, owner, repo, storeKey]);
 
+  // a row that just closed keeps its panel mounted for the exit
+  // animation, then lets go; under reduced motion it goes at once
+  const [closing, setClosing] = useState<Set<string>>(() => new Set());
+  const prevOpenRef = useRef<string[]>(expanded);
+  useEffect(() => {
+    const gone = prevOpenRef.current.filter((id) => !expanded.includes(id));
+    prevOpenRef.current = expanded;
+    if (!gone.length) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    setClosing((s) => new Set([...s, ...gone]));
+  }, [expanded]);
+  const settle = (id: string) =>
+    setClosing((s) => {
+      if (!s.has(id)) return s;
+      const next = new Set(s);
+      next.delete(id);
+      return next;
+    });
+
   // keep the keyboard selection in view
   useEffect(() => {
     if (selected === null) return;
@@ -307,9 +326,11 @@ export function LogBlock({
         const id = rowId(block, i);
         const isSel = selected === i;
         const isOpen = expanded.includes(id);
-        const detail = isOpen
-          ? details?.get(`${block.kind === "log" ? "commit" : "pr"}:${id}`)
-          : undefined;
+        const isClosing = !isOpen && closing.has(id);
+        const detail =
+          isOpen || isClosing
+            ? details?.get(`${block.kind === "log" ? "commit" : "pr"}:${id}`)
+            : undefined;
         return (
           <div key={id}>
             <div
@@ -325,8 +346,11 @@ export function LogBlock({
                 <PrCells row={row as PrRow} />
               )}
             </div>
-            {isOpen ? (
-              <div className="log-panel-wrap">
+            {isOpen || isClosing ? (
+              <div
+                className={isClosing ? "log-panel-out" : "log-panel-wrap"}
+                onAnimationEnd={isClosing ? () => settle(id) : undefined}
+              >
                 <div>
                   <div className="log-panel" style={{ gridTemplateColumns: panelCols }}>
                     <div className="flex justify-end">

@@ -445,7 +445,8 @@ button {
   display: grid;
   animation: panel-in 200ms cubic-bezier(0.215, 0.61, 0.355, 1) both;
 }
-.log-panel-wrap > div {
+.log-panel-wrap > div,
+.log-panel-out > div {
   min-height: 0;
   overflow: hidden;
 }
@@ -457,6 +458,22 @@ button {
   to {
     grid-template-rows: 1fr;
     opacity: 1;
+  }
+}
+/* closing: the same motion backwards, a touch faster, then unmounted */
+.log-panel-out {
+  display: grid;
+  animation: panel-out 160ms cubic-bezier(0.215, 0.61, 0.355, 1) both;
+  pointer-events: none;
+}
+@keyframes panel-out {
+  from {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+  to {
+    grid-template-rows: 0fr;
+    opacity: 0;
   }
 }
 /* the fetched detail replacing its skeleton */
@@ -475,6 +492,7 @@ button {
   .line-in,
   .block-in,
   .log-panel-wrap,
+  .log-panel-out,
   .detail-in {
     animation: none;
   }
