@@ -351,8 +351,9 @@ the picker, ctrl+1..9 switches, × closes.
 
 Hover any control for its purpose and shortcut, and a status line under
 the prompt shows the provider, model, effort, and tokens in use (`groq ·
-openai/gpt-oss-120b · 12.4k tokens`). A tab whose explain is still
-streaming shows a dot after its name.
+openai/gpt-oss-120b · 12.4k tokens`, a small star before it marking the
+ai provider). A tab whose explain is still streaming shows a dot after
+its name.
 
 The token count is the one thing here that is yours to keep: no
 provider exposes an account balance or a running total to an api key

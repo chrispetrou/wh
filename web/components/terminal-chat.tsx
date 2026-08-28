@@ -7,6 +7,7 @@ import { chatStore, type LogRow, type PrPick } from "@/lib/chat-store";
 import { commandHint, parseCommand } from "@/lib/commands";
 import { signInAgain, takeResume } from "@/lib/signin";
 import { LogBlock } from "./log-block";
+import { ModelGlyph } from "./glyph";
 import { relTime } from "@/lib/utils";
 import {
   DEFAULT_MODELS,
@@ -1677,6 +1678,7 @@ export function TerminalChat({
         data-tip="the model runs on your key; /model changes it. tokens are counted here since the key was saved; /usage for the breakdown"
       >
         {/* localStorage reads must wait for mount or hydration breaks */}
+        {mounted && keyStore.active() ? <ModelGlyph /> : null}
         {mounted ? providerInfo() : " "}
         {mounted && activeEffort() && !effortIgnored() ? ` · effort ${activeEffort()}` : ""}
         {mounted ? usageInfo() : ""}
