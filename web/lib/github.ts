@@ -496,6 +496,29 @@ export interface SinceOpts {
 
 export type SinceResult = ExplainInput | { empty: string };
 
+// a window of commits: a period, or everything after a ref's commit
+// (the commit itself left out)
+interface Window {
+  since: string; // iso
+  until?: string; // iso, exclusive
+  label: string; // "since yesterday", "since v1.2"
+  skip?: string; // the ref's sha
+}
+
+async function refWindow(token: string, base: string, ref: string): Promise<Window> {
+  let res: Response;
+  try {
+    res = await gh(token, `${base}/commits/${encodeURIComponent(ref)}`);
+  } catch (e) {
+    if (e instanceof GithubError && e.status === 404) {
+      throw new GithubError(404, `unknown ref ${ref}; run branches to see refs`);
+    }
+    throw e;
+  }
+  const c = (await res.json()) as CommitJson;
+  return { since: c.commit.committer.date, skip: c.sha, label: `since ${ref}` };
+}
+
 export async function sinceInput(
   token: string,
   owner: string,
@@ -524,34 +547,15 @@ export async function sinceInput(
   const info = await gh(token, base);
   const def = ((await info.json()) as { default_branch: string }).default_branch;
 
-  let since: string;
-  let until: string | undefined;
-  let label: string;
-  let skip: string | null = null; // the ref commit itself, when since is a ref
-  if (period) {
-    ({ since, until, label } = period);
-  } else {
-    // a ref with an author: the window starts at the ref's commit
-    let res: Response;
-    try {
-      res = await gh(token, `${base}/commits/${encodeURIComponent(opts.period)}`);
-    } catch (e) {
-      if (e instanceof GithubError && e.status === 404) {
-        throw new GithubError(404, `unknown ref ${opts.period}; run branches to see refs`);
-      }
-      throw e;
-    }
-    const c = (await res.json()) as CommitJson;
-    since = c.commit.committer.date;
-    skip = c.sha;
-    label = `since ${opts.period}`;
-  }
+  // a ref with an author: the window starts at the ref's commit
+  const { since, until, label, skip }: Window =
+    period ?? (await refWindow(token, base, opts.period));
 
   const q = new URLSearchParams({ sha: def, since, per_page: String(SINCE_PAGE) });
   if (until) q.set("until", until);
   if (author) q.set("author", author);
   const listRes = await gh(token, `${base}/commits?${q}`);
-  const list = ((await listRes.json()) as CommitJson[]).filter((c) => c.sha !== skip);
+  const list = ((await listRes.json()) as CommitJson[]).filter((c) => c.sha !== (skip ?? null));
   const who = author ? ` by ${author}` : "";
   if (!list.length) return { empty: `nothing ${label}${who}` };
 
@@ -704,7 +708,7 @@ export async function historyBlock(
         `${n === HISTORY_ROWS ? "the latest " : ""}${n} ${n === 1 ? "commit" : "commits"} touching ${path}${where}`,
       ]
     : [`no commits touch ${path}${where}`];
-  return { block: { kind: "log", rows, lanes: 0, footer }, rows: logRefs(rows) };
+  return { block: { kind: "log", rows, lanes: 0, footer }, rows: logRefs(rows), spans: false };
 }
 
 // why a line exists: blame the line on the ref, then the blaming commit
@@ -812,6 +816,17 @@ export interface LogRef {
 export interface LogResult {
   block: Block;
   rows: LogRef[]; // for `explain 3`
+  spans: boolean; // the rows are one contiguous walk, so `explain 2..5` is a range
+}
+
+// a filtered log: one author, a window, or both. the rows are no
+// longer a contiguous walk, so it is drawn flat, like a file's history
+export interface LogFilter {
+  since?: string; // a period ("yesterday") or a ref ("v1.2")
+  author?: string; // login, or "me"
+  login: string; // the signed-in user, for "me"
+  now: number;
+  tz: number; // minutes, as getTimezoneOffset reports
 }
 
 export async function logBlock(
@@ -819,9 +834,15 @@ export async function logBlock(
   owner: string,
   repo: string,
   n: number,
-  ref?: string
+  ref?: string,
+  filter?: LogFilter
 ): Promise<LogResult> {
   const base = `/repos/${owner}/${repo}`;
+  const author = filter?.author === "me" ? filter.login : filter?.author;
+  const window: Window | undefined = filter?.since
+    ? (resolvePeriod(filter.since, filter.now, filter.tz) ?? (await refWindow(token, base, filter.since)))
+    : undefined;
+  const filtered = Boolean(author || window);
   const [infoRes, branchRes, tagRes] = await Promise.all([
     gh(token, base),
     gh(token, `${base}/branches?per_page=100`),
@@ -836,11 +857,14 @@ export async function logBlock(
     : [def, ...branches.map((b) => b.name).filter((b) => b !== def)].slice(0, LOG_WALKS);
   const walks = await Promise.all(
     heads.map(async (h) => {
+      const q = new URLSearchParams({ per_page: String(n), sha: h });
+      if (window) {
+        q.set("since", window.since);
+        if (window.until) q.set("until", window.until);
+      }
+      if (author) q.set("author", author);
       try {
-        const res = await gh(
-          token,
-          `${base}/commits?per_page=${n}&sha=${encodeURIComponent(h)}`
-        );
+        const res = await gh(token, `${base}/commits?${q}`);
         return (await res.json()) as CommitJson[];
       } catch (e) {
         if (ref && e instanceof GithubError && e.status === 404) {
@@ -854,13 +878,24 @@ export async function logBlock(
 
   const byShaMap = new Map<string, CommitJson>();
   for (const walk of walks) for (const c of walk) byShaMap.set(c.sha, c);
-  const laid = layout(
-    [...byShaMap.values()].map((c) => ({
-      sha: c.sha,
-      parents: c.parents.map((p) => p.sha),
-      date: c.commit.committer.date,
-    }))
-  ).slice(0, n);
+  if (window?.skip) byShaMap.delete(window.skip);
+  const all = [...byShaMap.values()];
+  // the graph only makes sense over a contiguous walk; a filter gives a
+  // list, newest first
+  const laid = filtered
+    ? []
+    : layout(
+        all.map((c) => ({
+          sha: c.sha,
+          parents: c.parents.map((p) => p.sha),
+          date: c.commit.committer.date,
+        }))
+      ).slice(0, n);
+  const flat = filtered
+    ? all
+        .sort((a, b) => Date.parse(b.commit.committer.date) - Date.parse(a.commit.committer.date))
+        .slice(0, n)
+    : [];
 
   // decorations: the default branch first, then branches, then tags
   const refs = new Map<string, Ref[]>();
@@ -874,25 +909,39 @@ export async function logBlock(
   for (const b of branches) if (b.name !== def) decorate(b.commit.sha, b.name, "branch");
   for (const t of tags) decorate(t.commit.sha, t.name, "tag");
 
-  const rows: CommitRow[] = laid.map((r) => {
-    const { sha, ...graph } = r;
-    return { ...commitRow(byShaMap.get(sha)!, refs.get(sha)), graph };
-  });
+  const rows: CommitRow[] = filtered
+    ? flat.map((c) => commitRow(c, refs.get(c.sha)))
+    : laid.map((r) => {
+        const { sha, ...graph } = r;
+        return { ...commitRow(byShaMap.get(sha)!, refs.get(sha)), graph };
+      });
 
   const shown = rows.length;
+  const where = ref ? ` on ${ref}` : "";
+  const who = author ? ` by ${author}` : "";
   const footer: string[] = [];
+  if (filtered && !shown) {
+    // rows show a display name when the email is not linked to an
+    // account; the api only matches logins
+    const when = window ? ` ${window.label}` : "";
+    const hint = author ? " (by takes a github login)" : "";
+    footer.push(`no commits${when}${who}${where}${hint}`);
+    return { block: { kind: "log", rows, lanes: 0, footer }, rows: [], spans: false };
+  }
+  const latest = filtered && all.length > shown ? "the latest " : "";
+  const when = window ? `, ${window.label}` : "";
+  const count = `${latest}${shown} ${shown === 1 ? "commit" : "commits"}${where}${who}${when}`;
   if (ref) {
-    footer.push(`${shown} ${shown === 1 ? "commit" : "commits"} on ${ref}`);
+    footer.push(count);
   } else {
     const drawn = Math.min(heads.length, branches.length);
-    footer.push(
-      `${shown} ${shown === 1 ? "commit" : "commits"} · ${drawn} ${drawn === 1 ? "branch" : "branches"}`
-    );
+    footer.push(`${count} · ${drawn} ${drawn === 1 ? "branch" : "branches"}`);
     if (branches.length > drawn) footer.push(`(+${branches.length - drawn} branches not drawn)`);
   }
   return {
     block: { kind: "log", rows, lanes: laneCount(laid), footer },
     rows: logRefs(rows),
+    spans: !filtered,
   };
 }
 

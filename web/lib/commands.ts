@@ -13,8 +13,9 @@ type Shape =
   | { kind: "pr"; num: number }
   | { kind: "range"; base: string; head: string }
   | { kind: "branches" }
-  // the ascii graph; n rows, all branches unless scoped with `on`
-  | { kind: "log"; n?: number; ref?: string }
+  // the ascii graph; n rows, all branches unless scoped with `on`; one
+  // author and/or a window ("since yesterday", "since v1.2") draw it flat
+  | { kind: "log"; n?: number; ref?: string; since?: string; author?: string }
   // one commit by sha
   | { kind: "commit"; sha: string }
   // rows of the last log, resolved to shas client-side before sending
@@ -74,6 +75,9 @@ const HASH = /^#(\d{1,6})$/;
 const RANGE = /^(\S+?)\.{2,3}(\S*)$/;
 // "log", "git log 50", "graph on dev" (history is a file's story, see below)
 const LOG = /^(?:git\s+)?(?:log|graph)(?:\s+(\d{1,3}))?(?:\s+on\s+(\S+))?$/i;
+// "log since yesterday", "log 50 since this week by me": the filters come
+// last, in either order, after `on`
+const LOG_SINCE = /\s+since\s+(.+)$/i;
 // an abbreviated or full sha
 const SHA = /^[0-9a-f]{7,40}$/i;
 // a row of the last log, or a span of rows
@@ -112,6 +116,37 @@ function sinceCommand(phrase: string): Command | null {
     return null;
   }
   const out: Command = { kind: "since", period: period.toLowerCase() };
+  if (author) out.author = author.toLowerCase();
+  return out;
+}
+
+function logCommand(phrase: string): Command | null {
+  let p = phrase;
+  let author: string | undefined;
+  let since: string | undefined;
+  for (;;) {
+    const by = author ? null : BY.exec(p);
+    if (by) {
+      author = by[1];
+      p = p.slice(0, by.index);
+      continue;
+    }
+    const s = since ? null : LOG_SINCE.exec(p);
+    if (s) {
+      since = s[1];
+      p = p.slice(0, s.index);
+      continue;
+    }
+    break;
+  }
+  const log = LOG.exec(p);
+  if (!log) return null;
+  // a ref: "since v1.2", never a range or a period typo like "the merge"
+  if (since && !isPeriod(since) && (since.includes(" ") || since.includes(".."))) return null;
+  const out: Command = { kind: "log" };
+  if (log[1]) out.n = Math.min(Math.max(parseInt(log[1], 10), 1), LOG_MAX);
+  if (log[2]) out.ref = log[2];
+  if (since) out.since = since.toLowerCase();
   if (author) out.author = author.toLowerCase();
   return out;
 }
@@ -164,8 +199,9 @@ export function parseCommand(raw: string): Command | null {
       return { ...inner, path: inPath[2] };
     }
   }
+  // "show log since yesterday" is a filtered log, not a path called log
   const pathFirst = PATH_FIRST.exec(input);
-  if (pathFirst) {
+  if (pathFirst && !/^(?:log|graph)$/i.test(pathFirst[1])) {
     const inner = parseCommand(pathFirst[2]);
     if (inner && isDiff(inner)) return { ...inner, path: pathFirst[1] };
   }
@@ -184,13 +220,8 @@ export function parseCommand(raw: string): Command | null {
   const pr = PR.exec(phrase) ?? HASH.exec(phrase);
   if (pr) return { kind: "pr", num: parseInt(pr[1], 10) };
 
-  const log = LOG.exec(phrase);
-  if (log) {
-    const out: Command = { kind: "log" };
-    if (log[1]) out.n = Math.min(Math.max(parseInt(log[1], 10), 1), LOG_MAX);
-    if (log[2]) out.ref = log[2];
-    return out;
-  }
+  const log = logCommand(phrase);
+  if (log) return log;
 
   const history = HISTORY.exec(phrase);
   if (history) {
@@ -240,7 +271,7 @@ export const commandHint = [
   "  explain the last N commits [on <branch>]",
   "  what changed in pr #N (or in <branch>)",
   "  diff main..dev (any two refs)",
-  "  log [N] [on <branch>], then explain 3 or explain 2..5",
+  "  log [N] [on <branch>] [since <period>] [by <login>], then explain 3",
   "  explain <sha>",
   "  since yesterday | this week | v1.2 [by <login>], standup",
   "  changelog [v1.1..v1.2 | since v1.2 | pr #N] (release notes)",

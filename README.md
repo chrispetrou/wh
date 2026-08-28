@@ -197,7 +197,7 @@ sign in with GitHub, pick a repo, and ask in a full-page terminal:
 explain the last 5 commits [on <branch>]
 what changed in pr #42
 diff main..release
-log [N] [on <branch>]
+log [N] [on <branch>] [since <period>] [by <login>]
 explain 3 (a row of the log), explain 2..5, explain <sha>
 since yesterday | this week | v1.2 [by <login>], standup
 changelog [v1.1..v1.2 | since v1.2 | pr #42]
@@ -223,7 +223,13 @@ merges), branch and tag chips, subject, author, age, and sha, every
 row numbered. All branches are walked (the default branch first, up to
 12 heads; the footer says how many were left out) and unioned into one
 graph; `log 100` shows more rows, `log on <branch>` scopes to one
-branch. After a `log`, the arrow keys walk its rows (`›` marks the one
+branch. `log by <login>` keeps one person's commits (`by me` for your
+own) and `log since <period>` one window (`since yesterday`, `since
+this week`, `since v1.2`, the same words as below), in either order
+after `on`; the filtering happens on GitHub's side, and a filtered log
+is drawn flat, without lanes, since its rows are no longer a contiguous
+walk (so `explain 2..5` asks for one row at a time). After a `log`,
+the arrow keys walk its rows (`›` marks the one
 selected), enter opens a commit in place (full sha, parents, author,
 message, files with their +/−, and `explain`, `changelog`, `github ↗`
 actions; hovering a file offers `explain` (that commit, cut to the

@@ -138,6 +138,7 @@ interface ExplainMeta {
   tags?: boolean;
   block?: Block; // log, history, prs: rendered as a grid, no text follows
   rows?: LogRow[] | PrPick[]; // the block's rows for `explain 3` and `pr ` completion
+  spans?: boolean; // false when the rows are not contiguous (a filtered log, a history)
   empty?: string; // "nothing since yesterday": no diff, no model call
 }
 
@@ -153,6 +154,7 @@ const HELP: HelpRow[] = [
   ["what changed in pr #N (or in <branch>)", ""],
   ["diff main..dev (any two refs)", ""],
   ["log [N] [on <branch>]", "the commit graph, rows numbered"],
+  ["log since <period> [by <login>]", "the same, filtered: one window, one author, drawn flat"],
   ["explain 3, explain 2..5", "rows of the last log"],
   ["explain <sha>", "one commit"],
   ["since yesterday [by me]", "a period, a ref, one author; standup"],
@@ -852,7 +854,11 @@ export function TerminalChat({
             if (meta.block.kind === "prs") {
               chatStore.setPrRows(storeKey, (meta.rows as PrPick[] | undefined) ?? []);
             } else {
-              chatStore.setLogRows(storeKey, (meta.rows as LogRow[] | undefined) ?? []);
+              chatStore.setLogRows(
+                storeKey,
+                (meta.rows as LogRow[] | undefined) ?? [],
+                meta.spans !== false
+              );
             }
             if (meta.block.rows.length) {
               chatStore.setLive(storeKey, {
@@ -1268,6 +1274,12 @@ export function TerminalChat({
         resolved = a.sha;
         muted([`row ${cmd.from}: ${a.sha.slice(0, 7)} ${a.subject}`]);
       } else {
+        // a filtered log or a history skips commits between its rows, so
+        // a span would pull in what is not on screen
+        if (!chatStore.logSpans(storeKey)) {
+          muted(["these rows are not contiguous; explain one row at a time"]);
+          return;
+        }
         if (!b.parent) {
           muted([`row ${cmd.to} is the first commit; try explain ${cmd.from}..${cmd.to - 1}`]);
           return;

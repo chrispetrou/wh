@@ -219,11 +219,31 @@ export async function POST(req: NextRequest) {
       return githubFailure(e, destroy);
     }
   }
+  // the browser's utc offset, so "today" is the user's day
+  const tz = Math.max(-840, Math.min(840, Number(req.headers.get("x-wd-tz") ?? 0) || 0));
+
   // blocks: structured rows the terminal renders as a grid, no model
   if (command.kind === "log") {
     try {
-      const log = await logBlock(session.token, owner, repo, command.n ?? LOG_DEFAULT, command.ref);
-      return plain({ block: log.block, rows: log.rows }, "");
+      const filter =
+        command.since || command.author
+          ? {
+              since: command.since,
+              author: command.author,
+              login: session.login ?? "",
+              now: Date.now(),
+              tz,
+            }
+          : undefined;
+      const log = await logBlock(
+        session.token,
+        owner,
+        repo,
+        command.n ?? LOG_DEFAULT,
+        command.ref,
+        filter
+      );
+      return plain({ block: log.block, rows: log.rows, spans: log.spans }, "");
     } catch (e) {
       return githubFailure(e, destroy);
     }
@@ -246,16 +266,13 @@ export async function POST(req: NextRequest) {
   if (command.kind === "history") {
     try {
       const h = await historyBlock(session.token, owner, repo, command.path, command.ref);
-      return plain({ block: h.block, rows: h.rows }, "");
+      return plain({ block: h.block, rows: h.rows, spans: h.spans }, "");
     } catch (e) {
       return githubFailure(e, destroy);
     }
   }
   // row numbers only mean something next to the client's last log
   if (command.kind === "row") return err(400, "run log first, then explain a row number");
-
-  // the browser's utc offset, so "today" is the user's day
-  const tz = Math.max(-840, Math.min(840, Number(req.headers.get("x-wd-tz") ?? 0) || 0));
 
   let data: ExplainInput;
   let question = ""; // why: the line itself, after the payload
