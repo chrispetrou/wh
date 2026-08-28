@@ -28,6 +28,11 @@ implementations must produce the same payloads and the same output shape.
   paths, minified and generated files). Both implementations parse this
   file, so the list can never drift between them. The CLI embeds it at
   compile time; the web app imports it.
+- `provider.md`: what a failed model call says (one wording per failure
+  class, keyed by HTTP status then body, with the way out), how token
+  usage and rate-limit headroom are read from each provider, and the
+  closing, footer, and warning lines that show them. Prose, not embedded:
+  the tests on both sides quote it.
 
 ## golden fixtures
 
