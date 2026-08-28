@@ -301,7 +301,10 @@ The transcript reads like the cli: your command in the accent color,
 changed (`→ model claude-sonnet-5`, `→ saved wd-owner-repo.txt`), an
 amber `error:` label when something failed (in plain words, never the
 provider's raw json: `the diff is too big for gpt-5-mini: 17842 tokens,
-limit 8192`, followed by a muted line with the way out), and muted gray
+limit 8192`, `your groq key is out of credit`, `provider rate limit, try
+again in 12s`, `provider is overloaded, try again in a moment`, `could
+not reach api.groq.com`; a muted line under it says the way out where
+there is one, like the billing page to top up at), and muted gray
 for status
 (`reading 3 commits · 14 files · +212 −87`). Each answer closes with its
 elapsed time and model (`· 8.4s · claude-opus-5`; `· stopped after 2.1s`

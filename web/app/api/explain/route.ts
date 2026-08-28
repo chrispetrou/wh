@@ -23,8 +23,10 @@ import {
   buildRequest,
   DEFAULT_MODELS,
   detectProvider,
+  droppedFailure,
   EFFORTS,
   MODEL_RE,
+  networkFailure,
   providerFailure,
   sseToText,
   type ChatMessage,
@@ -78,15 +80,21 @@ async function streamProvider(
   model: string,
   meta: string
 ): Promise<NextResponse> {
-  const upstream = await fetch(request.url, {
-    method: "POST",
-    headers: request.headers,
-    body: request.body,
-  });
+  let upstream: Response;
+  try {
+    upstream = await fetch(request.url, {
+      method: "POST",
+      headers: request.headers,
+      body: request.body,
+    });
+  } catch {
+    const f = networkFailure(request.url);
+    return NextResponse.json({ error: f.error, hint: null }, { status: f.status });
+  }
   if (!upstream.ok || !upstream.body) {
     // in our words, with a hint where there is a way out
     const body = (await upstream.text()).slice(0, 4000);
-    const f = providerFailure(upstream.status, body, model);
+    const f = providerFailure(upstream.status, body, model, { provider, headers: upstream.headers });
     return NextResponse.json({ error: f.error, hint: f.hint ?? null }, { status: f.status });
   }
 
@@ -96,14 +104,19 @@ async function streamProvider(
     async start(controller) {
       controller.enqueue(encoder.encode(meta));
       const reader = textStream.getReader();
+      // sentinel lines must start a line of their own, without leaving a
+      // blank one behind
+      let atLineStart = true;
       try {
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
+          if (value.length) atLineStart = value[value.length - 1] === 10;
           controller.enqueue(value);
         }
       } catch {
-        controller.enqueue(encoder.encode("\n[wd:error] stream interrupted\n"));
+        const f = droppedFailure(request.url);
+        controller.enqueue(encoder.encode(`${atLineStart ? "" : "\n"}[wd:error] ${f.error}\n`));
       }
       controller.close();
     },

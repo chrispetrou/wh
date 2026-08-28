@@ -1,6 +1,8 @@
 // provider request shapes and stream decoding; mirrors cli/src/llm.rs.
 // keys arrive per request and are never stored or logged.
 
+import { fmtWait, hostOf, waitFrom, type HeaderBag } from "./usage";
+
 export type ProviderName = "anthropic" | "openai" | "groq";
 
 // key prefixes are disjoint; openai stays the fallback, so any future
@@ -79,30 +81,78 @@ export interface ProviderRequest {
 
 // a failed provider call, in our words: the message the provider sent
 // (never its raw json), the usual cases recognized, and a hint with the
-// way out where there is one
+// way out where there is one. the classes and wording are the contract
+// in shared/prompts/provider.md
 export interface ProviderFailure {
   status: number;
   error: string;
   hint?: string;
 }
 
+// where each provider lives, and where its money is; the one part of the
+// contract likely to drift
+export const PROVIDER_HOSTS: Record<ProviderName, string> = {
+  anthropic: "api.anthropic.com",
+  openai: "api.openai.com",
+  groq: "api.groq.com",
+};
+const BILLING_URLS: Record<ProviderName, string> = {
+  anthropic: "platform.claude.com/settings/billing",
+  openai: "platform.openai.com/settings/organization/billing",
+  groq: "console.groq.com/settings/billing",
+};
+const LIMIT_URLS: Record<ProviderName, string> = {
+  anthropic: "platform.claude.com/settings/limits",
+  openai: "platform.openai.com/settings/organization/limits",
+  groq: "console.groq.com/settings/limits",
+};
+
+interface ErrorBody {
+  error?: { message?: string; code?: string; type?: string; details?: { error_code?: string } } | string;
+  message?: string;
+}
+
+function parseError(body: string): ErrorBody | null {
+  try {
+    const j = JSON.parse(body.trim()) as unknown;
+    return j && typeof j === "object" ? (j as ErrorBody) : null;
+  } catch {
+    return null;
+  }
+}
+
 // the message inside the usual error bodies: {"error":{"message":..}}
 // (openai, groq, anthropic), {"error":".."} (ollama), or the text itself
 function providerMessage(body: string): string {
-  const text = body.trim();
-  try {
-    const j = JSON.parse(text) as { error?: { message?: string } | string; message?: string };
-    const m =
-      typeof j.error === "string" ? j.error : (j.error?.message ?? j.message);
+  const j = parseError(body);
+  if (j) {
+    const m = typeof j.error === "string" ? j.error : (j.error?.message ?? j.message);
     if (typeof m === "string" && m.trim()) return m.trim();
-  } catch {
-    // not json
   }
-  return text.replace(/\s+/g, " ").slice(0, 300);
+  return body.trim().replace(/\s+/g, " ").slice(0, 300);
 }
 
+// the codes a body carries: openai error.code, anthropic error.type and
+// error.details.error_code
+function providerCodes(body: string): string[] {
+  const j = parseError(body);
+  if (!j || typeof j.error !== "object" || !j.error) return [];
+  return [j.error.code, j.error.type, j.error.details?.error_code].filter(
+    (c): c is string => typeof c === "string"
+  );
+}
+
+const CREDIT_CODES = ["billing_error", "insufficient_quota", "credit_balance_exhausted"];
+const SPEND_CODES = [
+  "enforced_spend_limit_reached",
+  "organization_spend_limit_exceeded",
+  "project_spend_limit_exceeded",
+  "organization_usage_limit_exceeded",
+];
+
+// never "tokens per minute" on its own: that is a momentary 429
 const TOO_LARGE =
-  /too large|too long|context length|maximum context|tokens per minute|too many tokens|request_too_large|context_length_exceeded/i;
+  /request_too_large|too large|too long|context length|maximum context|too many tokens|context_length_exceeded/i;
 
 // "Limit 8000, Requested 17842" (groq), "maximum context length is 8192
 // tokens. However, you requested 17842 tokens" (openai), "213000 tokens >
@@ -117,10 +167,57 @@ function tokenCounts(m: string): { requested: number; limit: number } | null {
   return null;
 }
 
-export function providerFailure(status: number, body: string, model: string): ProviderFailure {
+export interface FailureContext {
+  provider?: ProviderName;
+  headers?: HeaderBag;
+}
+
+// status first, then the body, in the order shared/prompts/provider.md
+// lists the classes. status 0 means "no status": an error frame that
+// came mid-stream, classified by its body alone
+export function providerFailure(
+  status: number,
+  body: string,
+  model: string,
+  ctx: FailureContext = {}
+): ProviderFailure {
   const message = providerMessage(body);
+  const lower = message.toLowerCase();
+  const codes = providerCodes(body);
+  const who = ctx.provider ? `your ${ctx.provider} key` : "the key";
+  const billing = ctx.provider ? BILLING_URLS[ctx.provider] : "the provider's billing page";
+  const limits = ctx.provider ? LIMIT_URLS[ctx.provider] : "the provider's limits page";
+
   if (status === 401 || status === 403) {
     return { status: 401, error: "provider rejected the key", hint: "/key <value> replaces it" };
+  }
+  if (
+    status === 402 ||
+    codes.some((c) => CREDIT_CODES.includes(c)) ||
+    lower.includes("credit balance")
+  ) {
+    return {
+      status: 402,
+      error: `${who} is out of credit`,
+      hint: `top up at ${billing}, or /model another provider's`,
+    };
+  }
+  if (
+    codes.some((c) => SPEND_CODES.includes(c)) ||
+    lower.includes("specified api usage limits") ||
+    lower.includes("spend limit")
+  ) {
+    return { status: 402, error: `${who} hit its spend limit`, hint: `raise it at ${limits}` };
+  }
+  if (status === 429 && (lower.includes("used ") || lower.includes("try again in"))) {
+    const wait = waitFrom(ctx.headers, message);
+    if (/per day|\btpd\b|\brpd\b/i.test(message)) {
+      return {
+        status: 429,
+        error: `provider daily limit reached, resets ${wait === null ? "tomorrow" : `in ${fmtWait(wait)}`}`,
+      };
+    }
+    return { status: 429, error: rateLimitLine(wait) };
   }
   if (TOO_LARGE.test(message)) {
     const n = tokenCounts(message);
@@ -132,12 +229,31 @@ export function providerFailure(status: number, body: string, model: string): Pr
     };
   }
   if (status === 429) {
-    return { status: 429, error: "provider rate limit, try again in a moment" };
+    return { status: 429, error: rateLimitLine(waitFrom(ctx.headers, message)) };
   }
   if (status === 404 || /model.*not (found|exist)|does not exist|unknown model/i.test(message)) {
     return { status: 404, error: `provider has no model ${model}`, hint: "/model lists the ones it knows" };
   }
+  if (status >= 500 || codes.includes("overloaded_error") || lower.includes("overloaded")) {
+    return { status: 503, error: "provider is overloaded, try again in a moment" };
+  }
   return { status: 502, error: `provider error: ${message}` };
+}
+
+function rateLimitLine(wait: number | null): string {
+  return wait === null
+    ? "provider rate limit, try again in a moment"
+    : `provider rate limit, try again in ${fmtWait(wait)}`;
+}
+
+// the request never got an answer: dns, tls, a refused connection
+export function networkFailure(url: string): ProviderFailure {
+  return { status: 502, error: `could not reach ${hostOf(url)}` };
+}
+
+// the answer stopped partway
+export function droppedFailure(url: string): ProviderFailure {
+  return { status: 502, error: `lost the connection to ${hostOf(url)}` };
 }
 
 export function buildRequest(
