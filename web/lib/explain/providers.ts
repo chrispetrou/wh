@@ -292,6 +292,8 @@ export function buildRequest(
     body: JSON.stringify({
       model: chosen,
       stream: true,
+      // the last chunk then carries usage (openai and groq both honor it)
+      stream_options: { include_usage: true },
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },
@@ -360,6 +362,8 @@ export function buildFollowupRequest(
     body: JSON.stringify({
       model: chosen,
       stream: true,
+      // the last chunk then carries usage (openai and groq both honor it)
+      stream_options: { include_usage: true },
       messages: [
         { role: "system", content: system },
         ...history,
@@ -370,46 +374,139 @@ export function buildFollowupRequest(
   };
 }
 
+interface AnthropicUsage {
+  input_tokens?: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+  output_tokens?: number;
+}
+
 interface AnthropicEvent {
   type?: string;
   delta?: { text?: string };
+  message?: { usage?: AnthropicUsage };
+  usage?: AnthropicUsage;
+}
+
+interface ChatUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
 }
 
 // openai and groq share this shape
 interface ChatCompletionsEvent {
   choices?: Array<{ delta?: { content?: string | null } }>;
+  usage?: ChatUsage | null;
+  x_groq?: { usage?: ChatUsage };
+  error?: unknown;
 }
 
-export function extractText(provider: ProviderName, json: string): string {
-  try {
-    if (provider === "anthropic") {
-      const ev = JSON.parse(json) as AnthropicEvent;
-      return ev.type === "content_block_delta" ? (ev.delta?.text ?? "") : "";
+// tokens one answer cost, as the provider reported them
+export interface Usage {
+  in: number;
+  out: number;
+}
+
+const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+
+// one provider stream, frame by frame: the text of each, plus what the
+// non-text frames carry (usage, an error where a chunk should be). see
+// "usage" in shared/prompts/provider.md
+export class StreamDecoder {
+  usage: Usage | null = null;
+  error: string | null = null;
+
+  constructor(private readonly provider: ProviderName) {}
+
+  line(json: string): string {
+    let ev: unknown;
+    try {
+      ev = JSON.parse(json);
+    } catch {
+      return "";
     }
-    const ev = JSON.parse(json) as ChatCompletionsEvent;
-    return ev.choices?.[0]?.delta?.content ?? "";
-  } catch {
-    return "";
+    if (!ev || typeof ev !== "object") return "";
+    if (this.provider === "anthropic") {
+      const a = ev as AnthropicEvent;
+      if (a.type === "message_start") {
+        const u = a.message?.usage;
+        if (u) {
+          this.usage = {
+            in: num(u.input_tokens) + num(u.cache_creation_input_tokens) + num(u.cache_read_input_tokens),
+            out: this.usage?.out ?? 0,
+          };
+        }
+        return "";
+      }
+      if (a.type === "message_delta") {
+        // cumulative: the last one wins, never message_start's
+        if (a.usage && typeof a.usage.output_tokens === "number") {
+          this.usage = { in: this.usage?.in ?? 0, out: a.usage.output_tokens };
+        }
+        return "";
+      }
+      if (a.type === "error") {
+        this.error ??= json;
+        return "";
+      }
+      return a.type === "content_block_delta" ? (a.delta?.text ?? "") : "";
+    }
+    const c = ev as ChatCompletionsEvent;
+    const u = c.usage ?? c.x_groq?.usage;
+    if (u && (typeof u.prompt_tokens === "number" || typeof u.completion_tokens === "number")) {
+      this.usage = {
+        in: u.prompt_tokens ?? this.usage?.in ?? 0,
+        out: u.completion_tokens ?? this.usage?.out ?? 0,
+      };
+    }
+    if (c.error !== undefined && !c.choices) {
+      this.error ??= json;
+      return "";
+    }
+    return c.choices?.[0]?.delta?.content ?? "";
   }
 }
 
-// provider sse/ndjson bytes -> plain text chunks
-export function sseToText(provider: ProviderName): TransformStream<Uint8Array, Uint8Array> {
-  const decoder = new TextDecoder();
+export function extractText(provider: ProviderName, json: string): string {
+  return new StreamDecoder(provider).line(json);
+}
+
+// provider sse/ndjson bytes -> plain text chunks; the decoder keeps what
+// the stream said besides text
+export function decodeStream(provider: ProviderName): {
+  stream: TransformStream<Uint8Array, Uint8Array>;
+  decoder: StreamDecoder;
+} {
+  const bytes = new TextDecoder();
   const encoder = new TextEncoder();
+  const decoder = new StreamDecoder(provider);
   let buf = "";
-  return new TransformStream({
+  const take = (line: string, controller: TransformStreamDefaultController<Uint8Array>) => {
+    const trimmed = line.trim();
+    const json = trimmed.startsWith("data: ") ? trimmed.slice(6) : trimmed;
+    if (!json || json === "[DONE]" || !json.startsWith("{")) return;
+    const text = decoder.line(json);
+    if (text) controller.enqueue(encoder.encode(text));
+  };
+  const stream = new TransformStream<Uint8Array, Uint8Array>({
     transform(chunk, controller) {
-      buf += decoder.decode(chunk, { stream: true });
+      buf += bytes.decode(chunk, { stream: true });
       let nl;
       while ((nl = buf.indexOf("\n")) >= 0) {
-        const line = buf.slice(0, nl).trim();
+        const line = buf.slice(0, nl);
         buf = buf.slice(nl + 1);
-        const json = line.startsWith("data: ") ? line.slice(6) : line;
-        if (!json || json === "[DONE]" || !json.startsWith("{")) continue;
-        const text = extractText(provider, json);
-        if (text) controller.enqueue(encoder.encode(text));
+        take(line, controller);
       }
     },
+    flush(controller) {
+      // a last frame without its newline
+      if (buf) take(buf, controller);
+      buf = "";
+    },
   });
+  return { stream, decoder };
+}
+
+export function sseToText(provider: ProviderName): TransformStream<Uint8Array, Uint8Array> {
+  return decodeStream(provider).stream;
 }

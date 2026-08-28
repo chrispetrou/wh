@@ -306,7 +306,7 @@ provider opens the effort menu right away. Model and effort are
 remembered per provider.
 
 Typing `/` opens a completion menu of every slash command with its
-options: `/help`, `/repos`, `/key`, `/model`, `/effort`, `/theme` (auto,
+options: `/help`, `/repos`, `/key`, `/usage`, `/model`, `/effort`, `/theme` (auto,
 light, or dark), `/font` (fira, jetbrains, plex, or the system default),
 `/fontsize`, `/ligatures`, `/show` (the raw diff payload, pager-colored),
 `/copy` (the last answer to the clipboard), `/export` (save the
@@ -326,8 +326,11 @@ not reach api.groq.com`; a muted line under it says the way out where
 there is one, like the billing page to top up at), and muted gray
 for status
 (`reading 3 commits · 14 files · +212 −87`). Each answer closes with its
-elapsed time and model (`· 8.4s · claude-opus-5`; `· stopped after 2.1s`
-if you pressed esc), commands and their output group into blocks, and
+elapsed time, model, and what it cost in tokens (`· 8.4s · claude-opus-5
+· 1.2k in · 340 out`; `· stopped after 2.1s` if you pressed esc), an
+amber `low on groq tokens: 8.2k of 100k left, resets in 42s` follows
+when the key is nearly out of headroom, commands and their output group
+into blocks, and
 scrolling up to read earlier output is never interrupted by new lines.
 Motion is quiet and short: state changes ease in (an error, a `→` line,
 a panel opening, a block landing, a page settling after navigation,
@@ -347,8 +350,19 @@ keeps going while you are on another tab. ctrl+t opens a new tab via
 the picker, ctrl+1..9 switches, × closes.
 
 Hover any control for its purpose and shortcut, and a status line under
-the prompt shows the provider, model, and effort in use. A tab whose
-explain is still streaming shows a dot after its name.
+the prompt shows the provider, model, effort, and tokens in use (`groq ·
+openai/gpt-oss-120b · 12.4k tokens`). A tab whose explain is still
+streaming shows a dot after its name.
+
+The token count is the one thing here that is yours to keep: no
+provider exposes an account balance or a running total to an api key
+(openai and anthropic have admin-key usage apis, groq has none), so the
+terminal adds up what each answer cost, per key, in your browser, from
+the day the key was saved. `/usage` shows the breakdown (`anthropic
+1.2m in · 84.3k out · 41 answers · since aug 12`) and what the provider
+last said was left on the key; `/usage reset [provider]` starts over, as
+does replacing or removing the key. Tokens only, never money: prices
+drift, and the provider's own dashboard is the bill.
 
 Notes:
 

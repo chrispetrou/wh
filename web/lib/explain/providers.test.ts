@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { droppedFailure, networkFailure, providerFailure } from "./providers";
+import { decodeStream, droppedFailure, networkFailure, providerFailure, StreamDecoder } from "./providers";
 import {
   buildFollowupRequest,
   buildRequest,
@@ -287,5 +287,86 @@ describe("providerFailure", () => {
     expect(droppedFailure("https://api.anthropic.com/v1/messages").error).toBe(
       "lost the connection to api.anthropic.com"
     );
+  });
+});
+
+describe("StreamDecoder", () => {
+  it("reads openai and groq usage from the last chunk", () => {
+    const d = new StreamDecoder("groq");
+    expect(d.line('{"choices":[{"delta":{"content":"hi"}}]}')).toBe("hi");
+    expect(d.usage).toBeNull();
+    expect(
+      d.line(
+        '{"choices":[{"delta":{},"finish_reason":"stop"}],"x_groq":{"usage":{"queue_time":0.01,"prompt_tokens":9,"completion_tokens":4,"total_tokens":13}}}'
+      )
+    ).toBe("");
+    expect(d.usage).toEqual({ in: 9, out: 4 });
+    const o = new StreamDecoder("openai");
+    o.line('{"choices":[],"usage":{"prompt_tokens":120,"completion_tokens":30,"prompt_tokens_details":{"cached_tokens":0}}}');
+    expect(o.usage).toEqual({ in: 120, out: 30 });
+    expect(o.error).toBeNull();
+  });
+
+  it("sums anthropic input with its cache parts and keeps the last output", () => {
+    const d = new StreamDecoder("anthropic");
+    d.line(
+      '{"type":"message_start","message":{"usage":{"input_tokens":25,"cache_creation_input_tokens":3,"cache_read_input_tokens":100,"output_tokens":1}}}'
+    );
+    expect(d.line('{"type":"content_block_delta","delta":{"type":"text_delta","text":"hi"}}')).toBe("hi");
+    d.line('{"type":"message_delta","delta":{"stop_reason":null},"usage":{"output_tokens":7}}');
+    d.line('{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":15}}');
+    expect(d.usage).toEqual({ in: 128, out: 15 });
+  });
+
+  it("keeps an error frame where a chunk should be", () => {
+    const a = new StreamDecoder("anthropic");
+    a.line('{"type":"content_block_delta","delta":{"text":"half"}}');
+    a.line('{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}');
+    expect(a.error).toContain("overloaded_error");
+    expect(providerFailure(0, a.error!, "m", { provider: "anthropic" }).status).toBe(503);
+    const g = new StreamDecoder("groq");
+    expect(g.line('{"error":{"message":"x"}}')).toBe("");
+    expect(g.error).toBe('{"error":{"message":"x"}}');
+    // text that mentions "error" is text
+    expect(g.line('{"choices":[{"delta":{"content":"\\"error\\": none"}}]}')).toBe('"error": none');
+  });
+
+  it("decodes a byte stream and flushes a last frame without a newline", async () => {
+    const { stream, decoder } = decodeStream("groq");
+    const enc = new TextEncoder();
+    const chunks = [
+      'data: {"choices":[{"delta":{"content":"sum"}}]}\n\ndata: {"choices":[{"del',
+      'ta":{"content":"mary"}}]}\n\ndata: {"choices":[],"usage":{"prompt_tokens":2,"completion_tokens":1}}',
+    ];
+    const src = new ReadableStream<Uint8Array>({
+      start(c) {
+        for (const ch of chunks) c.enqueue(enc.encode(ch));
+        c.close();
+      },
+    });
+    const reader = src.pipeThrough(stream).getReader();
+    let text = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      text += new TextDecoder().decode(value);
+    }
+    expect(text).toBe("summary");
+    expect(decoder.usage).toEqual({ in: 2, out: 1 });
+  });
+
+  it("asks openai and groq for usage, anthropic sends it anyway", () => {
+    expect(JSON.parse(buildRequest("groq", "gsk_x", "s", "u").body).stream_options).toEqual({
+      include_usage: true,
+    });
+    expect(JSON.parse(buildRequest("openai", "sk-x", "s", "u").body).stream_options).toEqual({
+      include_usage: true,
+    });
+    expect(JSON.parse(buildRequest("anthropic", "sk-ant-x", "s", "u").body)).not.toHaveProperty(
+      "stream_options"
+    );
+    expect(
+      JSON.parse(buildFollowupRequest("groq", "gsk_x", "s", [], "q").body).stream_options
+    ).toEqual({ include_usage: true });
   });
 });

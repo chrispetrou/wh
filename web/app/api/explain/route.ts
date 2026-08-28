@@ -21,6 +21,7 @@ import { prompt, type PromptMode } from "@/lib/explain/prompt";
 import {
   buildFollowupRequest,
   buildRequest,
+  decodeStream,
   DEFAULT_MODELS,
   detectProvider,
   droppedFailure,
@@ -28,11 +29,11 @@ import {
   MODEL_RE,
   networkFailure,
   providerFailure,
-  sseToText,
   type ChatMessage,
   type ProviderName,
   type ProviderRequest,
 } from "@/lib/explain/providers";
+import { headroom } from "@/lib/explain/usage";
 import { getSession, touch } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -99,14 +100,20 @@ async function streamProvider(
   }
 
   const encoder = new TextEncoder();
-  const textStream = upstream.body.pipeThrough(sseToText(provider));
+  const { stream: textStream, decoder } = decodeStream(provider);
+  const left = headroom(provider, upstream.headers);
   const out = new ReadableStream<Uint8Array>({
     async start(controller) {
       controller.enqueue(encoder.encode(meta));
-      const reader = textStream.getReader();
+      const reader = upstream.body!.pipeThrough(textStream).getReader();
       // sentinel lines must start a line of their own, without leaving a
       // blank one behind
       let atLineStart = true;
+      const sentinel = (line: string) => {
+        controller.enqueue(encoder.encode(`${atLineStart ? "" : "\n"}${line}\n`));
+        atLineStart = true;
+      };
+      let dropped = false;
       try {
         for (;;) {
           const { done, value } = await reader.read();
@@ -115,8 +122,20 @@ async function streamProvider(
           controller.enqueue(value);
         }
       } catch {
-        const f = droppedFailure(request.url);
-        controller.enqueue(encoder.encode(`${atLineStart ? "" : "\n"}[wd:error] ${f.error}\n`));
+        dropped = true;
+        sentinel(`[wd:error] ${droppedFailure(request.url).error}`);
+      }
+      if (!dropped) {
+        // an error the provider sent on the 200 stream, in our words
+        if (decoder.error) {
+          const f = providerFailure(0, decoder.error, model, { provider });
+          sentinel(`[wd:error] ${f.error}`);
+          if (f.hint) sentinel(`[wd:hint] ${f.hint}`);
+        }
+        // what the answer cost and what is left, for the client's count
+        if (decoder.usage || left) {
+          sentinel(`[wd:usage] ${JSON.stringify({ ...(decoder.usage ?? {}), left })}`);
+        }
       }
       controller.close();
     },
