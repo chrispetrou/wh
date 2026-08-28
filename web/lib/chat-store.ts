@@ -1,6 +1,7 @@
 // per-repo chat state living outside react, so a streaming explain keeps
 // flowing while another tab is in the foreground. persisted to
 // sessionStorage (200-line cap) exactly like the old in-component state.
+import type { Block } from "./block";
 
 export interface ChatLine {
   text: string;
@@ -8,6 +9,65 @@ export interface ChatLine {
   prefix?: string;
   head?: { text: string; cls: string };
   tail?: { text: string; cls: string };
+  // a structured entry (commit graph, history, prs) rendered as a grid
+  block?: Block;
+  // a line that is a button
+  action?: "signin";
+}
+
+// the block the arrow keys drive right now. what is open in a block is
+// kept apart (see `expanded`), so a command launched from a panel does
+// not close the panel it came from
+export interface Live {
+  line: number; // index into lines
+  selected: number | null;
+}
+
+// lazily fetched details for the expanded panel, keyed "commit:<sha>"
+// or "pr:<num>"; never persisted
+export interface CommitDetail {
+  kind: "commit";
+  sha: string;
+  parents: string[];
+  author: { login: string | null; name: string; date: string };
+  committer: { name: string; date: string };
+  message: string;
+  url: string;
+  files: Array<{ path: string; additions: number; deletions: number; status: string }>;
+}
+export interface PrDetail {
+  kind: "pr";
+  num: number;
+  title: string;
+  body: string;
+  author: string;
+  head: string;
+  base: string;
+  flags: string[];
+  url: string;
+  commits: number;
+  files: Array<{ path: string; additions: number; deletions: number; status: string }>;
+}
+export type Detail = CommitDetail | PrDetail;
+
+// why a detail fetch failed; `auth` means the github session is gone
+export interface DetailFailure {
+  failed: string;
+  auth: boolean;
+}
+export type DetailState = Detail | "loading" | DetailFailure;
+
+// a row of the last log, so row numbers resolve to shas client-side
+export interface LogRow {
+  sha: string;
+  parent: string | null;
+  subject: string;
+}
+
+// a row of the last prs list, for the completion menu after `pr `
+export interface PrPick {
+  num: number;
+  title: string;
 }
 
 export interface ChatMessage {
@@ -23,9 +83,19 @@ interface Entry {
   abort?: AbortController;
   // follow-up context: alternating user/assistant, [0] is the payload
   context?: ChatMessage[];
-  // branch names for completion, default branch first
+  // branch names for completion, default branch first, then tags
   branches?: string[];
+  // rows of the last log, numbered from 1
+  log?: LogRow[];
+  // rows of the last prs list
+  prs?: PrPick[];
+  live?: Live;
+  // open rows per block line: shas, or pr numbers as strings
+  expanded?: Map<number, string[]>;
+  details?: Map<string, DetailState>;
 }
+
+const NONE: string[] = [];
 
 const MAX_CONTEXT_MESSAGES = 26;
 const MAX_CONTEXT_CHARS = 400_000;
@@ -134,6 +204,52 @@ export const chatStore = {
   },
   setBranches(key: string, branches: string[]) {
     entry(key).branches = branches;
+    emit(key);
+  },
+  logRows(key: string): LogRow[] | undefined {
+    return entry(key).log;
+  },
+  setLogRows(key: string, rows: LogRow[] | undefined) {
+    entry(key).log = rows;
+    emit(key);
+  },
+  prRows(key: string): PrPick[] | undefined {
+    return entry(key).prs;
+  },
+  setPrRows(key: string, rows: PrPick[] | undefined) {
+    entry(key).prs = rows;
+    emit(key);
+  },
+  live(key: string): Live | undefined {
+    return entry(key).live;
+  },
+  setLive(key: string, live: Live | undefined) {
+    entry(key).live = live;
+    emit(key);
+  },
+  expanded(key: string, line: number): string[] {
+    return entry(key).expanded?.get(line) ?? NONE;
+  },
+  setExpanded(key: string, line: number, ids: string[]) {
+    const e = entry(key);
+    e.expanded = new Map(e.expanded ?? []);
+    e.expanded.set(line, ids);
+    emit(key);
+  },
+  clearExpanded(key: string) {
+    entry(key).expanded = undefined;
+    emit(key);
+  },
+  detail(key: string, id: string): DetailState | undefined {
+    return entry(key).details?.get(id);
+  },
+  details(key: string): Map<string, DetailState> | undefined {
+    return entry(key).details;
+  },
+  setDetail(key: string, id: string, d: DetailState) {
+    const e = entry(key);
+    e.details = new Map(e.details ?? []);
+    e.details.set(id, d);
     emit(key);
   },
   setContext(key: string, firstUser: string, firstAnswer: string) {

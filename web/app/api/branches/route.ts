@@ -1,8 +1,8 @@
-// branch names for the chat's completion menu; failures come back as an
-// empty list so the menu just stays quiet
+// branch and tag names for the chat's completion menu; failures come
+// back as empty lists so the menu just stays quiet
 import { NextRequest, NextResponse } from "next/server";
-import { branchNames } from "@/lib/github";
-import { getSession } from "@/lib/session";
+import { branchNames, tagNames } from "@/lib/github";
+import { getSession, touch } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -11,15 +11,15 @@ export async function GET(req: NextRequest) {
   if (!session.token) {
     return NextResponse.json({ error: "sign in required" }, { status: 401 });
   }
+  await touch(session);
   const owner = req.nextUrl.searchParams.get("owner");
   const repo = req.nextUrl.searchParams.get("repo");
   if (!owner || !repo) {
     return NextResponse.json({ error: "bad request" }, { status: 400 });
   }
-  try {
-    const branches = await branchNames(session.token, owner, repo);
-    return NextResponse.json({ branches });
-  } catch {
-    return NextResponse.json({ branches: [] });
-  }
+  const [branches, tags] = await Promise.all([
+    branchNames(session.token, owner, repo).catch(() => [] as string[]),
+    tagNames(session.token, owner, repo).catch(() => [] as string[]),
+  ]);
+  return NextResponse.json({ branches, tags });
 }

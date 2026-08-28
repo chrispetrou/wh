@@ -3,17 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { RepoItem } from "@/lib/github";
-
-function relTime(iso: string): string {
-  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return "just now";
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  if (s < 86400 * 30) return `${Math.floor(s / 86400)}d`;
-  return new Date(iso)
-    .toLocaleDateString("en-GB", { month: "short", day: "numeric" })
-    .toLowerCase();
-}
+import { relTime } from "@/lib/utils";
 
 export function RepoPicker({ repos }: { repos: RepoItem[] }) {
   const router = useRouter();
@@ -73,7 +63,7 @@ export function RepoPicker({ repos }: { repos: RepoItem[] }) {
 
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col"
+      className="page-in flex min-h-0 flex-1 flex-col"
       onClick={() => {
         if (!window.getSelection()?.toString()) inputRef.current?.focus();
       }}

@@ -86,6 +86,10 @@ means `<ref>..HEAD`) and streams a plain-English summary with a
 "watch out" section. Lockfiles, vendored paths, and binaries are
 excluded, and large diffs are truncated (see `shared/prompts/`).
 `--dry-run` prints the preprocessed payload instead of asking the model.
+`--changelog` asks for release notes instead of a review: `added`,
+`changed`, `fixed`, `removed` sections (empty ones left out), one line
+per user-visible change, so `wd explain --changelog v1.1..v1.2` drafts
+the notes for a tag.
 
 ```
 $ wd rm
@@ -137,8 +141,13 @@ worktrees           new, ls, switch, rm           (cli only)
 explain a range     wd explain main..dev          diff main..dev
 last N commits      wd explain HEAD~3..           explain the last 3 commits
                                                   (on <branch> to scope it)
-a pull request      fetch the branch, then a range what changed in pr #42
-branches            wd ls (worktrees, dirty)      branches (ahead/behind)
+a pull request      fetch the branch, then a range prs, then what changed in pr #42
+one commit          wd explain <sha>~1..<sha>     explain <sha>
+the graph           git log --graph               log, then explain 3
+time and people     git log --since, --author     since yesterday by me, standup
+release notes       wd explain --changelog v1..   changelog v1.1..v1.2
+a file's story      git log -p -- <path>          history <path>, why <path>:<line>
+branches            wd ls (worktrees, dirty)      branches (ahead/behind), tags
 follow-ups          (not yet)                     plain words after an explain
 raw payload         wd explain --dry-run          /show
 keys                env: ANTHROPIC_API_KEY, ...   pasted once, kept in browser
@@ -169,7 +178,12 @@ sign in with GitHub, pick a repo, and ask in a full-page terminal:
 explain the last 5 commits [on <branch>]
 what changed in pr #42
 diff main..release
-branches
+log [N] [on <branch>]
+explain 3 (a row of the log), explain 2..5, explain <sha>
+since yesterday | this week | v1.2 [by <login>], standup
+changelog [v1.1..v1.2 | since v1.2 | pr #42]
+history src/git.rs, explain the last 5 commits in src/, why src/git.rs:42
+branches, tags, prs [open | closed | mine]
 ```
 
 Phrasing is flexible: `summarize`, `show me`, and `what changed in` work
@@ -183,6 +197,76 @@ branch, and `branches` lists branches numbered with ahead/behind
 against the default (the web cousin of `wd ls`; worktrees themselves
 live in the cli). Wherever a branch name belongs, the completion menu
 drops down with the repo's branches, filtered as you type.
+
+`log` draws the commit graph inside the transcript: colored lanes with
+curves where branches fork and join, a dot per commit (a ring for
+merges), branch and tag chips, subject, author, age, and sha, every
+row numbered. All branches are walked (the default branch first, up to
+12 heads; the footer says how many were left out) and unioned into one
+graph; `log 100` shows more rows, `log on <branch>` scopes to one
+branch. After a `log`, the arrow keys walk its rows (`›` marks the one
+selected), enter opens a commit in place (full sha, parents, author,
+message, files with their +/−, and `explain`, `changelog`, `github ↗`
+actions; hovering a file offers `explain` (that commit, cut to the
+file), `history` (the file's story), and `copy` (its path); a parent
+jumps to its row), esc steps back out, and clicking a row does the
+same. A command launched from an open panel leaves the panel open, so
+the answer below it still shows where it came from; only /clear closes
+them all. The session slides: every request renews it, so it only ends
+after a week of silence, with a hard ceiling of 30 days from sign-in
+(or when the token is revoked). If it has
+ended, an opened row or a command says `your github session ended` and
+offers `sign in again →`: the page goes to GitHub and comes straight
+back to the same repo, transcript intact, prints `→ signed in as you`
+under the error, and reruns the command or reopens the row that
+failed. The numbers
+still work as words: `explain 3` explains that commit, `explain 2..5`
+the span of rows (from the parent of row 5 to row 2), and `explain
+<sha>` takes any sha directly; typing `explain ` with a log on screen
+offers the rows in the completion menu.
+
+Time and people work as words: `since yesterday`, `since monday`, `this
+week`, `last week`, `since 3 days ago`, `since 2026-08-20`, or `since
+v1.2` for a ref. Add `by <login>` for one person's commits, `by me` (or
+`what did i do this week`, `my commits since v1.2`) for your own, and
+`standup` for your commits since the last working day. Days follow your
+browser's clock. An empty window says `nothing since yesterday` and
+costs no model call.
+
+`changelog` frames any of those as release notes instead of a review:
+`changelog v1.1..v1.2`, `changelog since v1.2`, `release notes for pr
+#42`, `changelog of the last 10 commits`, or bare `changelog` for
+everything since the newest tag. The answer comes as `added`,
+`changed`, `fixed`, `removed` sections (empty ones left out), one line
+per user-visible change, the same contract as `wd explain --changelog`
+in the cli. `tags` lists tags newest first with their sha and age, and
+tag names join branch names in the completion menu wherever a ref
+belongs (`since `, `changelog `, ranges).
+
+`prs` lists open pull requests, most recently updated first (`closed
+prs`, `my prs`): number, title, `head → base`, author, age, and `draft`,
+`merged`, or `closed` where it applies. It is the same kind of block as
+the log: arrows and enter open a pr in place (state, branches,
+description, files, and `explain` / `changelog` actions). Typing `pr `
+afterwards offers those numbers in the completion menu, and `what
+changed in pr #42` shows the pr's state under its title: `draft`,
+`mergeable`, or `conflicts with base`.
+
+Files have a history too. `history src/git.rs` (or a directory, `on
+<branch>` to scope) lists the commits touching it as a log block
+without lanes, numbered and navigable the same way, so `explain 3`
+follows. (`log` is the whole repo across branches; `history` always
+takes a path.) Opening a row shows what the row already knows at once
+and fills in parents, message, and files as they arrive; nothing spins. Any explain takes `in <path>` to cut the
+diff down to one file or directory before the model sees it: `explain
+the last 5 commits in src/`, `what changed in src/git.rs since v1.2`,
+`changelog of pr 42 in docs/`; the header says `2 of 14 files, under
+src/`. And `why src/git.rs:42` (or `why line 42 of src/git.rs`, `on
+<ref>` to pick the version) blames the line, fetches the commit that
+last touched it cut down to that file, and asks the model why the line
+exists and what would break without it: a `why` section, then `watch
+out`, with the blaming commit noted under the header so `explain
+<sha>` can follow.
 
 It uses the same explain spec as the CLI (`shared/prompts/`), on your own
 LLM keys. The first time a repo opens with no key stored, the terminal
@@ -215,11 +299,19 @@ cmd+k jumps back to the repo picker.
 The transcript reads like the cli: your command in the accent color,
 `summary` and `watch out` in amber, a green `→` line when something
 changed (`→ model claude-sonnet-5`, `→ saved wd-owner-repo.txt`), an
-amber `error:` label when something failed, and muted gray for status
+amber `error:` label when something failed (in plain words, never the
+provider's raw json: `the diff is too big for gpt-5-mini: 17842 tokens,
+limit 8192`, followed by a muted line with the way out), and muted gray
+for status
 (`reading 3 commits · 14 files · +212 −87`). Each answer closes with its
 elapsed time and model (`· 8.4s · claude-opus-5`; `· stopped after 2.1s`
 if you pressed esc), commands and their output group into blocks, and
 scrolling up to read earlier output is never interrupted by new lines.
+Motion is quiet and short: state changes ease in (an error, a `→` line,
+a panel opening, a block landing, a page settling after navigation,
+the theme cross-fading), streamed text and anything driven by the
+keyboard never animate, and everything stops under
+`prefers-reduced-motion`.
 
 After an explain, plain words are follow-up questions: "why is that
 risky?", "which files touch auth?". Answers stay grounded in the same

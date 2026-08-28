@@ -47,6 +47,9 @@ WD_MODEL overrides the model.")]
         /// print the preprocessed payload instead of querying the model
         #[arg(long)]
         dry_run: bool,
+        /// release notes (added, changed, fixed, removed) instead of a review
+        #[arg(long)]
+        changelog: bool,
     },
     /// remove worktrees whose branches are merged
     Rm {

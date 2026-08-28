@@ -2,7 +2,7 @@ use crate::{git, llm, output, preprocess, WdError};
 use std::env;
 use std::io::Write;
 
-pub fn run(range: Option<&str>, dry_run: bool) -> Result<(), WdError> {
+pub fn run(range: Option<&str>, dry_run: bool, changelog: bool) -> Result<(), WdError> {
     let cwd = env::current_dir()?;
     let range = normalize(range);
 
@@ -33,7 +33,7 @@ pub fn run(range: Option<&str>, dry_run: bool) -> Result<(), WdError> {
     let getenv = |k: &str| env::var(k).ok();
     let provider = llm::choose(&getenv)?;
     let model = llm::model_for(&provider, &getenv);
-    let (system, user) = llm::prompt(&payload);
+    let (system, user) = llm::prompt(&payload, changelog);
 
     let mut printer = LinePrinter::new(output::color());
     llm::stream(&provider, &model, &system, &user, &mut |chunk| {
@@ -51,6 +51,16 @@ fn normalize(range: Option<&str>) -> String {
         Some(r) => format!("{r}..HEAD"),
     }
 }
+
+/// The section labels of both output contracts (review and changelog).
+const LABELS: [&str; 6] = [
+    "summary",
+    "watch out",
+    "added",
+    "changed",
+    "fixed",
+    "removed",
+];
 
 /// Streams chunks to stdout line by line, painting the contract's section
 /// labels amber like the landing demo.
@@ -79,7 +89,7 @@ impl LinePrinter {
     }
 
     fn paint(&self, line: &str) -> String {
-        if self.colored && (line.trim_end() == "summary" || line.trim_end() == "watch out") {
+        if self.colored && LABELS.contains(&line.trim_end()) {
             format!("\x1b[33m{line}\x1b[0m")
         } else {
             line.to_string()

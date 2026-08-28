@@ -45,7 +45,11 @@ fn main() {
         cli::Cmd::Ls => commands::ls::run(),
         cli::Cmd::Switch { query } => commands::switch::run(query.as_deref()),
         cli::Cmd::Init { shell } => commands::init::run(shell),
-        cli::Cmd::Explain { range, dry_run } => commands::explain::run(range.as_deref(), *dry_run),
+        cli::Cmd::Explain {
+            range,
+            dry_run,
+            changelog,
+        } => commands::explain::run(range.as_deref(), *dry_run, *changelog),
         cli::Cmd::Rm {
             name,
             dry_run,

@@ -72,4 +72,20 @@ describe("prompt", () => {
     expect(system).not.toContain("{{payload}}");
     expect(user).toBe("PAYLOAD");
   });
+
+  it("swaps the system prompt in changelog mode, same payload", () => {
+    const { system, user } = prompt("PAYLOAD", "changelog");
+    for (const label of ["added", "changed", "fixed", "removed"]) {
+      expect(system).toContain(`\n${label}\n`);
+    }
+    expect(system).not.toContain("watch out");
+    expect(user).toBe("PAYLOAD");
+  });
+
+  it("has a why section for line archaeology", () => {
+    const { system } = prompt("PAYLOAD", "why");
+    expect(system).toContain("\nwhy\n");
+    expect(system).toContain("\nwatch out\n");
+    expect(system).not.toContain("summary");
+  });
 });

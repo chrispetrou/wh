@@ -77,6 +77,69 @@ export interface ProviderRequest {
   body: string;
 }
 
+// a failed provider call, in our words: the message the provider sent
+// (never its raw json), the usual cases recognized, and a hint with the
+// way out where there is one
+export interface ProviderFailure {
+  status: number;
+  error: string;
+  hint?: string;
+}
+
+// the message inside the usual error bodies: {"error":{"message":..}}
+// (openai, groq, anthropic), {"error":".."} (ollama), or the text itself
+function providerMessage(body: string): string {
+  const text = body.trim();
+  try {
+    const j = JSON.parse(text) as { error?: { message?: string } | string; message?: string };
+    const m =
+      typeof j.error === "string" ? j.error : (j.error?.message ?? j.message);
+    if (typeof m === "string" && m.trim()) return m.trim();
+  } catch {
+    // not json
+  }
+  return text.replace(/\s+/g, " ").slice(0, 300);
+}
+
+const TOO_LARGE =
+  /too large|too long|context length|maximum context|tokens per minute|too many tokens|request_too_large|context_length_exceeded/i;
+
+// "Limit 8000, Requested 17842" (groq), "maximum context length is 8192
+// tokens. However, you requested 17842 tokens" (openai), "213000 tokens >
+// 200000 maximum" (anthropic)
+function tokenCounts(m: string): { requested: number; limit: number } | null {
+  let r = /limit (\d+), requested (\d+)/i.exec(m);
+  if (r) return { limit: +r[1], requested: +r[2] };
+  r = /context length is (\d+) tokens.*?requested (\d+) tokens/i.exec(m);
+  if (r) return { limit: +r[1], requested: +r[2] };
+  r = /(\d+) tokens > (\d+) maximum/i.exec(m);
+  if (r) return { requested: +r[1], limit: +r[2] };
+  return null;
+}
+
+export function providerFailure(status: number, body: string, model: string): ProviderFailure {
+  const message = providerMessage(body);
+  if (status === 401 || status === 403) {
+    return { status: 401, error: "provider rejected the key", hint: "/key <value> replaces it" };
+  }
+  if (TOO_LARGE.test(message)) {
+    const n = tokenCounts(message);
+    const size = n ? `: ${n.requested} tokens, limit ${n.limit}` : "";
+    return {
+      status: 413,
+      error: `the diff is too big for ${model}${size}`,
+      hint: "try fewer commits, cut it to a path (add: in src/), or /model one with a larger context",
+    };
+  }
+  if (status === 429) {
+    return { status: 429, error: "provider rate limit, try again in a moment" };
+  }
+  if (status === 404 || /model.*not (found|exist)|does not exist|unknown model/i.test(message)) {
+    return { status: 404, error: `provider has no model ${model}`, hint: "/model lists the ones it knows" };
+  }
+  return { status: 502, error: `provider error: ${message}` };
+}
+
 export function buildRequest(
   provider: ProviderName,
   key: string,

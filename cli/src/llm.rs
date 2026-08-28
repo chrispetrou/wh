@@ -80,19 +80,23 @@ fn valid_url(url: &str) -> bool {
 }
 
 /// (system, user) parts of shared/prompts/explain.md, split on the
-/// [system]/[user] marker lines. {{payload}} substitution happens here.
-pub fn prompt(payload: &str) -> (String, String) {
+/// [section] marker lines. {{payload}} substitution happens here. In
+/// changelog mode the [changelog] section is the system prompt.
+pub fn prompt(payload: &str, changelog: bool) -> (String, String) {
     let template = include_str!("../../shared/prompts/explain.md");
     let mut system = String::new();
     let mut user = String::new();
     let mut target: Option<&mut String> = None;
+    let system_marker = if changelog { "[changelog]" } else { "[system]" };
     for line in template.lines() {
         // any [section] line switches sections; unknown ones are skipped
         if line.starts_with('[') && line.ends_with(']') {
-            target = match line {
-                "[system]" => Some(&mut system),
-                "[user]" => Some(&mut user),
-                _ => None,
+            target = if line == system_marker {
+                Some(&mut system)
+            } else if line == "[user]" {
+                Some(&mut user)
+            } else {
+                None
             };
         } else if let Some(t) = target.as_deref_mut() {
             t.push_str(line);
@@ -339,10 +343,50 @@ pub fn stream(
         return Err(WdError::Msg(if tail.is_empty() {
             "provider returned no text".to_string()
         } else {
-            format!("provider error: {}", &tail[..tail.len().min(400)])
+            provider_failure(tail, model)
         }));
     }
     Ok(())
+}
+
+/// A failed reply in our words: the provider's message (never its raw
+/// json), the too-large case named with the counts and a way out.
+pub fn provider_failure(body: &str, model: &str) -> String {
+    let message = extract_string_field(body, "message")
+        .or_else(|| extract_string_field(body, "error"))
+        .unwrap_or_else(|| body.split_whitespace().collect::<Vec<_>>().join(" "));
+    let message = &message[..message.len().min(300)];
+    let lower = message.to_lowercase();
+    let too_large = [
+        "too large",
+        "too long",
+        "context length",
+        "maximum context",
+        "tokens per minute",
+        "too many tokens",
+    ]
+    .iter()
+    .any(|s| lower.contains(s));
+    if too_large {
+        let size = match (
+            number_after(message, "Limit "),
+            number_after(message, "Requested "),
+        ) {
+            (Some(limit), Some(requested)) => format!(": {requested} tokens, limit {limit}"),
+            _ => String::new(),
+        };
+        return format!(
+            "the diff is too big for {model}{size}\ntry fewer commits, a narrower range, or WD_MODEL with a larger context"
+        );
+    }
+    format!("provider error: {message}")
+}
+
+/// The integer right after `key` in `s`, if any.
+fn number_after(s: &str, key: &str) -> Option<u64> {
+    let rest = &s[s.find(key)? + key.len()..];
+    let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+    digits.parse().ok()
 }
 
 #[cfg(test)]
@@ -464,10 +508,38 @@ mod tests {
 
     #[test]
     fn splits_prompt_template() {
-        let (system, user) = prompt("PAYLOAD");
+        let (system, user) = prompt("PAYLOAD", false);
         assert!(system.contains("summary"));
         assert!(system.contains("watch out"));
         assert!(!system.contains("{{payload}}"));
+        assert_eq!(user, "PAYLOAD");
+    }
+
+    #[test]
+    fn provider_failures_are_in_our_words() {
+        let groq = r#"{"error":{"message":"Request too large for model `openai/gpt-oss-120b` in organization `org_x` service tier `on_demand` on tokens per minute (TPM): Limit 8000, Requested 17842, please reduce your message size and try again.","type":"tokens"}}"#;
+        let msg = provider_failure(groq, "openai/gpt-oss-120b");
+        assert!(msg
+            .starts_with("the diff is too big for openai/gpt-oss-120b: 17842 tokens, limit 8000"));
+        assert!(!msg.contains("org_x"));
+        assert!(msg.contains("try fewer commits"));
+        assert_eq!(
+            provider_failure(r#"{"error":"model not found"}"#, "m"),
+            "provider error: model not found"
+        );
+        assert_eq!(
+            provider_failure("bad gateway", "m"),
+            "provider error: bad gateway"
+        );
+    }
+
+    #[test]
+    fn changelog_mode_swaps_the_system_prompt() {
+        let (system, user) = prompt("PAYLOAD", true);
+        for label in ["added", "changed", "fixed", "removed"] {
+            assert!(system.contains(&format!("\n{label}\n")), "{label}");
+        }
+        assert!(!system.contains("watch out"));
         assert_eq!(user, "PAYLOAD");
     }
 }

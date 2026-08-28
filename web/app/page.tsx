@@ -91,7 +91,7 @@ export default async function Home({
   return (
     <div className="mx-auto max-w-[880px] px-6 pb-10">
       <SiteHeader />
-      <section className="pt-[88px] max-[560px]:pt-14">
+      <section className="page-in pt-[88px] max-[560px]:pt-14">
         <p>Ask questions about any repo. Explained in plain english.</p>
         <p className="mt-4 text-muted-foreground">
           pick a repo, then: explain the last 5 commits, what changed in pr

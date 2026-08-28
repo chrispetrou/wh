@@ -148,6 +148,36 @@ fn streams_from_fake_ollama() {
 }
 
 #[test]
+fn changelog_flag_sends_the_release_notes_prompt() {
+    let t = TestRepo::new();
+    t.write("a.txt", "one\n");
+    t.commit("first");
+    t.write("a.txt", "two\n");
+    t.commit("second");
+    let (url, server) = fake_server("application/x-ndjson", &[
+        "{\"message\":{\"role\":\"assistant\",\"content\":\"changed\\ntwo replaces one.\\n\"},\"done\":false}\n",
+        "{\"done\":true}\n",
+    ]);
+    t.wd()
+        .env("WD_PROVIDER", "ollama")
+        .env("WD_OLLAMA_URL", &url)
+        .env("WD_MODEL", "test-model")
+        .args(["explain", "--changelog"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("changed\ntwo replaces one."));
+    let request = server.join().unwrap();
+    assert!(
+        request.contains("release notes"),
+        "changelog system prompt should be sent"
+    );
+    assert!(
+        !request.contains("watch out"),
+        "review prompt must not be sent"
+    );
+}
+
+#[test]
 fn provider_error_body_is_surfaced() {
     let t = TestRepo::new();
     t.write("a.txt", "one\n");

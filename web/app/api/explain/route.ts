@@ -1,27 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
-import { parseCommand } from "@/lib/commands";
+import { LOG_DEFAULT, parseCommand } from "@/lib/commands";
 import {
   branchesText,
+  commitInput,
   compareRange,
   GithubError,
+  historyBlock,
   lastNCommits,
+  logBlock,
   prInput,
+  prsBlock,
+  sinceInput,
+  tagsText,
+  whyInput,
   type ExplainInput,
 } from "@/lib/github";
+import { filterDiff } from "@/lib/explain/filter";
 import { defaultCaps, defaultRules, preprocess, stats } from "@/lib/explain/preprocess";
-import { prompt } from "@/lib/explain/prompt";
+import { prompt, type PromptMode } from "@/lib/explain/prompt";
 import {
   buildFollowupRequest,
   buildRequest,
+  DEFAULT_MODELS,
   detectProvider,
   EFFORTS,
   MODEL_RE,
+  providerFailure,
   sseToText,
   type ChatMessage,
   type ProviderName,
   type ProviderRequest,
 } from "@/lib/explain/providers";
-import { getSession } from "@/lib/session";
+import { getSession, touch } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -32,6 +42,21 @@ const MAX_TOTAL_CHARS = 400_000;
 
 function err(status: number, message: string): NextResponse {
   return NextResponse.json({ error: message }, { status });
+}
+
+// a lookup answer: meta line, then text, no model
+function plain(meta: object, text: string): NextResponse {
+  return new NextResponse(JSON.stringify(meta) + "\n" + text, {
+    headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+  });
+}
+
+function githubFailure(e: unknown, destroy: () => void): NextResponse {
+  if (e instanceof GithubError) {
+    if (e.status === 401) destroy();
+    return err(e.status, e.message);
+  }
+  return err(502, "github request failed");
 }
 
 function validHistory(history: unknown): history is ChatMessage[] {
@@ -50,6 +75,7 @@ function validHistory(history: unknown): history is ChatMessage[] {
 async function streamProvider(
   request: ProviderRequest,
   provider: ProviderName,
+  model: string,
   meta: string
 ): Promise<NextResponse> {
   const upstream = await fetch(request.url, {
@@ -58,10 +84,10 @@ async function streamProvider(
     body: request.body,
   });
   if (!upstream.ok || !upstream.body) {
-    const body = (await upstream.text()).slice(0, 200);
-    if (upstream.status === 401) return err(401, "provider rejected the key");
-    if (upstream.status === 429) return err(429, "provider rate limit");
-    return err(502, `provider error: ${body.trim()}`);
+    // in our words, with a hint where there is a way out
+    const body = (await upstream.text()).slice(0, 4000);
+    const f = providerFailure(upstream.status, body, model);
+    return NextResponse.json({ error: f.error, hint: f.hint ?? null }, { status: f.status });
   }
 
   const encoder = new TextEncoder();
@@ -96,6 +122,7 @@ export async function POST(req: NextRequest) {
 
   const session = await getSession();
   if (!session.token) return err(401, "sign in required");
+  await touch(session);
 
   const key = req.headers.get("x-wd-provider-key") ?? "";
   const model = req.headers.get("x-wd-model") ?? "";
@@ -138,43 +165,118 @@ export async function POST(req: NextRequest) {
       model || undefined,
       effort || undefined
     );
-    return streamProvider(request, provider, JSON.stringify({ followup: true }) + "\n");
+    return streamProvider(
+      request,
+      provider,
+      model || DEFAULT_MODELS[provider],
+      JSON.stringify({ followup: true }) + "\n"
+    );
   }
 
   if (!input) return err(400, "bad request");
   const command = parseCommand(input);
   if (!command) return err(400, "unknown command");
 
-  // branches is a plain lookup: no diff, no model
+  const destroy = () => session.destroy();
+
+  // lookups: no diff, no model
   if (command.kind === "branches") {
     try {
-      const text = await branchesText(session.token, owner, repo);
-      return new NextResponse(JSON.stringify({ branches: true }) + "\n" + text, {
-        headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
-      });
+      return plain({ branches: true }, await branchesText(session.token, owner, repo));
     } catch (e) {
-      if (e instanceof GithubError) {
-        if (e.status === 401) session.destroy();
-        return err(e.status, e.message);
-      }
-      return err(502, "github request failed");
+      return githubFailure(e, destroy);
     }
   }
+  // blocks: structured rows the terminal renders as a grid, no model
+  if (command.kind === "log") {
+    try {
+      const log = await logBlock(session.token, owner, repo, command.n ?? LOG_DEFAULT, command.ref);
+      return plain({ block: log.block, rows: log.rows }, "");
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
+  if (command.kind === "tags") {
+    try {
+      return plain({ tags: true }, await tagsText(session.token, owner, repo));
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
+  if (command.kind === "prs") {
+    try {
+      const prs = await prsBlock(session.token, owner, repo, command.state, session.login ?? "");
+      return plain({ block: prs.block, rows: prs.rows }, "");
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
+  if (command.kind === "history") {
+    try {
+      const h = await historyBlock(session.token, owner, repo, command.path, command.ref);
+      return plain({ block: h.block, rows: h.rows }, "");
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
+  // row numbers only mean something next to the client's last log
+  if (command.kind === "row") return err(400, "run log first, then explain a row number");
+
+  // the browser's utc offset, so "today" is the user's day
+  const tz = Math.max(-840, Math.min(840, Number(req.headers.get("x-wd-tz") ?? 0) || 0));
 
   let data: ExplainInput;
+  let question = ""; // why: the line itself, after the payload
+  let mode: PromptMode = command.mode ?? "explain";
   try {
-    data =
-      command.kind === "last"
-        ? await lastNCommits(session.token, owner, repo, command.n, command.ref)
-        : command.kind === "pr"
-          ? await prInput(session.token, owner, repo, command.num)
-          : await compareRange(session.token, owner, repo, command.base, command.head);
-  } catch (e) {
-    if (e instanceof GithubError) {
-      if (e.status === 401) session.destroy();
-      return err(e.status, e.message);
+    if (command.kind === "why") {
+      const w = await whyInput(
+        session.token,
+        owner,
+        repo,
+        command.path,
+        command.line,
+        command.ref
+      );
+      question = w.question;
+      mode = "why";
+      data = w;
+    } else if (command.kind === "since") {
+      const r = await sinceInput(session.token, owner, repo, {
+        period: command.period,
+        author: command.author,
+        login: session.login ?? "",
+        now: Date.now(),
+        tz,
+      });
+      if ("empty" in r) return plain({ empty: r.empty }, "");
+      data = r;
+    } else {
+      data =
+        command.kind === "last"
+          ? await lastNCommits(session.token, owner, repo, command.n, command.ref)
+          : command.kind === "pr"
+            ? await prInput(session.token, owner, repo, command.num)
+            : command.kind === "commit"
+              ? await commitInput(session.token, owner, repo, command.sha)
+              : await compareRange(session.token, owner, repo, command.base, command.head);
     }
-    return err(502, "github request failed");
+  } catch (e) {
+    return githubFailure(e, destroy);
+  }
+
+  // a path cuts the diff down before anything is counted
+  if (command.path) {
+    const cut = filterDiff(data.diff, data.numstat, command.path);
+    if (!cut.kept) return plain({ empty: `nothing under ${command.path} in this range` }, "");
+    data = {
+      ...data,
+      diff: cut.diff,
+      numstat: cut.numstat,
+      note: [data.note, `${cut.kept} of ${cut.total} files, under ${command.path}`]
+        .filter(Boolean)
+        .join(" · "),
+    };
   }
 
   const { files, added, deleted } = stats(data.numstat);
@@ -186,6 +288,7 @@ export async function POST(req: NextRequest) {
     truncated: data.truncated,
     title: data.title ?? null,
     note: data.note ?? null,
+    mode,
   };
 
   if (!data.diff.trim()) {
@@ -204,9 +307,10 @@ export async function POST(req: NextRequest) {
   }
 
   if (!key || !provider) return err(401, "paste an api key first");
-  const { system, user } = prompt(payload);
+  const { system, user: userBase } = prompt(payload, mode);
+  const user = userBase + question;
   const request = buildRequest(provider, key, system, user, model || undefined, effort || undefined);
   // context lets the client hold the conversation for follow-up turns
   const meta = JSON.stringify({ ...metaBase, context: user }) + "\n";
-  return streamProvider(request, provider, meta);
+  return streamProvider(request, provider, model || DEFAULT_MODELS[provider], meta);
 }

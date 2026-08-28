@@ -102,6 +102,175 @@ describe("parseCommand", () => {
     expect(parseCommand("v1.2..HEAD")).toEqual({ kind: "range", base: "v1.2", head: "" });
   });
 
+  it("parses log shapes", () => {
+    expect(parseCommand("log")).toEqual({ kind: "log" });
+    expect(parseCommand("graph")).toEqual({ kind: "log" });
+    expect(parseCommand("git log")).toEqual({ kind: "log" });
+    expect(parseCommand("show the log")).toBeNull(); // "the" is not a ref
+    expect(parseCommand("show log")).toEqual({ kind: "log" });
+    expect(parseCommand("log 50")).toEqual({ kind: "log", n: 50 });
+    expect(parseCommand("log 999")).toEqual({ kind: "log", n: 200 });
+    expect(parseCommand("log on dev")).toEqual({ kind: "log", ref: "dev" });
+    expect(parseCommand("graph 20 on feat/x")).toEqual({ kind: "log", n: 20, ref: "feat/x" });
+    // history is a file's story, never the graph
+    expect(parseCommand("history")).toBeNull();
+  });
+
+  it("parses commits by sha and by log row", () => {
+    expect(parseCommand("explain a1b2c3d")).toEqual({ kind: "commit", sha: "a1b2c3d" });
+    expect(parseCommand("A1B2C3D")).toEqual({ kind: "commit", sha: "a1b2c3d" });
+    expect(parseCommand("show me 40cce0c2a1")).toEqual({ kind: "commit", sha: "40cce0c2a1" });
+    expect(parseCommand("explain 3")).toEqual({ kind: "row", from: 3 });
+    expect(parseCommand("3")).toEqual({ kind: "row", from: 3 });
+    expect(parseCommand("explain 2..5")).toEqual({ kind: "row", from: 2, to: 5 });
+    expect(parseCommand("5..2")).toEqual({ kind: "row", from: 2, to: 5 });
+    // six hex chars is too short to be a sha, and not a row either
+    expect(parseCommand("abc123")).toBeNull();
+    // sha ranges are plain ranges
+    expect(parseCommand("a1b2c3d..40cce0c")).toEqual({
+      kind: "range",
+      base: "a1b2c3d",
+      head: "40cce0c",
+    });
+  });
+
+  it("parses periods, refs, and authors", () => {
+    expect(parseCommand("since yesterday")).toEqual({ kind: "since", period: "yesterday" });
+    expect(parseCommand("what changed since Monday")).toEqual({
+      kind: "since",
+      period: "monday",
+    });
+    expect(parseCommand("explain this week")).toEqual({ kind: "since", period: "this week" });
+    expect(parseCommand("yesterday")).toEqual({ kind: "since", period: "yesterday" });
+    expect(parseCommand("since 2026-08-20")).toEqual({ kind: "since", period: "2026-08-20" });
+    expect(parseCommand("since v1.2")).toEqual({ kind: "since", period: "v1.2" });
+    expect(parseCommand("commits since last week by alice")).toEqual({
+      kind: "since",
+      period: "last week",
+      author: "alice",
+    });
+    expect(parseCommand("what did i do this week")).toEqual({
+      kind: "since",
+      period: "this week",
+      author: "me",
+    });
+    expect(parseCommand("my commits since v1.2")).toEqual({
+      kind: "since",
+      period: "v1.2",
+      author: "me",
+    });
+    expect(parseCommand("standup")).toEqual({ kind: "since", period: "standup", author: "me" });
+    expect(parseCommand("since 3 days ago")).toEqual({ kind: "since", period: "3 days ago" });
+    // a bare ref is not a command, and "since" wants one word for a ref
+    expect(parseCommand("main")).toBeNull();
+    expect(parseCommand("since the merge")).toBeNull();
+    expect(parseCommand("since main..dev")).toBeNull();
+  });
+
+  it("parses changelog mode and tags", () => {
+    expect(parseCommand("changelog")).toEqual({
+      kind: "since",
+      period: "latest tag",
+      mode: "changelog",
+    });
+    expect(parseCommand("changelog v1.1..v1.2")).toEqual({
+      kind: "range",
+      base: "v1.1",
+      head: "v1.2",
+      mode: "changelog",
+    });
+    expect(parseCommand("release notes for pr 42")).toEqual({
+      kind: "pr",
+      num: 42,
+      mode: "changelog",
+    });
+    expect(parseCommand("changelog since v1.2")).toEqual({
+      kind: "since",
+      period: "v1.2",
+      mode: "changelog",
+    });
+    expect(parseCommand("changelog of the last 10 commits")).toEqual({
+      kind: "last",
+      n: 10,
+      mode: "changelog",
+    });
+    // a lookup cannot be framed as release notes
+    expect(parseCommand("changelog branches")).toBeNull();
+    expect(parseCommand("tags")).toEqual({ kind: "tags" });
+    expect(parseCommand("list tags")).toEqual({ kind: "tags" });
+  });
+
+  it("parses pull request lists", () => {
+    expect(parseCommand("prs")).toEqual({ kind: "prs", state: "open" });
+    expect(parseCommand("open pull requests")).toEqual({ kind: "prs", state: "open" });
+    expect(parseCommand("closed prs")).toEqual({ kind: "prs", state: "closed" });
+    expect(parseCommand("prs closed")).toEqual({ kind: "prs", state: "closed" });
+    expect(parseCommand("my prs")).toEqual({ kind: "prs", state: "mine" });
+    expect(parseCommand("prs mine")).toEqual({ kind: "prs", state: "mine" });
+    expect(parseCommand("changelog prs")).toBeNull();
+  });
+
+  it("parses history, path cuts, and why", () => {
+    expect(parseCommand("history src/git.rs")).toEqual({ kind: "history", path: "src/git.rs" });
+    expect(parseCommand("history of src on dev")).toEqual({
+      kind: "history",
+      path: "src",
+      ref: "dev",
+    });
+    expect(parseCommand("history on dev")).toBeNull();
+
+    expect(parseCommand("explain the last 5 commits in src/git.rs")).toEqual({
+      kind: "last",
+      n: 5,
+      path: "src/git.rs",
+    });
+    expect(parseCommand("last 3 on dev in src")).toEqual({
+      kind: "last",
+      n: 3,
+      ref: "dev",
+      path: "src",
+    });
+    expect(parseCommand("what changed in src/git.rs since v1.2")).toEqual({
+      kind: "since",
+      period: "v1.2",
+      path: "src/git.rs",
+    });
+    expect(parseCommand("explain src/git.rs main..dev")).toEqual({
+      kind: "range",
+      base: "main",
+      head: "dev",
+      path: "src/git.rs",
+    });
+    expect(parseCommand("changelog of pr 42 in docs/")).toEqual({
+      kind: "pr",
+      num: 42,
+      mode: "changelog",
+      path: "docs/",
+    });
+    expect(parseCommand("explain 3 in src")).toEqual({ kind: "row", from: 3, path: "src" });
+    // the branch and pr forms keep their meaning
+    expect(parseCommand("what changed in feat/x")).toEqual({
+      kind: "range",
+      base: "",
+      head: "feat/x",
+    });
+    expect(parseCommand("what changed in pr #42")).toEqual({ kind: "pr", num: 42 });
+    expect(parseCommand("branches in src")).toBeNull();
+
+    expect(parseCommand("why src/git.rs:42")).toEqual({
+      kind: "why",
+      path: "src/git.rs",
+      line: 42,
+    });
+    expect(parseCommand("why line 7 of README.md on dev")).toEqual({
+      kind: "why",
+      path: "README.md",
+      line: 7,
+      ref: "dev",
+    });
+    expect(parseCommand("why")).toBeNull();
+  });
+
   it("rejects everything else", () => {
     expect(parseCommand("")).toBeNull();
     expect(parseCommand("hello")).toBeNull();

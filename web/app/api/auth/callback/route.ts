@@ -51,6 +51,11 @@ export async function GET(req: NextRequest) {
   const session = await getSession();
   session.token = token.access_token;
   session.login = user.login ?? "";
+  session.since = Date.now();
   await session.save();
-  return NextResponse.redirect(new URL("/repos", url));
+
+  // back to the transcript the session ended in, else the picker
+  const back = jar.get("wd_oauth_return")?.value;
+  jar.delete("wd_oauth_return");
+  return NextResponse.redirect(new URL(back && back.startsWith("/repos/") ? back : "/repos", url));
 }
