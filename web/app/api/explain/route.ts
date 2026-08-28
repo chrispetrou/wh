@@ -31,7 +31,7 @@ import {
   type ProviderName,
   type ProviderRequest,
 } from "@/lib/explain/providers";
-import { getSession } from "@/lib/session";
+import { getSession, touch } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -122,6 +122,7 @@ export async function POST(req: NextRequest) {
 
   const session = await getSession();
   if (!session.token) return err(401, "sign in required");
+  await touch(session);
 
   const key = req.headers.get("x-wd-provider-key") ?? "";
   const model = req.headers.get("x-wd-model") ?? "";

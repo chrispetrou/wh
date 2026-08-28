@@ -21,3 +21,9 @@ export const sessionOptions: SessionOptions = {
 export async function getSession(): Promise<IronSession<WdSession>> {
   return getIronSession<WdSession>(await cookies(), sessionOptions);
 }
+
+// sliding expiry: every api call re-issues the cookie, so a session ends
+// after a week of silence, never in the middle of a working day
+export async function touch(session: IronSession<WdSession>): Promise<void> {
+  if (session.token) await session.save();
+}

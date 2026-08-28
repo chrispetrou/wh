@@ -11,6 +11,8 @@ export interface ChatLine {
   tail?: { text: string; cls: string };
   // a structured entry (commit graph, history, prs) rendered as a grid
   block?: Block;
+  // a line that is a button
+  action?: "signin";
 }
 
 // the block the arrow keys drive right now. what is open in a block is
@@ -243,6 +245,14 @@ export const chatStore = {
   },
   details(key: string): Map<string, DetailState> | undefined {
     return entry(key).details;
+  },
+  // after a fresh sign-in: forget the fetches that died with the session
+  // so open rows fetch again
+  dropAuthFailures(key: string) {
+    const e = entry(key);
+    if (!e.details) return;
+    e.details = new Map([...e.details].filter(([, d]) => !(typeof d === "object" && "auth" in d && d.auth)));
+    emit(key);
   },
   setDetail(key: string, id: string, d: DetailState) {
     const e = entry(key);

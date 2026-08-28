@@ -15,6 +15,7 @@ import {
   type PrDetail,
 } from "@/lib/chat-store";
 import type { LaneRow } from "@/lib/graph";
+import { signInAgain } from "@/lib/signin";
 import { relTime } from "@/lib/utils";
 
 const LANE_W = 14;
@@ -342,11 +343,7 @@ export function LogBlock({
                         <span className="text-wd-amber">error:</span>{" "}
                         {detail.auth ? "your github session ended" : detail.failed}
                       </div>
-                      {detail.auth ? (
-                        <a className="log-action" href="/api/auth/reset">
-                          sign in again <span className="text-wd-green">→</span>
-                        </a>
-                      ) : null}
+                      {detail.auth ? <SignInAgain storeKey={storeKey} /> : null}
                     </div>
                   ) : detail.kind === "commit" ? (
                     <CommitPanel d={detail} block={block} submit={submit} jump={(sha) => jumpTo(block, sha, line, storeKey, submit)} />
@@ -430,6 +427,31 @@ function PrCells({ row }: { row: PrRow }) {
         {relTime(row.updated)}
       </span>
     </>
+  );
+}
+
+// sign in again in a popup; once it reports back, the rows that died
+// with the old session fetch again on their own
+function SignInAgain({ storeKey }: { storeKey: string }) {
+  const [state, setState] = useState<"idle" | "waiting" | "closed">("idle");
+  if (state === "waiting") {
+    return <div className="text-muted-foreground">signing in with github in the other window</div>;
+  }
+  return (
+    <div>
+      <Action
+        onClick={() => {
+          setState("waiting");
+          void signInAgain().then((ok) => {
+            if (ok) chatStore.dropAuthFailures(storeKey);
+            else setState("closed");
+          });
+        }}
+      >
+        sign in again <span className="text-wd-green">→</span>
+      </Action>
+      {state === "closed" ? <span className="text-muted-foreground"> (the window closed first)</span> : null}
+    </div>
   );
 }
 

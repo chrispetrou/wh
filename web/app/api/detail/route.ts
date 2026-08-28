@@ -2,7 +2,7 @@
 // prs block: parents, author, message, files. read-only, fetched lazily
 import { NextRequest, NextResponse } from "next/server";
 import { commitDetail, GithubError, prDetail } from "@/lib/github";
-import { getSession } from "@/lib/session";
+import { getSession, touch } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -11,6 +11,7 @@ export async function GET(req: NextRequest) {
   if (!session.token) {
     return NextResponse.json({ error: "sign in required" }, { status: 401 });
   }
+  await touch(session);
   const q = req.nextUrl.searchParams;
   const owner = q.get("owner");
   const repo = q.get("repo");

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { blockText, type Block } from "@/lib/block";
 import { chatStore, type LogRow, type PrRow } from "@/lib/chat-store";
 import { commandHint, parseCommand } from "@/lib/commands";
+import { signInAgain } from "@/lib/signin";
 import { LogBlock } from "./log-block";
 import { relTime } from "@/lib/utils";
 import {
@@ -35,6 +36,7 @@ interface Line {
   head?: Head;
   tail?: Head; // trailing span, e.g. the muted status words of a branch row
   block?: Block; // a structured entry (log, history, prs) rendered as a grid
+  action?: "signin"; // a line that is a button: sign in again, in a popup
 }
 
 const CLS: Record<Cls, string> = {
@@ -653,11 +655,15 @@ export function TerminalChat({
           error?: string;
           hint?: string | null;
         } | null;
+        if (res.status === 401 && fail?.error?.includes("sign in")) {
+          // the github session ended: say so, offer to sign in without
+          // leaving the page, and rerun what failed once it is back
+          err("your github session ended");
+          push([{ text: "", cls: "", action: "signin" }]);
+          return null;
+        }
         err(fail?.error ?? `request failed (${res.status})`);
         if (fail?.hint) muted([fail.hint]);
-        if (res.status === 401 && fail?.error?.includes("sign in")) {
-          window.location.href = "/api/auth/reset";
-        }
         return null;
       }
       const reader = res.body.getReader();
@@ -773,6 +779,19 @@ export function TerminalChat({
       { metrics: true }
     );
     if (full?.trim()) chatStore.appendExchange(storeKey, question, full.trim());
+  };
+
+  // sign in again in a popup, then rerun the command that hit the wall
+  const reauth = async () => {
+    muted(["signing in with github in the other window"]);
+    const signed = await signInAgain();
+    if (!signed) {
+      muted(["the sign-in window closed first"]);
+      return;
+    }
+    ok("signed in");
+    chatStore.dropAuthFailures(storeKey);
+    if (lastCmdRef.current) submit(lastCmdRef.current);
   };
 
   const saveKey = (value: string, echoText: string) => {
@@ -1404,6 +1423,10 @@ export function TerminalChat({
                 repo={repo}
                 submit={(c) => submit(c)}
               />
+            ) : l.action === "signin" ? (
+              <button type="button" className="log-action" onClick={() => void reauth()}>
+                sign in again <span className="text-wd-green">→</span>
+              </button>
             ) : (
               <>
                 {l.head ? <span className={CLS[l.head.cls]}>{l.head.text}</span> : null}
