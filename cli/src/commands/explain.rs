@@ -1,6 +1,7 @@
-use crate::{git, llm, output, preprocess, WdError};
+use crate::{git, llm, output, preprocess, usage, WdError};
 use std::env;
 use std::io::Write;
+use std::time::Instant;
 
 pub fn run(range: Option<&str>, dry_run: bool, changelog: bool) -> Result<(), WdError> {
     let cwd = env::current_dir()?;
@@ -24,7 +25,7 @@ pub fn run(range: Option<&str>, dry_run: bool, changelog: bool) -> Result<(), Wd
     let n_commits = commits.lines().filter(|l| !l.trim().is_empty()).count();
     let (files, added, deleted) = preprocess::stats(&numstat);
     // the fancy minus and middle dot match the landing demo; ui only
-    output::info(&format!(
+    output::status(&format!(
         "reading {n_commits} {} · {files} {} · +{added} \u{2212}{deleted}",
         if n_commits == 1 { "commit" } else { "commits" },
         if files == 1 { "file" } else { "files" },
@@ -36,10 +37,31 @@ pub fn run(range: Option<&str>, dry_run: bool, changelog: bool) -> Result<(), Wd
     let (system, user) = llm::prompt(&payload, changelog);
 
     let mut printer = LinePrinter::new(output::color());
-    llm::stream(&provider, &model, &system, &user, &mut |chunk| {
+    let started = Instant::now();
+    let res = llm::stream(&provider, &model, &system, &user, &mut |chunk| {
         printer.push(chunk)
-    })?;
+    });
+    // whatever arrived is shown before an error is
     printer.finish();
+    let reply = res?;
+
+    // the closing line: elapsed, model, and the tokens when the provider
+    // said (shared/prompts/provider.md, "lines")
+    let mut closing = format!("· {:.1}s · {model}", started.elapsed().as_secs_f64());
+    if let Some(u) = reply.usage {
+        closing.push_str(&format!(
+            " · {} in · {} out",
+            usage::fmt_tokens(u.input),
+            usage::fmt_tokens(u.output)
+        ));
+    }
+    output::status(&closing);
+    let anthropic = matches!(provider, llm::Provider::Anthropic { .. });
+    if let Some(h) = usage::headroom(&reply.head, anthropic) {
+        if let Some(line) = usage::low_line(provider.name(), &h) {
+            output::warn(&line);
+        }
+    }
     Ok(())
 }
 

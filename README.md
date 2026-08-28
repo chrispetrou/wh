@@ -79,6 +79,7 @@ Moves session handling from cookies to signed JWTs.
 ...
 watch out
 logout() no longer clears server state ...
+· 8.4s · claude-opus-5 · 1.2k in · 340 out
 ```
 
 `wd explain [range]` reads a diff range (default `HEAD~1..`; a bare ref
@@ -90,6 +91,22 @@ excluded, and large diffs are truncated (see `shared/prompts/`).
 `changed`, `fixed`, `removed` sections (empty ones left out), one line
 per user-visible change, so `wd explain --changelog v1.1..v1.2` drafts
 the notes for a tag.
+
+The closing line is the elapsed time, the model, and what the answer
+cost in tokens when the provider says (all four do). Those two muted
+status lines go to stderr when stdout is not a terminal, so `wd explain
+--changelog v1.1.. > notes.md` holds only the notes. When a call fails
+the reason is one line in plain words under an amber `error:` label,
+never the provider's json, with the way out under it where there is
+one: `provider rejected the key` (and which variable to fix), `your groq
+key is out of credit` (and the billing page), `provider rate limit, try
+again in 12s`, `provider daily limit reached, resets in 3h 12m`, `the
+diff is too big for gpt-5-mini: 17842 tokens, limit 8192`, `provider is
+overloaded, try again in a moment`, `could not reach api.groq.com`. A
+key nearly out of headroom gets an amber warning after the answer (`low
+on groq tokens: 8.2k of 100k left, resets in 42s`). No provider exposes
+an account balance to an api key, so the cli keeps no running total; the
+web terminal counts one per key in your browser.
 
 ```
 $ wd rm
@@ -117,6 +134,8 @@ WD_PROVIDER         force one of: anthropic, openai, groq, ollama
 WD_MODEL            override the model for any provider
 WD_OLLAMA_URL       default http://localhost:11434
 WD_GROQ_URL         default https://api.groq.com/openai
+WD_OPENAI_URL       default https://api.openai.com
+WD_ANTHROPIC_URL    default https://api.anthropic.com
 ```
 
 Paid keys win the auto-detect so nobody is silently downgraded;

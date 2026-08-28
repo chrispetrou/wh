@@ -6,6 +6,7 @@ mod llm;
 mod naming;
 mod output;
 mod preprocess;
+mod usage;
 
 use clap::Parser;
 use std::fmt;
@@ -58,7 +59,7 @@ fn main() {
         } => commands::rm::run(name.as_deref(), *dry_run, *yes, *force),
     };
     if let Err(e) = res {
-        eprintln!("{e}");
+        output::error(&e.to_string());
         std::process::exit(1);
     }
 }

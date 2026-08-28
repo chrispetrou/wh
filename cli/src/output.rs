@@ -31,6 +31,50 @@ pub fn info(msg: &str) {
     println!("{}", muted(msg));
 }
 
+fn stderr_colored() -> bool {
+    std::io::stderr().is_terminal() && env::var_os("NO_COLOR").is_none()
+}
+
+/// A status line beside an answer (`reading 3 commits ...`, `· 4.1s ·
+/// model`): stdout when it is a terminal, stderr when stdout is piped
+/// somewhere, so `wd explain > notes.md` holds only the answer.
+pub fn status(msg: &str) {
+    if std::io::stdout().is_terminal() {
+        info(msg);
+    } else if stderr_colored() {
+        eprintln!("\x1b[2m{msg}\x1b[0m");
+    } else {
+        eprintln!("{msg}");
+    }
+}
+
+/// An error on stderr: amber `error:` label, then the message; any
+/// further lines (the way out) muted.
+pub fn error(msg: &str) {
+    let mut lines = msg.lines();
+    let first = lines.next().unwrap_or("");
+    if stderr_colored() {
+        eprintln!("\x1b[33merror:\x1b[0m {first}");
+        for l in lines {
+            eprintln!("\x1b[2m{l}\x1b[0m");
+        }
+    } else {
+        eprintln!("error: {first}");
+        for l in lines {
+            eprintln!("{l}");
+        }
+    }
+}
+
+/// A warning on stderr, amber.
+pub fn warn(msg: &str) {
+    if stderr_colored() {
+        eprintln!("\x1b[33m{msg}\x1b[0m");
+    } else {
+        eprintln!("{msg}");
+    }
+}
+
 pub fn muted(s: &str) -> String {
     if color() {
         format!("\x1b[2m{s}\x1b[0m")
