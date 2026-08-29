@@ -32,6 +32,45 @@ pub fn run_ok(dir: &Path, args: &[&str]) -> bool {
         .unwrap_or(false)
 }
 
+/// The ref merges and pr drafts are judged against: origin's HEAD when
+/// known, else local main/master.
+pub fn default_ref(dir: &Path) -> Result<String, WdError> {
+    if let Ok(r) = run(
+        dir,
+        &[
+            "symbolic-ref",
+            "--quiet",
+            "--short",
+            "refs/remotes/origin/HEAD",
+        ],
+    ) {
+        if !r.is_empty() {
+            return Ok(r);
+        }
+    }
+    for b in ["main", "master"] {
+        if run_ok(
+            dir,
+            &[
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                &format!("refs/heads/{b}"),
+            ],
+        ) {
+            return Ok(b.to_string());
+        }
+    }
+    Err(WdError::Msg("cannot determine default branch".into()))
+}
+
+/// The checked-out branch, or None when detached.
+pub fn current_branch(dir: &Path) -> Option<String> {
+    run(dir, &["rev-parse", "--abbrev-ref", "HEAD"])
+        .ok()
+        .filter(|b| !b.is_empty() && b != "HEAD")
+}
+
 pub fn toplevel(dir: &Path) -> Result<PathBuf, WdError> {
     Ok(PathBuf::from(run(dir, &["rev-parse", "--show-toplevel"])?))
 }

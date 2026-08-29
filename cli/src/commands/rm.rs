@@ -14,39 +14,8 @@ pub fn run(name: Option<&str>, dry_run: bool, yes: bool, force: bool) -> Result<
     }
 }
 
-/// The ref merges are judged against: origin's HEAD when known, else local
-/// main/master. Squash merges are invisible to ancestor checks; the escape
-/// hatch is `wd rm <name> --force`.
-fn default_ref(cwd: &Path) -> Result<String, WdError> {
-    if let Ok(r) = git::run(
-        cwd,
-        &[
-            "symbolic-ref",
-            "--quiet",
-            "--short",
-            "refs/remotes/origin/HEAD",
-        ],
-    ) {
-        if !r.is_empty() {
-            return Ok(r);
-        }
-    }
-    for b in ["main", "master"] {
-        if git::run_ok(
-            cwd,
-            &[
-                "rev-parse",
-                "--verify",
-                "--quiet",
-                &format!("refs/heads/{b}"),
-            ],
-        ) {
-            return Ok(b.to_string());
-        }
-    }
-    Err(WdError::Msg("cannot determine default branch".into()))
-}
-
+/// Squash merges are invisible to ancestor checks; the escape hatch is
+/// `wd rm <name> --force`.
 fn merged(cwd: &Path, sha: &str, default: &str) -> bool {
     git::run_ok(cwd, &["merge-base", "--is-ancestor", sha, default])
 }
@@ -73,7 +42,7 @@ fn prune(
     cwd: &Path,
     current: Option<&Path>,
 ) -> Result<(), WdError> {
-    let default = default_ref(cwd)?;
+    let default = git::default_ref(cwd)?;
     let mut candidates = Vec::new();
     for w in wts {
         if w.is_main || w.is_bare || w.locked || w.prunable || is_current(w, current) {
@@ -183,7 +152,7 @@ fn remove_named(
         }
         match &w.branch {
             Some(b) => {
-                let default = default_ref(cwd)?;
+                let default = git::default_ref(cwd)?;
                 if !merged(cwd, &w.head, &default) {
                     return Err(WdError::Msg(format!("{b} is not merged (use --force)")));
                 }

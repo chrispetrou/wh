@@ -116,6 +116,57 @@ describe("parseCommand", () => {
     expect(parseCommand("history")).toBeNull();
   });
 
+  it("parses log filters: one author, a window, either order", () => {
+    expect(parseCommand("log by alice")).toEqual({ kind: "log", author: "alice" });
+    expect(parseCommand("log 100 by me")).toEqual({ kind: "log", n: 100, author: "me" });
+    expect(parseCommand("git log by Me")).toEqual({ kind: "log", author: "me" });
+    expect(parseCommand("log on dev by renovate[bot]")).toEqual({
+      kind: "log",
+      ref: "dev",
+      author: "renovate[bot]",
+    });
+    expect(parseCommand("log since yesterday")).toEqual({ kind: "log", since: "yesterday" });
+    expect(parseCommand("graph since Monday")).toEqual({ kind: "log", since: "monday" });
+    expect(parseCommand("log since 3 days ago")).toEqual({ kind: "log", since: "3 days ago" });
+    expect(parseCommand("log since v1.2")).toEqual({ kind: "log", since: "v1.2" });
+    expect(parseCommand("log 50 since this week by alice")).toEqual({
+      kind: "log",
+      n: 50,
+      since: "this week",
+      author: "alice",
+    });
+    expect(parseCommand("log by alice since 3 days ago")).toEqual({
+      kind: "log",
+      since: "3 days ago",
+      author: "alice",
+    });
+    expect(parseCommand("log 20 on dev since 2026-08-20 by me")).toEqual({
+      kind: "log",
+      n: 20,
+      ref: "dev",
+      since: "2026-08-20",
+      author: "me",
+    });
+    // a leading verb is not a path called log
+    expect(parseCommand("show log since yesterday")).toEqual({ kind: "log", since: "yesterday" });
+    expect(parseCommand("explain log since v1.2")).toEqual({ kind: "log", since: "v1.2" });
+    // `on` belongs before the filters; a ref is one word, never a range
+    expect(parseCommand("log since v1.2 on dev")).toBeNull();
+    expect(parseCommand("log since the merge")).toBeNull();
+    expect(parseCommand("log since main..dev")).toBeNull();
+    expect(parseCommand("log by")).toBeNull();
+    expect(parseCommand("log by alice by bob")).toBeNull();
+    // the log is not a diff, so changelog and paths keep rejecting it
+    expect(parseCommand("changelog log since v1.2")).toBeNull();
+    expect(parseCommand("log by alice in src")).toBeNull();
+    // the since command is untouched
+    expect(parseCommand("since yesterday by alice")).toEqual({
+      kind: "since",
+      period: "yesterday",
+      author: "alice",
+    });
+  });
+
   it("parses commits by sha and by log row", () => {
     expect(parseCommand("explain a1b2c3d")).toEqual({ kind: "commit", sha: "a1b2c3d" });
     expect(parseCommand("A1B2C3D")).toEqual({ kind: "commit", sha: "a1b2c3d" });
@@ -165,6 +216,36 @@ describe("parseCommand", () => {
     expect(parseCommand("main")).toBeNull();
     expect(parseCommand("since the merge")).toBeNull();
     expect(parseCommand("since main..dev")).toBeNull();
+  });
+
+  it("parses describe mode", () => {
+    expect(parseCommand("describe pr 42")).toEqual({ kind: "pr", num: 42, mode: "describe" });
+    expect(parseCommand("pr description for #42")).toEqual({ kind: "pr", num: 42, mode: "describe" });
+    expect(parseCommand("wd describe pr 42")).toEqual({ kind: "pr", num: 42, mode: "describe" });
+    expect(parseCommand("describe feat/auth")).toEqual({
+      kind: "range",
+      base: "",
+      head: "feat/auth",
+      mode: "describe",
+    });
+    expect(parseCommand("draft a pr for main..dev")).toEqual({
+      kind: "range",
+      base: "main",
+      head: "dev",
+      mode: "describe",
+    });
+    expect(parseCommand("describe the last 3 commits")).toEqual({ kind: "last", n: 3, mode: "describe" });
+    expect(parseCommand("describe pr 42 in docs/")).toEqual({
+      kind: "pr",
+      num: 42,
+      path: "docs/",
+      mode: "describe",
+    });
+    expect(parseCommand("describe 3")).toEqual({ kind: "row", from: 3, mode: "describe" });
+    // needs a target, and lookups have no diff to draft from
+    expect(parseCommand("describe")).toBeNull();
+    expect(parseCommand("describe branches")).toBeNull();
+    expect(parseCommand("describe log")).toBeNull();
   });
 
   it("parses changelog mode and tags", () => {

@@ -140,7 +140,7 @@ function CommitSkeleton({ row }: { row: CommitRow }) {
         <br />
         <Skel w={30} /> <Skel w={8} />
       </div>
-      <div className="mt-2 text-muted-foreground">explain · changelog</div>
+      <div className="mt-2 text-muted-foreground">explain · changelog · describe</div>
     </div>
   );
 }
@@ -168,7 +168,7 @@ function PrSkeleton({ row }: { row: PrRow }) {
       <div className="mt-2">
         <Skel w={26} /> <Skel w={8} />
       </div>
-      <div className="mt-2 text-muted-foreground">explain · changelog</div>
+      <div className="mt-2 text-muted-foreground">explain · changelog · describe</div>
     </div>
   );
 }
@@ -584,6 +584,8 @@ function CommitPanel({
         <Action onClick={() => submit(`explain ${d.sha.slice(0, 7)}`)}>explain</Action>
         <span className="text-muted-foreground"> · </span>
         <Action onClick={() => submit(`changelog ${d.sha.slice(0, 7)}`)}>changelog</Action>
+        <span className="text-muted-foreground"> · </span>
+        <Action onClick={() => submit(`describe ${d.sha.slice(0, 7)}`)}>describe</Action>
         {d.url ? (
           <>
             <span className="text-muted-foreground"> · </span>
@@ -626,6 +628,8 @@ function PrPanel({ d, submit }: { d: PrDetail; submit: (c: string) => void }) {
         <Action onClick={() => submit(`pr ${d.num}`)}>explain</Action>
         <span className="text-muted-foreground"> · </span>
         <Action onClick={() => submit(`changelog pr ${d.num}`)}>changelog</Action>
+        <span className="text-muted-foreground"> · </span>
+        <Action onClick={() => submit(`describe pr ${d.num}`)}>describe</Action>
         {d.url ? (
           <>
             <span className="text-muted-foreground"> · </span>

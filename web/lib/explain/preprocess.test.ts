@@ -82,6 +82,17 @@ describe("prompt", () => {
     expect(user).toBe("PAYLOAD");
   });
 
+  it("swaps the system prompt in describe mode for a pr draft", () => {
+    const { system, user } = prompt("PAYLOAD", "describe");
+    for (const label of ["title", "description", "testing"]) {
+      expect(system).toContain(`\n${label}\n`);
+    }
+    expect(system).toContain("pull request");
+    expect(system).not.toContain("watch out");
+    expect(system).not.toContain("release notes");
+    expect(user).toBe("PAYLOAD");
+  });
+
   it("has a why section for line archaeology", () => {
     const { system } = prompt("PAYLOAD", "why");
     expect(system).toContain("\nwhy\n");

@@ -126,6 +126,121 @@ describe("logBlock", () => {
     expect(log.block.rows).toHaveLength(2);
     await expect(logBlock("t", "o", "r", 10, "nope")).rejects.toThrow("branch nope not found");
   });
+
+  // a filtered log: the api does the filtering on every walk, the rows
+  // come back flat (no rails), newest first, and spans are off
+  function filteredRepo(perWalk: (q: URLSearchParams) => unknown[]) {
+    const calls: string[] = [];
+    stub({});
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+      const path = url.replace("https://api.github.com", "");
+      calls.push(path);
+      if (path === "/repos/o/r") return Response.json({ default_branch: "main" });
+      if (path.startsWith("/repos/o/r/branches"))
+        return Response.json([
+          { name: "main", commit: { sha: SHA("m") } },
+          { name: "feat", commit: { sha: SHA("f") } },
+        ]);
+      if (path.startsWith("/repos/o/r/tags")) return Response.json([]);
+      if (path === `/repos/o/r/commits/v1`) return Response.json(C);
+      if (path === `/repos/o/r/commits/nope`) return new Response("{}", { status: 404 });
+      if (path.startsWith("/repos/o/r/commits?"))
+        return Response.json(perWalk(new URL(url).searchParams));
+      return new Response("{}", { status: 404 });
+    });
+    return calls;
+  }
+  const NOW = Date.parse("2026-08-27T12:00:00Z");
+  const shas = (log: Awaited<ReturnType<typeof logBlock>>) => {
+    if (log.block.kind !== "log") throw new Error("expected a log block");
+    return log.block.rows.map((r) => r.sha[0]);
+  };
+  const walksOf = (calls: string[]) =>
+    calls.filter((c) => c.startsWith("/repos/o/r/commits?")).map((c) => new URL(`https://x${c}`).searchParams);
+
+  it("filters by author on every walk and draws the rows flat", async () => {
+    // the api answers out of order and with duplicates across walks
+    const calls = filteredRepo((q) => (q.get("sha") === "main" ? [C, A] : [F, C]));
+    const log = await logBlock("t", "o", "r", 40, undefined, {
+      author: "renovate[bot]",
+      login: "chris",
+      now: NOW,
+      tz: 0,
+    });
+    for (const q of walksOf(calls)) expect(q.get("author")).toBe("renovate[bot]");
+    expect(calls.find((c) => c.includes("author="))).toContain("author=renovate%5Bbot%5D");
+    const b = log.block;
+    if (b.kind !== "log") throw new Error("expected a log block");
+    expect(b.lanes).toBe(0);
+    expect(b.rows.map((r) => [r.sha[0], r.graph])).toEqual([
+      ["a", undefined],
+      ["f", undefined],
+      ["c", undefined],
+    ]);
+    expect(b.rows[1].refs).toEqual([{ name: "feat", kind: "branch" }]);
+    expect(b.footer).toEqual(["3 commits by renovate[bot] · 2 branches"]);
+    expect(log.spans).toBe(false);
+    expect(log.rows.map((r) => r.sha[0])).toEqual(["a", "f", "c"]);
+  });
+
+  it("resolves `me`, passes a period as since/until, and says the latest when cut", async () => {
+    const calls = filteredRepo(() => [M, A, F, C]);
+    const log = await logBlock("t", "o", "r", 2, "main", {
+      author: "me",
+      since: "yesterday",
+      login: "chris",
+      now: NOW,
+      tz: 0,
+    });
+    const [q] = walksOf(calls);
+    expect(q.get("author")).toBe("chris");
+    expect(q.get("since")).toBe("2026-08-26T00:00:00.000Z");
+    expect(q.get("until")).toBe("2026-08-27T00:00:00.000Z");
+    expect(q.get("per_page")).toBe("2");
+    expect(shas(log)).toEqual(["m", "a"]);
+    expect(log.block.footer).toEqual(["the latest 2 commits on main by chris, yesterday"]);
+  });
+
+  it("takes a ref as the start of the window and leaves the ref itself out", async () => {
+    const calls = filteredRepo(() => [A, F, C]);
+    const log = await logBlock("t", "o", "r", 40, undefined, {
+      since: "v1",
+      login: "chris",
+      now: NOW,
+      tz: 0,
+    });
+    expect(calls).toContain("/repos/o/r/commits/v1");
+    for (const q of walksOf(calls)) {
+      expect(q.get("since")).toBe(C.commit.committer.date);
+      expect(q.get("author")).toBeNull();
+    }
+    expect(shas(log)).toEqual(["a", "f"]);
+    expect(log.block.footer).toEqual(["2 commits, since v1 · 2 branches"]);
+    await expect(
+      logBlock("t", "o", "r", 40, undefined, { since: "nope", login: "chris", now: NOW, tz: 0 })
+    ).rejects.toThrow("unknown ref nope");
+  });
+
+  it("says when nothing matches, and that by wants a login", async () => {
+    filteredRepo(() => []);
+    const log = await logBlock("t", "o", "r", 40, "feat", {
+      author: "alice",
+      since: "this week",
+      login: "chris",
+      now: NOW,
+      tz: 0,
+    });
+    expect(log.block.rows).toEqual([]);
+    expect(log.block.footer).toEqual(["no commits this week by alice on feat (by takes a github login)"]);
+    expect(log.spans).toBe(false);
+    const bare = await logBlock("t", "o", "r", 40, undefined, {
+      since: "today",
+      login: "chris",
+      now: NOW,
+      tz: 0,
+    });
+    expect(bare.block.footer).toEqual(["no commits today"]);
+  });
 });
 
 describe("sinceInput", () => {
@@ -339,11 +454,20 @@ describe("prs", () => {
           state: "open",
           merged: false,
           mergeable: false,
+          body: "  the body\n",
+          head: { ref: "feat/x" },
+          base: { ref: "main" },
         });
       }
     );
     const input = await prInput("t", "o", "r", 5);
     expect(input.note).toBe("draft · conflicts with base");
+    // what describe mode relays after the payload
+    expect(input.describe).toEqual({
+      base: "main",
+      head: "feat/x",
+      pr: { num: 5, title: "t", body: "  the body\n" },
+    });
     expect(prFlags({ draft: false, state: "open", merged: false, mergeable: null })).toEqual([]);
     expect(prFlags({ draft: false, state: "open", merged: false, mergeable: true })).toEqual([
       "mergeable",

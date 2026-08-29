@@ -7,6 +7,7 @@ import { chatStore, type LogRow, type PrPick } from "@/lib/chat-store";
 import { commandHint, parseCommand } from "@/lib/commands";
 import { signInAgain, takeResume } from "@/lib/signin";
 import { LogBlock } from "./log-block";
+import { ModelGlyph } from "./glyph";
 import { relTime } from "@/lib/utils";
 import {
   DEFAULT_MODELS,
@@ -17,7 +18,8 @@ import {
   SUGGESTED_MODELS,
   type ProviderName,
 } from "@/lib/explain/providers";
-import { keyStore } from "@/lib/key-store";
+import { keyStore, type Left } from "@/lib/key-store";
+import { fmtTokens, lowLine, usageParts } from "@/lib/explain/usage";
 import { currentTheme, switchTheme, type Theme } from "./theme-toggle";
 
 type Cls = "p" | "c" | "o" | "g" | "a" | "x" | "r" | "f" | "";
@@ -89,8 +91,19 @@ function tagLine(text: string): Line {
   };
 }
 
-// the section labels of both output contracts, painted amber
-const LABELS = new Set(["summary", "watch out", "added", "changed", "fixed", "removed", "why"]);
+// the section labels of every output contract, painted amber
+const LABELS = new Set([
+  "summary",
+  "watch out",
+  "added",
+  "changed",
+  "fixed",
+  "removed",
+  "title",
+  "description",
+  "testing",
+  "why",
+]);
 
 // urls in output become quiet accent links
 const URL_RE = /\bhttps?:\/\/[^\s]+|\bgithub\.com\/[^\s]+/g;
@@ -136,6 +149,7 @@ interface ExplainMeta {
   tags?: boolean;
   block?: Block; // log, history, prs: rendered as a grid, no text follows
   rows?: LogRow[] | PrPick[]; // the block's rows for `explain 3` and `pr ` completion
+  spans?: boolean; // false when the rows are not contiguous (a filtered log, a history)
   empty?: string; // "nothing since yesterday": no diff, no model call
 }
 
@@ -151,10 +165,12 @@ const HELP: HelpRow[] = [
   ["what changed in pr #N (or in <branch>)", ""],
   ["diff main..dev (any two refs)", ""],
   ["log [N] [on <branch>]", "the commit graph, rows numbered"],
+  ["log since <period> [by <login>]", "the same, filtered: one window, one author, drawn flat"],
   ["explain 3, explain 2..5", "rows of the last log"],
   ["explain <sha>", "one commit"],
   ["since yesterday [by me]", "a period, a ref, one author; standup"],
   ["changelog [range]", "release notes: added, changed, fixed, removed"],
+  ["describe pr #N | <branch> | range", "a pr title and description, ready to paste (/copy)"],
   ["history <path>", "commits touching a file or dir, numbered"],
   ["... in <path>", "any explain, cut down to a file or dir"],
   ["why <path>:<line>", "why a line exists (blame, in plain words)"],
@@ -165,6 +181,7 @@ const HELP: HelpRow[] = [
   "slash commands:",
   ["/repos", "switch repo"],
   ["/key <value>", "add an llm key (/key clear [provider] removes)"],
+  ["/usage", "tokens on each key since it was saved (/usage reset)"],
   ["/model <name>", "pick the model; another provider's switches to it"],
   ["/effort <level>", "reasoning effort (model support varies)"],
   ["/theme <t>", "auto, light, or dark"],
@@ -239,6 +256,10 @@ function keyArgs(): string[] {
   return ["clear", ...keyStore.providers().map((p) => `clear ${p}`)];
 }
 
+function usageArgs(): string[] {
+  return ["reset", ...keyStore.providers().map((p) => `reset ${p}`)];
+}
+
 // the completion menu: commands, their descriptions, and their options
 interface CmdSpec {
   name: string;
@@ -250,6 +271,7 @@ const COMMANDS: CmdSpec[] = [
   { name: "/help", desc: "all commands and keys" },
   { name: "/repos", desc: "switch repo" },
   { name: "/key", desc: "add an llm key", args: keyArgs },
+  { name: "/usage", desc: "tokens per key", args: usageArgs },
   { name: "/model", desc: "pick the model", args: modelArgs },
   { name: "/effort", desc: "reasoning effort", args: effortArgs },
   { name: "/theme", desc: "light or dark", args: ["auto", "light", "dark"] },
@@ -299,7 +321,7 @@ function branchSlot(input: string): BranchSlot | null {
   // "since <ref>" anywhere at the end, and the first side of a changelog range
   m = /^((?:wd\s+)?(?:.*\s)?since\s+)([^\s.]*)$/i.exec(input);
   if (m) return { prefix: m[1], partial: m[2] };
-  m = /^((?:wd\s+)?(?:changelog|release\s+notes)\s+)([^\s.]*)$/i.exec(input);
+  m = /^((?:wd\s+)?(?:changelog|release\s+notes|describe)\s+)([^\s.]*)$/i.exec(input);
   if (m) return { prefix: m[1], partial: m[2] };
   m = /^((?:(?:wd\s+)?(?:diff|compare|explain)\s+)?\S*?\.{2,3})(\S*)$/i.exec(input);
   if (m && m[1].includes("..")) return { prefix: m[1], partial: m[2] };
@@ -317,7 +339,7 @@ function rowSlot(input: string): BranchSlot | null {
 // "pr " with a prs list on screen offers its numbers
 function prSlot(input: string): BranchSlot | null {
   const m =
-    /^((?:wd\s+)?(?:(?:explain|changelog|release\s+notes)\s+(?:for\s+)?|what\s+changed\s+in\s+)?(?:pr|pull\s+request)\s*#?)(\d{0,6})$/i.exec(
+    /^((?:wd\s+)?(?:(?:explain|changelog|release\s+notes|describe|draft\s+pr|pr\s+description)\s+(?:for\s+)?|what\s+changed\s+in\s+)?(?:pr|pull\s+request)\s*#?)(\d{0,6})$/i.exec(
       input
     );
   return m ? { prefix: m[1], partial: m[2] } : null;
@@ -433,6 +455,49 @@ function providerInfo(): string {
 function modelName(): string {
   const a = keyStore.active();
   return a ? keyStore.model(a) || DEFAULT_MODELS[a] : "";
+}
+
+// "aug 27"
+function monthDay(ms: number): string {
+  return new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric" }).toLowerCase();
+}
+
+// the footer's " · 12.4k tokens": in + out on the active key since it
+// was saved; nothing at 0
+function usageInfo(): string {
+  const a = keyStore.active();
+  const u = a ? keyStore.usage(a) : null;
+  const total = u ? u.in + u.out : 0;
+  return total ? ` · ${fmtTokens(total)} tokens` : "";
+}
+
+// the /info row
+function usageInfoRow(): string {
+  const a = keyStore.active();
+  const u = a ? keyStore.usage(a) : null;
+  if (!u) return "nothing counted yet";
+  return `${fmtTokens(u.in + u.out)} tokens on ${a} since ${monthDay(u.since)}, /usage for the breakdown`;
+}
+
+// the /usage table: one row per provider, then the last headroom
+function usageLines(): string[] {
+  const a = keyStore.active();
+  const rows = PROVIDERS.map((p) => {
+    if (!keyStore.hasKey(p)) return `${p.padEnd(11)}no key`;
+    const u = keyStore.usage(p);
+    if (!u) return `${p.padEnd(11)}nothing yet${p === a ? " (active)" : ""}`;
+    const n = u.answers === 1 ? "answer" : "answers";
+    return `${p.padEnd(11)}${fmtTokens(u.in)} in · ${fmtTokens(u.out)} out · ${u.answers} ${n} · since ${monthDay(u.since)}${p === a ? " (active)" : ""}`;
+  });
+  const left = a ? keyStore.usage(a)?.left : undefined;
+  if (left) {
+    const parts = [
+      left.tokens ? `${fmtTokens(left.tokens.left)} tokens` : "",
+      left.requests ? `${fmtTokens(left.requests.left)} requests` : "",
+    ].filter(Boolean);
+    if (parts.length) rows.push(`${"headroom".padEnd(11)}${parts.join(" · ")} left (as of the last answer)`);
+  }
+  return rows;
 }
 
 function seconds(ms: number): string {
@@ -630,19 +695,49 @@ export function TerminalChat({
     if (LABELS.has(t)) return { text, cls: "a" };
     if (t.startsWith("[wd:error] "))
       return { head: { text: "error:", cls: "a" }, text: ` ${t.slice(11)}`, cls: "" };
+    if (t.startsWith("[wd:hint] ")) return { text: t.slice(10), cls: "o" };
     return { text, cls: "" };
+  };
+
+  // the answer's own lines, for the follow-up context; the [wd:...]
+  // sentinel lines the route appends are not part of it
+  const answerRef = useRef("");
+  // what the route said the answer cost, parsed from its [wd:usage] line
+  const usageRef = useRef<{ in?: number; out?: number; left?: Left | null } | null>(null);
+
+  // every complete line passes here: sentinels are taken aside (nothing
+  // to show), the rest is kept for the context and returned to show
+  const sink = (line: string, complete: boolean): Line | null => {
+    if (line.startsWith("[wd:usage] ")) {
+      try {
+        usageRef.current = JSON.parse(line.slice(11));
+      } catch {
+        // a bad sentinel is nothing to show
+      }
+      return null;
+    }
+    if (!line.startsWith("[wd:")) answerRef.current += complete ? `${line}\n` : line;
+    return classify(line);
+  };
+
+  const takeUsage = () => {
+    const u = usageRef.current;
+    usageRef.current = null;
+    return u;
   };
 
   const appendChunk = (chunk: string) => {
     partialRef.current += chunk;
     const parts = partialRef.current.split("\n");
     partialRef.current = parts.pop() ?? "";
-    if (parts.length) push(parts.map(classify));
+    const rows = parts.map((p) => sink(p, true)).filter((l): l is Line => l !== null);
+    if (rows.length) push(rows);
   };
 
   const flushPartial = () => {
     if (partialRef.current) {
-      push([classify(partialRef.current)]);
+      const row = sink(partialRef.current, false);
+      if (row) push([row]);
       partialRef.current = "";
     }
   };
@@ -661,7 +756,8 @@ export function TerminalChat({
     streamModeRef.current = opts.raw ? "diff" : "text";
     chatStore.setStreaming(storeKey, true, abort);
     const t0 = Date.now();
-    let full = "";
+    answerRef.current = "";
+    usageRef.current = null;
     let done = false;
     try {
       const res = await fetch("/api/explain", {
@@ -708,14 +804,24 @@ export function TerminalChat({
           metaDone = true;
         }
         if (buf) {
-          full += buf;
           appendChunk(buf);
           buf = "";
         }
       }
       flushPartial();
       done = true;
-      if (opts.metrics) muted([`· ${seconds(Date.now() - t0)} · ${modelName()}`]);
+      if (opts.metrics) {
+        // count first, then push: the pushed line is what re-renders the
+        // footer, which reads the count
+        const u = takeUsage();
+        const active = keyStore.active();
+        const counted = u && typeof u.in === "number" ? { in: u.in, out: u.out ?? 0 } : null;
+        if (active) keyStore.addUsage(active, counted?.in ?? 0, counted?.out ?? 0, u?.left);
+        const cost = usageParts(counted);
+        muted([`· ${seconds(Date.now() - t0)} · ${modelName()}${cost ? ` · ${cost}` : ""}`]);
+        const low = active ? lowLine(active, u?.left) : null;
+        if (low) enter([{ text: low, cls: "a" }]);
+      }
     } catch (e) {
       if ((e as Error).name !== "AbortError") {
         err("connection interrupted");
@@ -729,7 +835,7 @@ export function TerminalChat({
         chatStore.setStreaming(storeKey, false);
       }
     }
-    return done ? full : null;
+    return done ? answerRef.current : null;
   };
 
   const run = async (command: string, raw = false) => {
@@ -760,7 +866,11 @@ export function TerminalChat({
             if (meta.block.kind === "prs") {
               chatStore.setPrRows(storeKey, (meta.rows as PrPick[] | undefined) ?? []);
             } else {
-              chatStore.setLogRows(storeKey, (meta.rows as LogRow[] | undefined) ?? []);
+              chatStore.setLogRows(
+                storeKey,
+                (meta.rows as LogRow[] | undefined) ?? [],
+                meta.spans !== false
+              );
             }
             if (meta.block.rows.length) {
               chatStore.setLive(storeKey, {
@@ -841,6 +951,34 @@ export function TerminalChat({
         chatStore.setLive(storeKey, undefined);
         chatStore.clearExpanded(storeKey);
         break;
+      case "usage": {
+        echo(raw);
+        const [verb, which] = arg.split(/\s+/);
+        const how = "usage: /usage reset [provider] starts the count over";
+        if (!arg) {
+          muted(
+            keyStore.providers().length
+              ? [...usageLines(), how]
+              : ["no key set; the count starts when one is saved."]
+          );
+        } else if (verb !== "reset") {
+          muted([how]);
+        } else if (!which) {
+          keyStore.resetUsage();
+          ok("usage", "count started over for every key");
+        } else {
+          const target = PROVIDERS.find((p) => p === which);
+          if (!target) {
+            muted([how]);
+          } else if (!keyStore.hasKey(target)) {
+            muted([`no ${target} key stored.`]);
+          } else {
+            keyStore.resetUsage(target);
+            ok("usage", `count started over for ${target}`);
+          }
+        }
+        break;
+      }
       case "key": {
         const usage = "usage: /key <value> adds or replaces, /key clear [provider] removes";
         const [verb, which] = arg.split(/\s+/);
@@ -967,6 +1105,7 @@ export function TerminalChat({
           `repo      ${owner}/${repo}`,
           `provider  ${providerInfo()}`,
           `keys      ${keyStore.providers().join(", ") || "none"}`,
+          `usage     ${usageInfoRow()}`,
           `theme     ${currentTheme()}`,
           `font      ${pref("wd_font") || "default"} · ${pref("wd_fontsize") || "13"}px · ligatures ${pref("wd_lig") === "off" ? "off" : "on"}`,
           `context   ${ctx ? `active (${ctx.length} messages), follow-ups on` : "none, run a command first"}`,
@@ -1147,6 +1286,12 @@ export function TerminalChat({
         resolved = a.sha;
         muted([`row ${cmd.from}: ${a.sha.slice(0, 7)} ${a.subject}`]);
       } else {
+        // a filtered log or a history skips commits between its rows, so
+        // a span would pull in what is not on screen
+        if (!chatStore.logSpans(storeKey)) {
+          muted(["these rows are not contiguous; explain one row at a time"]);
+          return;
+        }
         if (!b.parent) {
           muted([`row ${cmd.to} is the first commit; try explain ${cmd.from}..${cmd.to - 1}`]);
           return;
@@ -1155,7 +1300,7 @@ export function TerminalChat({
         muted([`rows ${cmd.from}..${cmd.to}: ${b.sha.slice(0, 7)} to ${a.sha.slice(0, 7)}`]);
       }
       if (cmd.path) resolved = `${resolved} in ${cmd.path}`;
-      if (cmd.mode === "changelog") resolved = `changelog ${resolved}`;
+      if (cmd.mode) resolved = `${cmd.mode} ${resolved}`;
       lastCmdRef.current = resolved;
       void run(resolved);
       return;
@@ -1554,11 +1699,13 @@ export function TerminalChat({
       ) : null}
       <div
         className="pt-1.5 text-muted-foreground"
-        data-tip="the model runs on your key; /model changes it"
+        data-tip="the model runs on your key; /model changes it. tokens are counted here since the key was saved; /usage for the breakdown"
       >
         {/* localStorage reads must wait for mount or hydration breaks */}
+        {mounted && keyStore.active() ? <ModelGlyph /> : null}
         {mounted ? providerInfo() : " "}
         {mounted && activeEffort() && !effortIgnored() ? ` · effort ${activeEffort()}` : ""}
+        {mounted ? usageInfo() : ""}
       </div>
     </div>
   );

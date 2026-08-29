@@ -118,3 +118,53 @@ describe("key store", () => {
     expect(s.active()).toBeNull();
   });
 });
+
+describe("usage count", () => {
+  it("adds up per provider and remembers the last headroom", () => {
+    const s = createKeyStore(memory());
+    s.addKey("gsk_1");
+    expect(s.usage("groq")).toBeNull();
+    s.addUsage("groq", 1000, 200);
+    s.addUsage("groq", 500, 40, { tokens: { left: 900, limit: 1000 } });
+    const u = s.usage("groq")!;
+    expect(u.in).toBe(1500);
+    expect(u.out).toBe(240);
+    expect(u.answers).toBe(2);
+    expect(u.since).toBeGreaterThan(0);
+    expect(u.left).toEqual({ tokens: { left: 900, limit: 1000 } });
+    // no headroom this time keeps the last one
+    s.addUsage("groq", 1, 1);
+    expect(s.usage("groq")!.left).toEqual({ tokens: { left: 900, limit: 1000 } });
+    expect(s.usage("anthropic")).toBeNull();
+  });
+
+  it("starts over when the key is replaced, removed, or reset", () => {
+    const s = createKeyStore(memory());
+    s.addKey("gsk_1");
+    s.addKey("sk-ant-1");
+    s.addUsage("groq", 10, 5);
+    s.addUsage("anthropic", 7, 3);
+    s.addKey("gsk_2");
+    expect(s.usage("groq")).toBeNull();
+    expect(s.usage("anthropic")!.in).toBe(7);
+    s.addUsage("groq", 2, 2);
+    s.resetUsage("groq");
+    expect(s.usage("groq")).toBeNull();
+    s.addUsage("groq", 2, 2);
+    s.removeKey("groq");
+    expect(s.usage("groq")).toBeNull();
+    s.addUsage("anthropic", 1, 1);
+    s.resetUsage();
+    expect(s.usage("anthropic")).toBeNull();
+    s.addUsage("anthropic", 1, 1);
+    s.removeKey();
+    expect(s.usage("anthropic")).toBeNull();
+  });
+
+  it("ignores a malformed count", () => {
+    const s = createKeyStore(memory({ wd_keys: '{"groq":"gsk_1"}', wd_usage: '{"groq":"nope"}' }));
+    expect(s.usage("groq")).toBeNull();
+    const t = createKeyStore(memory({ wd_keys: '{"groq":"gsk_1"}', wd_usage: '{"groq":"{\\"in\\":\\"x\\"}"}' }));
+    expect(t.usage("groq")).toBeNull();
+  });
+});

@@ -12,6 +12,24 @@ const KEYS = "wd_keys";
 const ACTIVE = "wd_provider";
 const MODELS = "wd_models";
 const EFFORTS = "wd_efforts";
+// tokens since each key was saved; no provider tells a balance to a key,
+// so this is the only count there is
+const USAGE = "wd_usage";
+
+// what the last answer said was left on the key (see lib/explain/usage.ts)
+export interface Left {
+  tokens?: { left: number; limit: number };
+  requests?: { left: number; limit: number };
+  reset?: string;
+}
+
+export interface UsageRecord {
+  in: number;
+  out: number;
+  answers: number;
+  since: number; // ms epoch, when the count started
+  left?: Left;
+}
 
 // pre per-provider storage; migrated on first read
 const LEGACY_KEY = "wd_key";
@@ -116,6 +134,8 @@ export function createKeyStore(storage: StorageLike) {
       const replaced = Boolean(keys()[p]);
       patch(KEYS, p, key);
       set(ACTIVE, p);
+      // a new key starts a new count
+      patch(USAGE, p, "");
       return { provider: p, replaced };
     },
     removeKey(p?: ProviderName) {
@@ -124,12 +144,47 @@ export function createKeyStore(storage: StorageLike) {
         set(ACTIVE, "");
         set(MODELS, "");
         set(EFFORTS, "");
+        set(USAGE, "");
         return;
       }
       patch(KEYS, p, "");
       patch(MODELS, p, "");
       patch(EFFORTS, p, "");
+      patch(USAGE, p, "");
       if (get(ACTIVE) === p) set(ACTIVE, providers()[0] ?? "");
+    },
+    usage(p: ProviderName): UsageRecord | null {
+      const raw = getSlots(USAGE)[p];
+      if (!raw) return null;
+      try {
+        const u = JSON.parse(raw) as Partial<UsageRecord>;
+        if (typeof u.in !== "number" || typeof u.out !== "number") return null;
+        return {
+          in: u.in,
+          out: u.out,
+          answers: typeof u.answers === "number" ? u.answers : 0,
+          since: typeof u.since === "number" ? u.since : 0,
+          left: u.left && typeof u.left === "object" ? u.left : undefined,
+        };
+      } catch {
+        return null;
+      }
+    },
+    // one answer's tokens onto the count; `left` replaces the last headroom
+    addUsage(p: ProviderName, inTokens: number, outTokens: number, left?: Left | null) {
+      const prev = this.usage(p);
+      const next: UsageRecord = {
+        in: (prev?.in ?? 0) + Math.max(0, inTokens),
+        out: (prev?.out ?? 0) + Math.max(0, outTokens),
+        answers: (prev?.answers ?? 0) + 1,
+        since: prev?.since || Date.now(),
+        left: left ?? prev?.left,
+      };
+      patch(USAGE, p, JSON.stringify(next));
+    },
+    resetUsage(p?: ProviderName) {
+      if (p) patch(USAGE, p, "");
+      else set(USAGE, "");
     },
     model(p: ProviderName): string {
       migrate();

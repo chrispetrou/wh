@@ -87,6 +87,7 @@ interface Entry {
   branches?: string[];
   // rows of the last log, numbered from 1
   log?: LogRow[];
+  logSpans?: boolean; // the rows are contiguous, so `explain 2..5` is a range
   // rows of the last prs list
   prs?: PrPick[];
   live?: Live;
@@ -209,8 +210,13 @@ export const chatStore = {
   logRows(key: string): LogRow[] | undefined {
     return entry(key).log;
   },
-  setLogRows(key: string, rows: LogRow[] | undefined) {
-    entry(key).log = rows;
+  logSpans(key: string): boolean {
+    return entry(key).logSpans ?? true;
+  },
+  setLogRows(key: string, rows: LogRow[] | undefined, spans = true) {
+    const e = entry(key);
+    e.log = rows;
+    e.logSpans = spans;
     emit(key);
   },
   prRows(key: string): PrPick[] | undefined {

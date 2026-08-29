@@ -6,6 +6,7 @@ mod llm;
 mod naming;
 mod output;
 mod preprocess;
+mod usage;
 
 use clap::Parser;
 use std::fmt;
@@ -49,7 +50,17 @@ fn main() {
             range,
             dry_run,
             changelog,
-        } => commands::explain::run(range.as_deref(), *dry_run, *changelog),
+            describe,
+        } => {
+            let mode = if *describe {
+                llm::Mode::Describe
+            } else if *changelog {
+                llm::Mode::Changelog
+            } else {
+                llm::Mode::Explain
+            };
+            commands::explain::run(range.as_deref(), *dry_run, mode)
+        }
         cli::Cmd::Rm {
             name,
             dry_run,
@@ -58,7 +69,7 @@ fn main() {
         } => commands::rm::run(name.as_deref(), *dry_run, *yes, *force),
     };
     if let Err(e) = res {
-        eprintln!("{e}");
+        output::error(&e.to_string());
         std::process::exit(1);
     }
 }

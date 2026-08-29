@@ -15,22 +15,26 @@ import {
   whyInput,
   type ExplainInput,
 } from "@/lib/github";
+import { describeTurn } from "@/lib/explain/context";
 import { filterDiff } from "@/lib/explain/filter";
 import { defaultCaps, defaultRules, preprocess, stats } from "@/lib/explain/preprocess";
 import { prompt, type PromptMode } from "@/lib/explain/prompt";
 import {
   buildFollowupRequest,
   buildRequest,
+  decodeStream,
   DEFAULT_MODELS,
   detectProvider,
+  droppedFailure,
   EFFORTS,
   MODEL_RE,
+  networkFailure,
   providerFailure,
-  sseToText,
   type ChatMessage,
   type ProviderName,
   type ProviderRequest,
 } from "@/lib/explain/providers";
+import { headroom } from "@/lib/explain/usage";
 import { getSession, touch } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -78,32 +82,61 @@ async function streamProvider(
   model: string,
   meta: string
 ): Promise<NextResponse> {
-  const upstream = await fetch(request.url, {
-    method: "POST",
-    headers: request.headers,
-    body: request.body,
-  });
+  let upstream: Response;
+  try {
+    upstream = await fetch(request.url, {
+      method: "POST",
+      headers: request.headers,
+      body: request.body,
+    });
+  } catch {
+    const f = networkFailure(request.url);
+    return NextResponse.json({ error: f.error, hint: null }, { status: f.status });
+  }
   if (!upstream.ok || !upstream.body) {
     // in our words, with a hint where there is a way out
     const body = (await upstream.text()).slice(0, 4000);
-    const f = providerFailure(upstream.status, body, model);
+    const f = providerFailure(upstream.status, body, model, { provider, headers: upstream.headers });
     return NextResponse.json({ error: f.error, hint: f.hint ?? null }, { status: f.status });
   }
 
   const encoder = new TextEncoder();
-  const textStream = upstream.body.pipeThrough(sseToText(provider));
+  const { stream: textStream, decoder } = decodeStream(provider);
+  const left = headroom(provider, upstream.headers);
   const out = new ReadableStream<Uint8Array>({
     async start(controller) {
       controller.enqueue(encoder.encode(meta));
-      const reader = textStream.getReader();
+      const reader = upstream.body!.pipeThrough(textStream).getReader();
+      // sentinel lines must start a line of their own, without leaving a
+      // blank one behind
+      let atLineStart = true;
+      const sentinel = (line: string) => {
+        controller.enqueue(encoder.encode(`${atLineStart ? "" : "\n"}${line}\n`));
+        atLineStart = true;
+      };
+      let dropped = false;
       try {
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
+          if (value.length) atLineStart = value[value.length - 1] === 10;
           controller.enqueue(value);
         }
       } catch {
-        controller.enqueue(encoder.encode("\n[wd:error] stream interrupted\n"));
+        dropped = true;
+        sentinel(`[wd:error] ${droppedFailure(request.url).error}`);
+      }
+      if (!dropped) {
+        // an error the provider sent on the 200 stream, in our words
+        if (decoder.error) {
+          const f = providerFailure(0, decoder.error, model, { provider });
+          sentinel(`[wd:error] ${f.error}`);
+          if (f.hint) sentinel(`[wd:hint] ${f.hint}`);
+        }
+        // what the answer cost and what is left, for the client's count
+        if (decoder.usage || left) {
+          sentinel(`[wd:usage] ${JSON.stringify({ ...(decoder.usage ?? {}), left })}`);
+        }
       }
       controller.close();
     },
@@ -187,11 +220,31 @@ export async function POST(req: NextRequest) {
       return githubFailure(e, destroy);
     }
   }
+  // the browser's utc offset, so "today" is the user's day
+  const tz = Math.max(-840, Math.min(840, Number(req.headers.get("x-wd-tz") ?? 0) || 0));
+
   // blocks: structured rows the terminal renders as a grid, no model
   if (command.kind === "log") {
     try {
-      const log = await logBlock(session.token, owner, repo, command.n ?? LOG_DEFAULT, command.ref);
-      return plain({ block: log.block, rows: log.rows }, "");
+      const filter =
+        command.since || command.author
+          ? {
+              since: command.since,
+              author: command.author,
+              login: session.login ?? "",
+              now: Date.now(),
+              tz,
+            }
+          : undefined;
+      const log = await logBlock(
+        session.token,
+        owner,
+        repo,
+        command.n ?? LOG_DEFAULT,
+        command.ref,
+        filter
+      );
+      return plain({ block: log.block, rows: log.rows, spans: log.spans }, "");
     } catch (e) {
       return githubFailure(e, destroy);
     }
@@ -214,7 +267,7 @@ export async function POST(req: NextRequest) {
   if (command.kind === "history") {
     try {
       const h = await historyBlock(session.token, owner, repo, command.path, command.ref);
-      return plain({ block: h.block, rows: h.rows }, "");
+      return plain({ block: h.block, rows: h.rows, spans: h.spans }, "");
     } catch (e) {
       return githubFailure(e, destroy);
     }
@@ -222,11 +275,9 @@ export async function POST(req: NextRequest) {
   // row numbers only mean something next to the client's last log
   if (command.kind === "row") return err(400, "run log first, then explain a row number");
 
-  // the browser's utc offset, so "today" is the user's day
-  const tz = Math.max(-840, Math.min(840, Number(req.headers.get("x-wd-tz") ?? 0) || 0));
-
   let data: ExplainInput;
-  let question = ""; // why: the line itself, after the payload
+  // after the payload: why sends the line itself, describe its context block
+  let question = "";
   let mode: PromptMode = command.mode ?? "explain";
   try {
     if (command.kind === "why") {
@@ -278,6 +329,8 @@ export async function POST(req: NextRequest) {
         .join(" · "),
     };
   }
+
+  if (mode === "describe") question = describeTurn(data.describe);
 
   const { files, added, deleted } = stats(data.numstat);
   const metaBase = {

@@ -17,6 +17,15 @@ implementations must produce the same payloads and the same output shape.
   --changelog`, `changelog <range>` on the web): the output contract is up
   to four sections, `added`, `changed`, `fixed`, `removed`, empty ones
   left out, or the single line `nothing user-visible`.
+  `[describe]` replaces `[system]` in describe mode (`wd explain
+  --describe`, `describe pr #N` or `describe <branch>` on the web): the
+  contract is `title`, `description`, and `testing` when the diff shows
+  how to verify. Both implementations append a context block to the user
+  turn after the payload, never inside it (the preprocess spec and the
+  fixtures are untouched): a blank line, `context:`, then `branch <head>
+  into <base>` (either side left out when unknown) and, for an existing
+  pull request, `pr #N: <title>` and `current description:` followed by
+  the body, trimmed and cut at 2000 characters.
   `[why]` is the system prompt behind `why <path>:<line>` on the web: the
   payload is the blaming commit cut down to that file, followed by the
   line itself; the contract is `why` then `watch out`. (cli parity is
@@ -28,6 +37,11 @@ implementations must produce the same payloads and the same output shape.
   paths, minified and generated files). Both implementations parse this
   file, so the list can never drift between them. The CLI embeds it at
   compile time; the web app imports it.
+- `provider.md`: what a failed model call says (one wording per failure
+  class, keyed by HTTP status then body, with the way out), how token
+  usage and rate-limit headroom are read from each provider, and the
+  closing, footer, and warning lines that show them. Prose, not embedded:
+  the tests on both sides quote it.
 
 ## golden fixtures
 

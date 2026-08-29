@@ -4,9 +4,10 @@
 import { explainTemplate } from "./shared.gen";
 
 // which system prompt frames the payload: the review shape (summary,
-// watch out), release notes (added, changed, fixed, removed), or the
-// reason a line exists (why, watch out)
-export type PromptMode = "explain" | "changelog" | "why";
+// watch out), release notes (added, changed, fixed, removed), a pull
+// request draft (title, description, testing), or the reason a line
+// exists (why, watch out)
+export type PromptMode = "explain" | "changelog" | "describe" | "why";
 
 function sections(): Record<string, string> {
   const out: Record<string, string> = {};
