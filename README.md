@@ -6,35 +6,61 @@ Tiny git companion. Worktrees, minus the ceremony. Diffs, in plain English.
 branch-switching never touches your working state, and explaining diffs in
 plain English so review starts with understanding, not archaeology.
 
-It is local-first and telemetry-free. Explanations run on your own key:
-Anthropic, OpenAI, Groq (free tier), or a local model via Ollama. Everything
-else needs nothing but git.
+Local-first and telemetry-free. Explanations run on your own key (Anthropic,
+OpenAI, Groq's free tier) or a local model via Ollama. Everything else needs
+nothing but git.
 
-Written in Rust. One binary, no runtime.
+Written in Rust. One binary (0.6MiB, budget 3.2MiB), one dependency, no
+runtime. The same explain logic also runs as a web app for any repo you can
+see on GitHub, including ones you never cloned.
 
 ## install
 
-From a clone (or straight from git):
-
 ```
-cargo install --path cli
-# or, without cloning:
-cargo install --git https://github.com/chrispetrou/wd wd
+cargo install --path cli                                   # from a clone
+cargo install --git https://github.com/chrispetrou/wd wd   # or straight from git
 ```
 
-That puts `wd` on your PATH via `~/.cargo/bin`. Then add the shell wrapper
-so `wd switch` can actually change directory:
+That puts `wd` in `~/.cargo/bin`. Add the shell wrapper so `wd switch` can
+actually change directory:
 
 ```
 echo 'eval "$(wd init zsh)"' >> ~/.zshrc     # bash: ~/.bashrc
 wd init fish | source                        # fish: add to config.fish
 ```
 
-Needs git 2.31+ and, for `wd explain`, curl (both ship with macOS and
-virtually every Linux). A `curl | bash` installer with prebuilt binaries
+Needs `git`, and `curl` for `wd explain` (both ship with macOS and virtually
+every Linux). Tagged releases build static binaries for macOS (arm64, x64)
+and Linux (x64, arm64 musl) with sha256 checksums; a `curl | bash` installer
 comes with the first release.
 
-## commands
+## quick start
+
+```
+wd new feat/auth              # a sibling worktree, branch created if missing
+wd ls                         # every worktree, dirty count, ahead/behind
+wd switch                     # pick one, cd into it
+export GROQ_API_KEY=gsk_...   # free tier at console.groq.com
+wd explain HEAD~3..           # the last three commits, in plain english
+wd rm                         # prune worktrees whose branches are merged
+```
+
+## cli commands
+
+| command | what it does |
+|---|---|
+| `wd new <branch> [--from <ref>]` | create a worktree in a sibling dir, copy `.env*` files into it |
+| `wd ls` | list worktrees with dirty count and ahead/behind |
+| `wd switch [query]` | pick a worktree (or match one) and cd into it |
+| `wd rm [name] [--dry-run] [--yes] [--force]` | remove merged worktrees, or one by name |
+| `wd explain [range] [--changelog] [--describe] [--dry-run]` | a plain-English review, release notes, or a pr draft for a diff |
+| `wd init <zsh\|bash\|fish>` | print the shell wrapper that makes `switch` a real `cd` |
+
+`--help` on any of them is short and lowercase. Colors only when the output
+is a terminal and `NO_COLOR` is unset. Exit codes: 0 success (including a
+declined prompt), 1 for any error or a cancelled picker, 2 for bad usage.
+
+### wd new
 
 ```
 $ wd new feat/auth
@@ -43,10 +69,23 @@ copied .env .env.local
 → ready feat/auth checked out
 ```
 
-`wd new <branch>` creates a worktree in a predictable sibling directory
-(`<repo>.<branch>`, slashes become dashes) and copies your untracked `.env*`
-files into it. The branch is created from `HEAD` if it doesn't exist
-(`--from <ref>` to branch from elsewhere).
+The worktree lands next to the main one as `<repo>.<branch>` (`/` and other
+unsafe characters become `-`), anchored to the main worktree, never to
+wherever you are standing. The branch is created from `HEAD` if it does not
+exist; `--from <ref>` branches from elsewhere. Top-level `.env` and `.env.*`
+files are copied over (not `.envrc`, nothing recursive), skipping any that
+already exist; the `copied` line is left out when there was nothing to copy.
+
+```
+wd new fix/nav-323                  # ../repo.fix-nav-323, from HEAD
+wd new hotfix/1.2 --from v1.2       # branch from a tag
+wd new feat/auth                    # existing branch: just checks it out
+```
+
+Refuses with a one-line reason when the directory exists or the branch is
+already checked out somewhere.
+
+### wd ls
 
 ```
 $ wd ls
@@ -56,8 +95,12 @@ fix/nav-323   2 dirty   ·  ahead 3
 spike/wasm    clean     ·  behind 12
 ```
 
-`wd ls` lists worktrees with dirty-file counts and ahead/behind against
-upstream.
+Main worktree first, then alphabetical. Status is `clean`, `N dirty`, or
+`stale` (a worktree git can no longer read, or one it would prune); the
+muted column is `ahead N`, `behind N`, or both, against the upstream. A
+detached worktree shows as `<sha> detached`.
+
+### wd switch
 
 ```
 $ wd switch
@@ -66,10 +109,47 @@ $ wd switch
 → switched ../repo.feat-auth
 ```
 
-`wd switch` opens a picker over your worktrees: type to filter, arrows (or
-ctrl-p/ctrl-n) to move, enter to select, esc to cancel. With the shell
-wrapper installed it is a real `cd`. `wd switch <query>` skips the picker
-when the match is unique.
+Type to filter, arrows (or ctrl-p/ctrl-n) to move, enter to select, esc to
+cancel. The picker draws on `/dev/tty` and prints only the chosen path to
+stdout, which is what the `wd init` wrapper turns into a `cd`. Without the
+wrapper, `cd "$(wd switch)"` does the same.
+
+```
+wd switch auth        # unique match: no picker, straight there
+wd switch fix         # 'fix' matches 2 worktrees: lists them, exit 1
+wd switch             # no terminal (a script, a pipe): asks for a query
+```
+
+An exact name wins over a substring match.
+
+### wd rm
+
+```
+$ wd rm
+skipped ../repo.fix-nav-323 (fix/nav-323): 2 dirty
+would remove ../repo.feat-auth (feat/auth)
+remove 1 worktree? [y/N] y
+removed ../repo.feat-auth (feat/auth)
+→ pruned 1 worktree
+```
+
+With no name, `wd rm` prunes worktrees whose branches are merged into the
+default branch and deletes those branches. It never touches dirty, locked,
+or detached worktrees, the main worktree, or the one you are standing in;
+`nothing to prune` when there is nothing to do.
+
+```
+wd rm --dry-run                   # preview only
+wd rm --yes                       # no prompt (required when not a terminal)
+wd rm feat/auth                   # one worktree, by branch or directory
+wd rm feat/auth --force           # even if dirty or unmerged
+```
+
+`--force` is the escape hatch for squash-merged branches, which plain
+ancestor detection cannot see; it needs a name. Named removals print
+`removed <path> (<branch>)` and no summary line.
+
+### wd explain
 
 ```
 $ wd explain HEAD~3..
@@ -82,53 +162,50 @@ logout() no longer clears server state ...
 · 8.4s · claude-opus-5 · 1.2k in · 340 out
 ```
 
-`wd explain [range]` reads a diff range (default `HEAD~1..`; a bare ref
-means `<ref>..HEAD`) and streams a plain-English summary with a
-"watch out" section. Lockfiles, vendored paths, and binaries are
-excluded, and large diffs are truncated (see `shared/prompts/`).
-`--dry-run` prints the preprocessed payload instead of asking the model.
-`--changelog` asks for release notes instead of a review: `added`,
-`changed`, `fixed`, `removed` sections (empty ones left out), one line
-per user-visible change, so `wd explain --changelog v1.1..v1.2` drafts
-the notes for a tag. `--describe` drafts a pull request to paste: a
-`title` line in the repo's own commit-subject style, a `description`,
-and `testing` when the diff shows how to verify. With no range it
-compares the current branch against the default branch from their
-merge base (`main...HEAD`), so a base that moved on never leaks into
-the draft, and it tells the model the branch names after the diff
-(`branch feat/auth into main`). A bare ref means `<ref>...HEAD` there,
-and in every mode a three-dot range now diffs from the merge base and
-logs only the head side. `wd explain --describe > body.md` holds only
-the draft; nothing is written to GitHub.
+Reads a diff, preprocesses it (lockfiles, vendored paths, minified and
+binary files are dropped; big diffs are capped per file and in total, per
+`shared/prompts/`), and streams the model's answer: a `summary`, then a
+`watch out` section. The closing line is elapsed time, model, and token cost
+when the provider reports it.
 
-The closing line is the elapsed time, the model, and what the answer
-cost in tokens when the provider says (all four do). Those two muted
-status lines go to stderr when stdout is not a terminal, so `wd explain
---changelog v1.1.. > notes.md` holds only the notes. When a call fails
-the reason is one line in plain words under an amber `error:` label,
-never the provider's json, with the way out under it where there is
-one: `provider rejected the key` (and which variable to fix), `your groq
-key is out of credit` (and the billing page), `provider rate limit, try
-again in 12s`, `provider daily limit reached, resets in 3h 12m`, `the
-diff is too big for gpt-5-mini: 17842 tokens, limit 8192`, `provider is
-overloaded, try again in a moment`, `could not reach api.groq.com`. A
-key nearly out of headroom gets an amber warning after the answer (`low
-on groq tokens: 8.2k of 100k left, resets in 42s`). No provider exposes
-an account balance to an api key, so the cli keeps no running total; the
-web terminal counts one per key in your browser.
+Three modes, one diff:
+
+| mode | asks for | sections |
+|---|---|---|
+| (default) | a review | `summary`, `watch out` |
+| `--changelog` | release notes, one line per user-visible change | `added`, `changed`, `fixed`, `removed` (empty ones left out) |
+| `--describe` | a pull request to paste | `title` (in the repo's own subject style), `description`, `testing` when the diff shows how to verify |
+
+Ranges:
 
 ```
-$ wd rm
-would remove ../repo.feat-auth (feat/auth)
-remove 1 worktree? [y/N]
+wd explain                          # HEAD~1.. (the last commit)
+wd explain HEAD~3..                 # the last three
+wd explain main..dev                # two-dot: exactly what git diff gets
+wd explain main...dev               # three-dot: from the merge base, log walks dev only
+wd explain v1.2                     # a bare ref means v1.2..HEAD
+wd explain abc123~1..abc123         # one commit
+wd explain --changelog v1.1..v1.2   # notes for a tag
+wd explain --changelog v1.2.. > notes.md
+wd explain --describe               # current branch vs the default branch, main...HEAD
+wd explain --describe > body.md
+wd explain --dry-run HEAD~3..       # the payload the model would see, no call
 ```
 
-`wd rm` prunes worktrees whose branches are merged into the default branch
-(and deletes the branches). It never touches dirty worktrees, the main
-worktree, or the one you're standing in. `--dry-run` previews, `--yes` skips
-the prompt, `wd rm <branch> --force` removes a specific worktree even if
-dirty or unmerged (the escape hatch for squash-merged branches, which plain
-ancestor detection can't see).
+`--describe` with no range compares against the default branch from their
+merge base, so a base that moved on never leaks into the draft, and tells
+the model the branch names (`branch feat/auth into main`); a bare ref there
+means `<ref>...HEAD`. Nothing is written to GitHub.
+
+When stdout is not a terminal the two muted status lines go to stderr, so
+redirecting to a file holds only the answer. `--changelog` and `--describe`
+are mutually exclusive.
+
+### wd init
+
+`wd init zsh` (or `bash`, `fish`) prints a small `wd()` function that
+forwards every command and turns `wd switch` into a `cd`. Nothing is
+written; you `eval` it from your rc file.
 
 ## configuration (explain)
 
@@ -145,31 +222,231 @@ WD_OLLAMA_URL       default http://localhost:11434
 WD_GROQ_URL         default https://api.groq.com/openai
 WD_OPENAI_URL       default https://api.openai.com
 WD_ANTHROPIC_URL    default https://api.anthropic.com
+NO_COLOR            any value disables color
 ```
 
 Paid keys win the auto-detect so nobody is silently downgraded;
-`WD_PROVIDER=groq` opts into the free one. Groq's free tier
-(console.groq.com) is the no-cost hosted option; Ollama is the no-key
-option.
+`WD_PROVIDER=groq` opts into the free tier, `WD_PROVIDER=ollama` into the
+no-key option. The `WD_*_URL` variables point at any compatible gateway.
 
-Nothing is sent anywhere unless you run `wd explain`. There is no
-telemetry.
+Requests go through the system `curl`; the key travels in curl's config on
+stdin (never argv) and the request body sits in a `0600` temp file for the
+duration of the call. Nothing is sent anywhere unless you run `wd explain`.
+
+### when a call fails
+
+One line under an amber `error:` label, in plain words, never the
+provider's json, with the way out on the line below where there is one:
+
+```
+provider rejected the key                          set GROQ_API_KEY to a valid key
+your groq key is out of credit                     top up at console.groq.com/settings/billing
+your openai key hit its spend limit                raise it at platform.openai.com/...
+provider rate limit, try again in 12s
+provider daily limit reached, resets in 3h 12m
+the diff is too big for gpt-5-mini: 17842 tokens, limit 8192
+provider has no model gpt-6
+provider is overloaded, try again in a moment
+could not reach api.groq.com
+lost the connection to api.groq.com
+```
+
+A key nearly out of headroom gets an amber warning after the answer (`low on
+groq tokens: 8.2k of 100k left, resets in 42s`). No provider exposes an
+account balance to an api key, so the cli keeps no running total; the web
+terminal counts one per key in your browser. The wording is a shared
+contract in `shared/prompts/provider.md`.
+
+## web
+
+`web/` is wd explain for any GitHub repo, in the browser: sign in with
+GitHub, pick a repo, ask in a full-page terminal. No worktrees (those are
+local by nature), but everything else the cli explains, plus the things
+only a hosted repo can answer: pull requests, the commit graph, who did what
+since when, and a file's story.
+
+### run it
+
+Node 22 (see `web/.nvmrc`):
+
+```
+cd web
+npm install
+npm run dev
+```
+
+Open http://localhost:3000. The first run shows a one-time setup screen that
+links to a prefilled GitHub OAuth-app form and saves the pasted client id and
+secret to `web/.env.local` for you (localhost only, while unconfigured).
+Deployed instances are configured through the environment instead:
+
+```
+GITHUB_CLIENT_ID       oauth app; callback must be $APP_URL/api/auth/callback
+GITHUB_CLIENT_SECRET
+SESSION_SECRET         32+ random chars (openssl rand -hex 32)
+APP_URL                base url of this instance
+GITHUB_API_URL         optional, for github enterprise (and GITHUB_GRAPHQL_URL)
+WD_ANTHROPIC_URL       optional provider gateways, same names as the cli
+WD_OPENAI_URL
+WD_GROQ_URL
+```
+
+Sign-in requests the `repo` scope so private repos appear in the picker
+(GitHub has no read-only scope for private repos; wd only ever reads). The
+session slides: every request renews it, so it ends after a week of silence
+or 30 days after sign-in, whichever comes first. An ended session says so in
+the transcript and `sign in again →` brings you back to the same repo with
+the transcript intact and reruns what failed.
+
+### commands
+
+Phrasing is flexible: `explain`, `summarize`, `show me`, `what changed in`
+work as leading verbs, a trailing `?` is fine, and cli-style input (`wd
+explain HEAD~3..`) works verbatim. `/wd` lists the cli commands.
+
+| ask | examples |
+|---|---|
+| a diff range | `diff main..release`, `compare v1.1..v1.2`, `main..` (to the default tip), `..dev` |
+| the last N commits | `explain the last 5 commits`, `last 3 on feat/auth`, `HEAD~3..` |
+| a pull request | `what changed in pr #42`, `pr 42`, `#42` |
+| a branch vs the default | `what changed in feat/auth` |
+| one commit | `explain <sha>` |
+| the graph | `log`, `log 100`, `log on feat/auth`, `log since monday by me` |
+| a row of the log | `explain 3`, `explain 2..5` (row 5's parent to row 2) |
+| time and people | `since yesterday`, `this week`, `since v1.2 by alice`, `what did i do this week`, `standup` |
+| release notes | `changelog v1.1..v1.2`, `changelog since v1.2`, `release notes for pr #42`, `changelog` (since the newest tag) |
+| a pr draft | `describe pr #42`, `describe feat/auth`, `draft a pr for feat/auth`, `describe main..dev` |
+| a file's story | `history src/git.rs`, `history src/ on feat/auth` |
+| one line | `why src/git.rs:42`, `why line 42 of src/git.rs on v1.2` |
+| cut to a path | any explain plus `in <path>`: `explain the last 5 commits in src/`, `changelog of pr 42 in docs/` |
+| lists | `branches`, `tags`, `prs`, `closed prs`, `my prs` |
+| follow-ups | plain words after an explain: `why is that risky?`, `which files touch auth?` |
+
+Periods: `today`, `yesterday`, `this week`, `last week`, `since monday`
+(any weekday), `since 3 days ago`, `since 2026-08-20`, `since v1.2` (any
+ref). `by <login>` keeps one person's commits, `by me` yours; `standup` is
+your commits since the last working day. Days follow your browser's clock;
+an empty window says `nothing since yesterday` and costs no model call.
+
+Wherever a branch, tag, pr number, or log row belongs, a completion menu
+drops down, filtered as you type.
+
+`changelog` and `describe` wrap any diff command and share the cli's output
+contracts: the same four sections, the same `title`/`description`/`testing`
+draft. `describe pr #42` sees the pr's current title and body and keeps
+their intent where the diff still supports it. Nothing is written to
+GitHub; `/copy` puts the draft on your clipboard.
+
+### the log, prs, and history
+
+`log` draws the commit graph inside the transcript: colored lanes with
+curves where branches fork and join, a dot per commit (a ring for merges),
+branch and tag chips, subject, author, age, sha, every row numbered. All
+branches are walked (the default first, up to 12 heads; the footer says how
+many were left out), 40 rows by default, up to 200. A log filtered by
+`since` or `by` is drawn flat, without lanes, since its rows are no longer
+a contiguous walk (so `explain 2..5` asks for one row at a time).
+
+`prs` lists open pull requests, most recently updated first (30 of them):
+number, title, `head → base`, author, age, and `draft`, `merged`, or
+`closed` where it applies. `history <path>` lists the commits touching a
+file or directory (30 rows, no lanes). `branches` numbers branches with
+ahead/behind against the default (the web cousin of `wd ls`); `tags` lists
+tags newest first with sha and age.
+
+All of these are blocks you can walk: arrows move (`›` marks the row),
+enter opens a commit or pr in place (sha, parents, author, message, files
+with their +/−, and `explain`, `changelog`, `describe`, `github ↗`
+actions; hovering a file offers `explain`, `history`, and `copy`), esc
+steps back out. A command launched from an open panel leaves it open so the
+answer still shows where it came from; `/clear` closes them all.
+
+### keys, models, effort
+
+The first time a repo opens with no key stored, the terminal asks for one:
+paste it as the first message. Keys live in your browser only (one per
+provider; the prefix decides which: `sk-ant-` anthropic, `gsk_` groq,
+anything else openai), travel per request in a header, and are never
+stored, logged, or echoed back by the server. The provider whose key was
+pasted last is active.
+
+| provider | default model | effort | free tier |
+|---|---|---|---|
+| anthropic | claude-opus-5 | low, medium, high, xhigh, max | |
+| openai | gpt-5-mini | minimal, low, medium, high | |
+| groq | llama-3.3-70b-versatile | (ignored) | console.groq.com |
+
+`/model` switches models (any id accepted; the menu marks each one's
+provider, `free`, and `no key`), and picking another provider's model
+makes that provider active. `/effort` sets the reasoning effort where the
+provider supports it. Both are remembered per provider. Follow-ups resend
+the conversation from your browser, with a prompt-cache breakpoint on the
+diff for anthropic keys so they stay cheap.
+
+`/usage` shows what each key has cost since it was saved (`anthropic  1.2m
+in · 84.3k out · 41 answers · since aug 12`) and the headroom the provider
+last reported; `/usage reset [provider]` starts over. Tokens only, never
+money: the provider's dashboard is the bill.
+
+### slash commands
+
+Typing `/` opens a menu of all of them with their options.
+
+| command | does |
+|---|---|
+| `/help`, `/wd` | the web grammar; the cli commands |
+| `/repos` | back to the repo picker |
+| `/key [value \| clear [provider]]` | add or replace a key, list them, drop one or all |
+| `/model [id \| default]`, `/effort [level \| default]` | per provider |
+| `/usage [reset [provider]]` | tokens per key |
+| `/show` | the raw diff payload the model saw, pager-colored |
+| `/copy`, `/export` | last answer to the clipboard; save the transcript as `wd-<owner>-<repo>.txt` |
+| `/theme auto\|light\|dark`, `/font default\|fira\|jetbrains\|plex`, `/fontsize 11..18`, `/ligatures on\|off` | looks |
+| `/account`, `/info` | who you are; repo, provider, keys, usage, prefs |
+| `/stop`, `/clear`, `/logout` | abort a running explain; new transcript; sign out |
+
+### keyboard
+
+| keys | |
+|---|---|
+| enter, up/down, ctrl+r | send; recall history; search it |
+| esc | stop a running explain; close a menu or panel |
+| tab, enter, esc (menu open) | complete; use; dismiss |
+| arrows, enter, esc (after a log, prs, or history) | walk rows; open one; step out |
+| cmd+k / ctrl+k | repo picker |
+| ctrl+t, ctrl+1..9, × | new repo tab; switch tabs; close |
+
+Repos open as tabs, each with its own transcript; a streaming explain keeps
+going while you are on another tab (a dot after the tab name says so). A
+status line under the prompt shows provider, model, effort, and tokens in
+use. Hover any control for its purpose and shortcut.
+
+### how it reads
+
+Like the cli: your command in the accent color, section labels in amber, a
+green `→` line when something changed, an amber `error:` label with the
+same plain-words vocabulary as the cli, muted gray for status. Each answer
+closes with its elapsed time, model, and token cost (`· stopped after 2.1s`
+if you pressed esc). Motion is short and stops under
+`prefers-reduced-motion`.
+
+`base..head` uses GitHub's three-dot compare (changes on head since it
+diverged from base). Ahead/behind counts are computed for the first 15
+branches and tag dates for the newest 15. A `since` window covers the
+latest 100 commits; `by <login>` fetches that person's commits one by one
+up to 20, past which the answer covers the whole span and a note says so.
 
 ## terminal or web
 
-Same tool, two surfaces. The cli is for the repo in front of you: it
-runs on your machine, reads your local git, and manages worktrees. The
-web app is for any repo you can see on GitHub, including ones you never
-cloned: sign in, pick a repo, ask. Both explain diffs from the same spec
-(`shared/prompts/`), so an answer reads the same wherever you ask.
+Same tool, two surfaces, one explain spec (`shared/prompts/`), so an answer
+reads the same wherever you ask.
 
 ```
                     terminal (wd)                 web
 worktrees           new, ls, switch, rm           (cli only)
 explain a range     wd explain main..dev          diff main..dev
-last N commits      wd explain HEAD~3..           explain the last 3 commits
-                                                  (on <branch> to scope it)
-a pull request      fetch the branch, then a range prs, then what changed in pr #42
+last N commits      wd explain HEAD~3..           explain the last 3 commits [on <branch>]
+a pull request      fetch the branch, then a range what changed in pr #42
 one commit          wd explain <sha>~1..<sha>     explain <sha>
 the graph           git log --graph               log, then explain 3
 time and people     git log --since, --author     since yesterday by me, standup
@@ -186,239 +463,12 @@ model / effort      WD_MODEL, WD_PROVIDER         /model, /effort, per provider
 private repos       whatever git can reach        github oauth, repo scope
 ```
 
-Pick the terminal when the diff is local, uncommitted, or on a machine
-with no GitHub access, when you want a no-key model via Ollama, or when
-the job is worktrees. Pick the web when the repo lives on GitHub and you
-want to ask about a PR or a branch without cloning it, keep several
-repos open as tabs, or ask follow-up questions about the same diff.
-Muscle memory carries over: the web terminal accepts `wd explain
-HEAD~3..` verbatim, and `/wd` inside it lists the cli commands.
-
-Keys never cross between the two. The cli reads them from the
-environment on your machine; the web app keeps them in your browser and
-sends them per request, and its server never stores or logs them.
-
-## web
-
-The web app (`web/`) is wd explain for any GitHub repo, in the browser:
-sign in with GitHub, pick a repo, and ask in a full-page terminal:
-
-```
-explain the last 5 commits [on <branch>]
-what changed in pr #42
-diff main..release
-log [N] [on <branch>] [since <period>] [by <login>]
-explain 3 (a row of the log), explain 2..5, explain <sha>
-since yesterday | this week | v1.2 [by <login>], standup
-changelog [v1.1..v1.2 | since v1.2 | pr #42]
-describe pr #42 | <branch> | main..dev
-history src/git.rs, explain the last 5 commits in src/, why src/git.rs:42
-branches, tags, prs [open | closed | mine]
-```
-
-Phrasing is flexible: `summarize`, `show me`, and `what changed in` work
-as leading verbs, `pull request 42` and bare `#42` name a PR,
-`what changed in <branch>` compares a branch against the default, and
-cli-style input like `wd explain HEAD~3..` or open ranges (`main..`)
-works exactly as it does in the terminal.
-
-Ranges take any refs, `on <branch>` scopes the last-N commands to a
-branch, and `branches` lists branches numbered with ahead/behind
-against the default (the web cousin of `wd ls`; worktrees themselves
-live in the cli). Wherever a branch name belongs, the completion menu
-drops down with the repo's branches, filtered as you type.
-
-`log` draws the commit graph inside the transcript: colored lanes with
-curves where branches fork and join, a dot per commit (a ring for
-merges), branch and tag chips, subject, author, age, and sha, every
-row numbered. All branches are walked (the default branch first, up to
-12 heads; the footer says how many were left out) and unioned into one
-graph; `log 100` shows more rows, `log on <branch>` scopes to one
-branch. `log by <login>` keeps one person's commits (`by me` for your
-own) and `log since <period>` one window (`since yesterday`, `since
-this week`, `since v1.2`, the same words as below), in either order
-after `on`; the filtering happens on GitHub's side, and a filtered log
-is drawn flat, without lanes, since its rows are no longer a contiguous
-walk (so `explain 2..5` asks for one row at a time). After a `log`,
-the arrow keys walk its rows (`›` marks the one
-selected), enter opens a commit in place (full sha, parents, author,
-message, files with their +/−, and `explain`, `changelog`, `describe`,
-`github ↗` actions; hovering a file offers `explain` (that commit, cut to the
-file), `history` (the file's story), and `copy` (its path); a parent
-jumps to its row), esc steps back out, and clicking a row does the
-same. A command launched from an open panel leaves the panel open, so
-the answer below it still shows where it came from; only /clear closes
-them all. The session slides: every request renews it, so it only ends
-after a week of silence, with a hard ceiling of 30 days from sign-in
-(or when the token is revoked). If it has
-ended, an opened row or a command says `your github session ended` and
-offers `sign in again →`: the page goes to GitHub and comes straight
-back to the same repo, transcript intact, prints `→ signed in as you`
-under the error, and reruns the command or reopens the row that
-failed. The numbers
-still work as words: `explain 3` explains that commit, `explain 2..5`
-the span of rows (from the parent of row 5 to row 2), and `explain
-<sha>` takes any sha directly; typing `explain ` with a log on screen
-offers the rows in the completion menu.
-
-Time and people work as words: `since yesterday`, `since monday`, `this
-week`, `last week`, `since 3 days ago`, `since 2026-08-20`, or `since
-v1.2` for a ref. Add `by <login>` for one person's commits, `by me` (or
-`what did i do this week`, `my commits since v1.2`) for your own, and
-`standup` for your commits since the last working day. Days follow your
-browser's clock. An empty window says `nothing since yesterday` and
-costs no model call.
-
-`changelog` frames any of those as release notes instead of a review:
-`changelog v1.1..v1.2`, `changelog since v1.2`, `release notes for pr
-#42`, `changelog of the last 10 commits`, or bare `changelog` for
-everything since the newest tag. The answer comes as `added`,
-`changed`, `fixed`, `removed` sections (empty ones left out), one line
-per user-visible change, the same contract as `wd explain --changelog`
-in the cli. `tags` lists tags newest first with their sha and age, and
-tag names join branch names in the completion menu wherever a ref
-belongs (`since `, `changelog `, ranges).
-
-`describe` frames any of those as a pull request draft instead:
-`describe pr #42` rewrites an existing pr (the model sees its current
-title and description and keeps their intent where the diff still
-supports it), `describe feat/auth` (or `draft a pr for feat/auth`)
-drafts one for a branch against the default branch, and ranges,
-`the last N commits`, a log row, or a sha work too. The answer is a
-`title` line in the repo's own commit-subject style, a `description`,
-and `testing` when the diff shows how to verify, plain text ready for
-`/copy`; the same contract as `wd explain --describe`. Nothing is
-written to GitHub: the draft is yours to paste.
-
-`prs` lists open pull requests, most recently updated first (`closed
-prs`, `my prs`): number, title, `head → base`, author, age, and `draft`,
-`merged`, or `closed` where it applies. It is the same kind of block as
-the log: arrows and enter open a pr in place (state, branches,
-description, files, and `explain` / `changelog` / `describe` actions). Typing `pr `
-afterwards offers those numbers in the completion menu, and `what
-changed in pr #42` shows the pr's state under its title: `draft`,
-`mergeable`, or `conflicts with base`.
-
-Files have a history too. `history src/git.rs` (or a directory, `on
-<branch>` to scope) lists the commits touching it as a log block
-without lanes, numbered and navigable the same way, so `explain 3`
-follows. (`log` is the whole repo across branches; `history` always
-takes a path.) Opening a row shows what the row already knows at once
-and fills in parents, message, and files as they arrive; nothing spins. Any explain takes `in <path>` to cut the
-diff down to one file or directory before the model sees it: `explain
-the last 5 commits in src/`, `what changed in src/git.rs since v1.2`,
-`changelog of pr 42 in docs/`; the header says `2 of 14 files, under
-src/`. And `why src/git.rs:42` (or `why line 42 of src/git.rs`, `on
-<ref>` to pick the version) blames the line, fetches the commit that
-last touched it cut down to that file, and asks the model why the line
-exists and what would break without it: a `why` section, then `watch
-out`, with the blaming commit noted under the header so `explain
-<sha>` can follow.
-
-It uses the same explain spec as the CLI (`shared/prompts/`), on your own
-LLM keys. The first time a repo opens with no key stored, the terminal
-asks for one: paste it as the first message and it is kept in your
-browser only (one per provider, the key prefix decides which), sent per
-request, never stored or logged server-side, and never echoed back.
-`/key <value>` adds or replaces one later; `/key` lists them; `/key
-clear groq` removes one, `/key clear` all of them. The provider whose
-key was pasted last is active; `/model` switches: picking another
-provider's model (any id accepted; the menu marks each model's provider,
-`free` where there is a no-cost tier, and `no key` where you have none)
-makes that provider active, defaulting to claude-opus-5 for anthropic,
-gpt-5-mini for openai, and llama-3.3-70b-versatile for groq (keys start
-with `gsk_`; groq has a free tier at console.groq.com). `/effort` sets
-the reasoning effort where the provider supports it (anthropic: low to
-max, openai: minimal to high; groq ignores it), and switching to such a
-provider opens the effort menu right away. Model and effort are
-remembered per provider.
-
-Typing `/` opens a completion menu of every slash command with its
-options: `/help`, `/repos`, `/key`, `/usage`, `/model`, `/effort`, `/theme` (auto,
-light, or dark), `/font` (fira, jetbrains, plex, or the system default),
-`/fontsize`, `/ligatures`, `/show` (the raw diff payload, pager-colored),
-`/copy` (the last answer to the clipboard), `/export` (save the
-transcript), `/account`, `/info`, `/wd`, `/stop`, `/clear`, `/logout`.
-Arrows navigate the menu, tab completes, enter uses, esc closes; up/down
-recalls history, ctrl+r searches it, esc stops a running explain, and
-cmd+k jumps back to the repo picker.
-
-The transcript reads like the cli: your command in the accent color,
-`summary` and `watch out` in amber, a green `→` line when something
-changed (`→ model claude-sonnet-5`, `→ saved wd-owner-repo.txt`), an
-amber `error:` label when something failed (in plain words, never the
-provider's raw json: `the diff is too big for gpt-5-mini: 17842 tokens,
-limit 8192`, `your groq key is out of credit`, `provider rate limit, try
-again in 12s`, `provider is overloaded, try again in a moment`, `could
-not reach api.groq.com`; a muted line under it says the way out where
-there is one, like the billing page to top up at), and muted gray
-for status
-(`reading 3 commits · 14 files · +212 −87`). Each answer closes with its
-elapsed time, model, and what it cost in tokens (`· 8.4s · claude-opus-5
-· 1.2k in · 340 out`; `· stopped after 2.1s` if you pressed esc), an
-amber `low on groq tokens: 8.2k of 100k left, resets in 42s` follows
-when the key is nearly out of headroom, commands and their output group
-into blocks, and
-scrolling up to read earlier output is never interrupted by new lines.
-Motion is quiet and short: state changes ease in (an error, a `→` line,
-a panel opening, a block landing, a page settling after navigation,
-the theme cross-fading), streamed text and anything driven by the
-keyboard never animate, and everything stops under
-`prefers-reduced-motion`.
-
-After an explain, plain words are follow-up questions: "why is that
-risky?", "which files touch auth?". Answers stay grounded in the same
-diff; a new command or /clear starts fresh. The conversation lives in
-your browser only and is resent per turn (with a prompt-cache
-breakpoint on the diff for anthropic keys, so follow-ups stay cheap).
-
-Repos open as tabs: a quiet tab bar under the header lets you work on
-several repos at once, each with its own history. A streaming explain
-keeps going while you are on another tab. ctrl+t opens a new tab via
-the picker, ctrl+1..9 switches, × closes.
-
-Hover any control for its purpose and shortcut, and a status line under
-the prompt shows the provider, model, effort, and tokens in use (`groq ·
-openai/gpt-oss-120b · 12.4k tokens`, a small star before it marking the
-ai provider). A tab whose explain is still streaming shows a dot after
-its name.
-
-The token count is the one thing here that is yours to keep: no
-provider exposes an account balance or a running total to an api key
-(openai and anthropic have admin-key usage apis, groq has none), so the
-terminal adds up what each answer cost, per key, in your browser, from
-the day the key was saved. `/usage` shows the breakdown (`anthropic
-1.2m in · 84.3k out · 41 answers · since aug 12`) and what the provider
-last said was left on the key; `/usage reset [provider]` starts over, as
-does replacing or removing the key. Tokens only, never money: prices
-drift, and the provider's own dashboard is the bill.
-
-Notes:
-
-- Sign-in requests the `repo` scope so private repos appear in the
-  picker. GitHub has no read-only scope for private repos; wd only ever
-  reads (commits, diffs, pull requests).
-- `base..head` uses GitHub's three-dot compare: changes on head since it
-  diverged from base.
-
-To run it yourself (Node 20+):
-
-```
-cd web
-npm install
-npm run dev
-```
-
-Then open http://localhost:3000: the first run shows a one-time setup
-screen that links to a prefilled GitHub OAuth-app form and saves the
-pasted client id and secret to `web/.env.local` for you. The setup
-screen only appears on localhost while unconfigured; deployed instances
-are configured through the environment instead (see `.env.example`, the
-callback must be `$APP_URL/api/auth/callback`).
-
-`npm test` runs the golden fixtures + grammar suites. The shared spec is
-embedded at build time by `scripts/sync-shared.mjs`; edit
-`shared/prompts/`, never the generated file.
+Pick the terminal when the diff is local, uncommitted, or on a machine with
+no GitHub access, when you want a no-key model via Ollama, or when the job
+is worktrees. Pick the web when the repo lives on GitHub and you want to ask
+about a pr or a branch without cloning it, keep several repos open as tabs,
+or ask follow-up questions about the same diff. Keys never cross between the
+two.
 
 ## layout
 
@@ -426,16 +476,29 @@ embedded at build time by `scripts/sync-shared.mjs`; edit
 cli/     rust cli: the wd binary
 web/     next.js app: wd explain for any github repo
 site/    landing page
-shared/  explain spec: prompt template, diff preprocessing rules,
-         and golden fixtures both implementations must reproduce
+shared/  explain spec: prompt template, preprocessing rules, provider
+         wording, and golden fixtures both implementations must reproduce
 ```
+
+The rule for `shared/`: spec once, implement twice. Change the spec first,
+then both implementations; the golden fixtures under `shared/fixtures/`
+must be reproduced byte for byte by the Rust and the TypeScript
+preprocessors. The web embeds the spec at build time via
+`scripts/sync-shared.mjs`; edit `shared/prompts/`, never the generated
+file.
 
 ## building
 
 ```
 cd cli && cargo build --release   # binary at target/release/wd
-cd cli && cargo test
-cd web && npm test && npm run build
+cd cli && cargo test              # unit + integration (isolated git config)
+cd web && npm test                # vitest: grammar, preprocessing, providers, usage
+cd web && npm run build
 ```
+
+CI runs fmt, clippy, tests, a 3.2MiB size gate on the binary, the web tests
+and build, and a brand check (no em dashes outside the landing mock).
+Tagged releases (`v*`) build the four static binaries and open a draft
+GitHub release with checksums.
 
 MIT license.
