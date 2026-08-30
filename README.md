@@ -14,7 +14,7 @@
   <a href="https://github.com/chrispetrou/wd/releases"><img alt="v0.1.0" src="https://img.shields.io/badge/version-v0.1.0-8a8a8a?style=flat-square&labelColor=1a1a1a"></a>
   <img alt="binary 0.6MiB" src="https://img.shields.io/badge/binary-0.6MiB-8a8a8a?style=flat-square&labelColor=1a1a1a">
   <img alt="rust" src="https://img.shields.io/badge/rust-stable-8a8a8a?style=flat-square&labelColor=1a1a1a">
-  <a href="LICENSE"><img alt="mit license" src="https://img.shields.io/badge/license-MIT-8a8a8a?style=flat-square&labelColor=1a1a1a"></a>
+  <a href="LICENSE"><img alt="gpl-3.0 license" src="https://img.shields.io/badge/license-GPL--3.0-8a8a8a?style=flat-square&labelColor=1a1a1a"></a>
   <img alt="status experimental" src="https://img.shields.io/badge/status-experimental-b08900?style=flat-square&labelColor=1a1a1a">
   <img alt="no telemetry" src="https://img.shields.io/badge/telemetry-none-8a8a8a?style=flat-square&labelColor=1a1a1a">
 </p>
@@ -565,4 +565,4 @@ javascript) written by `scripts/readme-anim.mjs`; they hold their last frame
 under `prefers-reduced-motion`. Wording and pacing live in that script, not
 in the svg files.
 
-MIT license.
+GPL-3.0 license.

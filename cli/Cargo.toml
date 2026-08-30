@@ -3,7 +3,7 @@ name = "wd"
 version = "0.1.0"
 edition = "2021"
 description = "tiny git companion"
-license = "MIT"
+license = "GPL-3.0-only"
 
 [dependencies]
 clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
