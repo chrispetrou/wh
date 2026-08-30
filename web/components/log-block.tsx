@@ -6,7 +6,9 @@
 // in full. everything in the panel is a way into explain.
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import type { Block, CommitRow, PrRow } from "@/lib/block";
+import type { CommitRow, ListBlock, PrRow } from "@/lib/block";
+import { absolute, Action, Chip, CopyAction } from "./block-bits";
+import { dragging, startDrag, type DragPayload } from "./drag-layer";
 import {
   chatStore,
   type CommitDetail,
@@ -88,26 +90,6 @@ function Through({ g, lanes }: { g: Omit<LaneRow, "sha">; lanes: number }) {
   );
 }
 
-function absolute(iso: string): string {
-  return new Date(iso)
-    .toLocaleString("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-    .toLowerCase();
-}
-
-function Chip({ name, color }: { name: string; color: string }) {
-  return (
-    <span className="chip" style={{ color }}>
-      {name}
-    </span>
-  );
-}
-
 // a value still in flight
 function Skel({ w }: { w: number }) {
   return <span className="skel" style={{ width: `${w}ch` }} />;
@@ -173,18 +155,21 @@ function PrSkeleton({ row }: { row: PrRow }) {
   );
 }
 
-function Action({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button type="button" className="log-action" onClick={onClick}>
-      {children}
-    </button>
-  );
-}
-
-const rowId = (b: Block, i: number): string =>
+const rowId = (b: ListBlock, i: number): string =>
   b.kind === "log" ? b.rows[i].sha : String(b.rows[i].num);
 
 const NONE: string[] = [];
+const DRAG_THRESHOLD = 4;
+
+// what a row says while it is carried
+function payload(b: ListBlock, i: number): DragPayload {
+  if (b.kind === "prs") {
+    const r = b.rows[i];
+    return { kind: "pr", id: String(r.num), label: `#${r.num} ${r.title.slice(0, 40)}` };
+  }
+  const r = b.rows[i];
+  return { kind: "commit", id: r.sha, label: `● ${r.sha.slice(0, 7)} ${r.subject.slice(0, 40)}` };
+}
 
 export function LogBlock({
   block,
@@ -195,7 +180,7 @@ export function LogBlock({
   submit,
   fresh = false,
 }: {
-  block: Block;
+  block: ListBlock;
   line: number;
   storeKey: string;
   owner: string;
@@ -279,6 +264,34 @@ export function LogBlock({
     rootRef.current?.querySelector(".row-sel")?.scrollIntoView({ block: "nearest" });
   }, [selected]);
 
+  // a press that travels picks the row up (the drag layer carries it to a
+  // branch line or a plan); the click that follows a drop is not a toggle
+  const pressRef = useRef<{ i: number; x: number; y: number } | null>(null);
+  const didDrag = useRef(false);
+  useEffect(() => {
+    const settle = () => setTimeout(() => (didDrag.current = false), 0);
+    window.addEventListener("pointerup", settle);
+    return () => window.removeEventListener("pointerup", settle);
+  }, []);
+  const onPointerDown = (e: React.PointerEvent, i: number) => {
+    if (e.button !== 0 || e.pointerType === "touch") return;
+    pressRef.current = { i, x: e.clientX, y: e.clientY };
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const p = pressRef.current;
+    if (!p || Math.hypot(e.clientX - p.x, e.clientY - p.y) < DRAG_THRESHOLD) return;
+    pressRef.current = null;
+    didDrag.current = true;
+    startDrag(payload(block, p.i), e);
+  };
+  const onPointerUp = () => {
+    pressRef.current = null;
+  };
+  const onClick = (i: number) => {
+    if (didDrag.current) return;
+    toggle(i);
+  };
+
   const toggle = (i: number) => {
     const id = rowId(block, i);
     const open = expanded.includes(id) ? expanded.filter((e) => e !== id) : [...expanded, id];
@@ -336,8 +349,11 @@ export function LogBlock({
             <div
               className={`log-row ${isSel ? "row-sel" : ""}`}
               style={{ gridTemplateColumns: cols }}
-              onClick={() => toggle(i)}
-              onMouseEnter={() => (mine ? select(i) : undefined)}
+              onClick={() => onClick(i)}
+              onMouseEnter={() => (mine && !dragging() ? select(i) : undefined)}
+              onPointerDown={(e) => onPointerDown(e, i)}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
             >
               <span className="text-muted-foreground">{isSel ? "›" : ""}</span>
               {block.kind === "log" ? (
@@ -410,7 +426,7 @@ export function LogBlock({
 }
 
 // a parent link: select the parent's row when it is on screen, else explain it
-function jumpTo(block: Block, sha: string, line: number, storeKey: string, submit: (c: string) => void) {
+function jumpTo(block: ListBlock, sha: string, line: number, storeKey: string, submit: (c: string) => void) {
   if (block.kind !== "log") return;
   const i = block.rows.findIndex((r) => r.sha === sha);
   if (i < 0) {
@@ -482,22 +498,6 @@ function SignInAgain({ storeKey, line, id }: { storeKey: string; line: number; i
   );
 }
 
-// copy with a moment of confirmation in place of the label
-function CopyAction({ text }: { text: string }) {
-  const [done, setDone] = useState(false);
-  return (
-    <Action
-      onClick={() => {
-        void navigator.clipboard?.writeText(text);
-        setDone(true);
-        setTimeout(() => setDone(false), 1200);
-      }}
-    >
-      {done ? "copied" : "copy"}
-    </Action>
-  );
-}
-
 // one line per file: counts, then actions that appear on hover (always
 // on touch): explain the change to this file, its history, copy the path
 function Files({
@@ -539,7 +539,7 @@ function CommitPanel({
   jump,
 }: {
   d: CommitDetail;
-  block: Block;
+  block: ListBlock;
   submit: (c: string) => void;
   jump: (sha: string) => void;
 }) {

@@ -31,6 +31,11 @@ implementations must produce the same payloads and the same output shape.
   line itself; the contract is `why` then `watch out`. (cli parity is
   deferred: `git blame` is local, so a cli `why` would be a small
   follow-up.)
+  `[message]` is the system prompt behind the `draft message` action of
+  a rebase plan on the web (`rebase <branch>`): the payload is the commit
+  whose message is drafted and, for a squash, the commits folding into
+  it, concatenated; the contract is `subject` then `body`, the body left
+  out when the subject says it all. (cli parity deferred.)
 - `preprocess.md`: the deterministic diff-to-payload transformation
   (section splitting, exclusion, sorting, size caps, payload layout).
 - `exclude.txt`: machine-readable exclusion rules (lockfiles, vendored

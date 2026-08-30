@@ -29,7 +29,18 @@ type Shape =
   // the commits touching a path, numbered like the log
   | { kind: "history"; path: string; ref?: string }
   // why a line exists: blame, then the blaming commit cut to the file
-  | { kind: "why"; path: string; line: number; ref?: string };
+  | { kind: "why"; path: string; line: number; ref?: string }
+  // a rebase plan over a linear set of commits: rows to reorder and mark,
+  // the git commands to paste. never executed here
+  | { kind: "plan"; source: PlanSource }
+  // a cherry-pick plan: rows (of the last log), shas, or a pr's commits
+  // onto a branch
+  | { kind: "pick"; onto: string; shas?: string[]; rows?: number[]; pr?: number }
+  // a commit message drafted from one or more commits (a plan row and
+  // the rows folding into it); not in the hints, the plan block sends it
+  | { kind: "message"; shas: string[] };
+
+export type PlanSource = Extract<Shape, { kind: "range" | "pr" | "last" | "row" }>;
 
 // "history src/git.rs", "history of src on dev"; bare history is not a
 // command (the client nudges toward a path)
@@ -57,9 +68,21 @@ export const LATEST_TAG = "latest tag";
 // no bare form: the web has no current branch
 const DESCRIBE = /^(?:describe|draft\s+(?:a\s+)?pr|pr\s+description)(?:\s+(?:for|of))?(?:\s+(.*))?$/i;
 
-// lookups have no diff to frame
+// "rebase feat/x", "rebase main..feat/x", "rebase pr #42", "rebase last 3
+// on feat/x", "rebase 2..5" (rows of the last log)
+const REBASE = /^rebase(?:\s+(.*))?$/i;
+// "pick 3 5 onto release/1.x", "cherry-pick a1b2c3d onto main", "pick pr
+// #42 onto release/1.x", "backport pr #42 to release/1.x"
+const PICK = /^(?:cherry-)?pick\s+(.+?)\s+onto\s+(\S+)$/i;
+const BACKPORT = /^backport\s+(.+?)\s+to\s+(\S+)$/i;
+const MESSAGE = /^message\s+(.+)$/i;
+export const MESSAGE_CAP = 10;
+
+// lookups have no diff to frame; plans are edited, not explained
 function isDiff(c: Command): boolean {
-  return !["branches", "log", "tags", "prs", "history", "why"].includes(c.kind);
+  return !["branches", "log", "tags", "prs", "history", "why", "plan", "pick", "message"].includes(
+    c.kind
+  );
 }
 
 // log rows shown by default and at most
@@ -194,6 +217,50 @@ export function parseCommand(raw: string): Command | null {
     return null;
   }
 
+  const rebase = REBASE.exec(input);
+  if (rebase) {
+    const rest = (rebase[1] ?? "").trim();
+    if (!rest) return null;
+    const inner = parseCommand(rest);
+    if (inner) {
+      if (inner.mode || inner.path) return null;
+      if (["range", "pr", "last", "row"].includes(inner.kind)) {
+        return { kind: "plan", source: inner as PlanSource };
+      }
+      return null;
+    }
+    if (/^\S+$/.test(rest) && !rest.includes("..")) {
+      return { kind: "plan", source: { kind: "range", base: "", head: rest } };
+    }
+    return null;
+  }
+
+  const pick = PICK.exec(input) ?? BACKPORT.exec(input);
+  if (pick) {
+    const what = pick[1].trim();
+    const onto = pick[2];
+    if (onto.includes("..")) return null;
+    const pr = PR.exec(what) ?? HASH.exec(what);
+    if (pr) return { kind: "pick", onto, pr: parseInt(pr[1], 10) };
+    const tokens = what.split(/[\s,]+/).filter(Boolean);
+    if (!tokens.length) return null;
+    if (tokens.every((t) => ROW.test(t))) {
+      return { kind: "pick", onto, rows: tokens.map((t) => parseInt(t, 10)) };
+    }
+    if (tokens.every((t) => SHA.test(t))) {
+      return { kind: "pick", onto, shas: tokens.map((t) => t.toLowerCase()) };
+    }
+    return null;
+  }
+
+  const message = MESSAGE.exec(input);
+  if (message) {
+    const tokens = message[1].split(/[\s,]+/).filter(Boolean);
+    if (!tokens.length || tokens.length > MESSAGE_CAP) return null;
+    if (!tokens.every((t) => SHA.test(t))) return null;
+    return { kind: "message", shas: tokens.map((t) => t.toLowerCase()) };
+  }
+
   const why = WHY_COLON.exec(input);
   if (why) {
     const out: Command = { kind: "why", path: why[1], line: parseInt(why[2], 10) };
@@ -294,6 +361,8 @@ export const commandHint = [
   "  changelog [v1.1..v1.2 | since v1.2 | pr #N] (release notes)",
   "  describe pr #N | <branch> | main..dev (a pr title and description to paste)",
   "  history <path>, any command + in <path>, why <path>:<line>",
+  "  rebase <branch> | main..feat | pr #N | 2..5 (a rebase plan to paste)",
+  "  pick 3 5 onto <branch>, backport pr #N to <branch> (a cherry-pick plan)",
   "  branches, tags, prs [open | closed | mine]",
   "  cli-style works too: wd explain HEAD~3..",
   "  /help for everything else",

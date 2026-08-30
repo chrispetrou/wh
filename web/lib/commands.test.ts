@@ -352,6 +352,64 @@ describe("parseCommand", () => {
     expect(parseCommand("why")).toBeNull();
   });
 
+  it("parses rebase plans over ranges, branches, prs, last n, and rows", () => {
+    expect(parseCommand("rebase main..feat/x")).toEqual({
+      kind: "plan",
+      source: { kind: "range", base: "main", head: "feat/x" },
+    });
+    expect(parseCommand("rebase feat/x")).toEqual({
+      kind: "plan",
+      source: { kind: "range", base: "", head: "feat/x" },
+    });
+    expect(parseCommand("rebase pr #42")).toEqual({ kind: "plan", source: { kind: "pr", num: 42 } });
+    expect(parseCommand("REBASE #7")).toEqual({ kind: "plan", source: { kind: "pr", num: 7 } });
+    expect(parseCommand("rebase last 3 on feat/x")).toEqual({
+      kind: "plan",
+      source: { kind: "last", n: 3, ref: "feat/x" },
+    });
+    expect(parseCommand("rebase 2..5")).toEqual({ kind: "plan", source: { kind: "row", from: 2, to: 5 } });
+    expect(parseCommand("wd rebase 3")).toEqual({ kind: "plan", source: { kind: "row", from: 3 } });
+    // no source, a single sha, a window, a lookup, a mode, a path
+    expect(parseCommand("rebase")).toBeNull();
+    expect(parseCommand("rebase a1b2c3d")).toBeNull();
+    expect(parseCommand("rebase since yesterday")).toBeNull();
+    expect(parseCommand("rebase log")).toBeNull();
+    expect(parseCommand("rebase changelog pr 4")).toBeNull();
+    expect(parseCommand("rebase feat/x in src")).toBeNull();
+    expect(parseCommand("changelog rebase feat/x")).toBeNull();
+    expect(parseCommand("describe rebase feat/x")).toBeNull();
+  });
+
+  it("parses cherry-pick plans", () => {
+    expect(parseCommand("pick 3 5 onto release/1.x")).toEqual({
+      kind: "pick",
+      onto: "release/1.x",
+      rows: [3, 5],
+    });
+    expect(parseCommand("cherry-pick 3, 4 onto main")).toEqual({ kind: "pick", onto: "main", rows: [3, 4] });
+    expect(parseCommand("pick A1B2C3D 1234567 onto main")).toEqual({
+      kind: "pick",
+      onto: "main",
+      shas: ["a1b2c3d", "1234567"],
+    });
+    expect(parseCommand("pick pr #42 onto release/1.x")).toEqual({ kind: "pick", onto: "release/1.x", pr: 42 });
+    expect(parseCommand("backport pr 42 to release/1.x")).toEqual({ kind: "pick", onto: "release/1.x", pr: 42 });
+    expect(parseCommand("backport #42 to main")).toEqual({ kind: "pick", onto: "main", pr: 42 });
+    // mixed tokens, a range target, nothing to pick
+    expect(parseCommand("pick 3 a1b2c3d onto main")).toBeNull();
+    expect(parseCommand("pick 3 onto main..dev")).toBeNull();
+    expect(parseCommand("pick onto main")).toBeNull();
+    expect(parseCommand("pick 3 5")).toBeNull();
+  });
+
+  it("parses the hidden message command", () => {
+    expect(parseCommand("message a1b2c3d")).toEqual({ kind: "message", shas: ["a1b2c3d"] });
+    expect(parseCommand("message A1B2C3D 1234567")).toEqual({ kind: "message", shas: ["a1b2c3d", "1234567"] });
+    expect(parseCommand("message 3")).toBeNull();
+    expect(parseCommand(`message ${Array(11).fill("a1b2c3d").join(" ")}`)).toBeNull();
+    expect(parseCommand("changelog message a1b2c3d")).toBeNull();
+  });
+
   it("rejects everything else", () => {
     expect(parseCommand("")).toBeNull();
     expect(parseCommand("hello")).toBeNull();

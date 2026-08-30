@@ -62,12 +62,10 @@ declined prompt), 1 for any error or a cancelled picker, 2 for bad usage.
 
 ### wd new
 
-```
-$ wd new feat/auth
-created worktree ../repo.feat-auth
-copied .env .env.local
-→ ready feat/auth checked out
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme/new-dark.svg">
+  <img alt="wd new feat/auth: creates a sibling worktree, copies .env files" src="readme/new-light.svg" width="720">
+</picture>
 
 The worktree lands next to the main one as `<repo>.<branch>` (`/` and other
 unsafe characters become `-`), anchored to the main worktree, never to
@@ -87,13 +85,10 @@ already checked out somewhere.
 
 ### wd ls
 
-```
-$ wd ls
-main          clean
-feat/auth     clean
-fix/nav-323   2 dirty   ·  ahead 3
-spike/wasm    clean     ·  behind 12
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme/ls-dark.svg">
+  <img alt="wd ls: worktrees with dirty count and ahead/behind" src="readme/ls-light.svg" width="720">
+</picture>
 
 Main worktree first, then alphabetical. Status is `clean`, `N dirty`, or
 `stale` (a worktree git can no longer read, or one it would prune); the
@@ -102,12 +97,10 @@ detached worktree shows as `<sha> detached`.
 
 ### wd switch
 
-```
-$ wd switch
-? select worktree au▏
-› feat/auth    clean
-→ switched ../repo.feat-auth
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme/switch-dark.svg">
+  <img alt="wd switch: type to filter the picker, enter to cd into the worktree" src="readme/switch-light.svg" width="720">
+</picture>
 
 Type to filter, arrows (or ctrl-p/ctrl-n) to move, enter to select, esc to
 cancel. The picker draws on `/dev/tty` and prints only the chosen path to
@@ -124,14 +117,10 @@ An exact name wins over a substring match.
 
 ### wd rm
 
-```
-$ wd rm
-skipped ../repo.fix-nav-323 (fix/nav-323): 2 dirty
-would remove ../repo.feat-auth (feat/auth)
-remove 1 worktree? [y/N] y
-removed ../repo.feat-auth (feat/auth)
-→ pruned 1 worktree
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme/rm-dark.svg">
+  <img alt="wd rm: skips dirty worktrees, prompts, prunes the merged one" src="readme/rm-light.svg" width="720">
+</picture>
 
 With no name, `wd rm` prunes worktrees whose branches are merged into the
 default branch and deletes those branches. It never touches dirty, locked,
@@ -151,16 +140,10 @@ ancestor detection cannot see; it needs a name. Named removals print
 
 ### wd explain
 
-```
-$ wd explain HEAD~3..
-reading 3 commits · 14 files · +212 −87
-summary
-Moves session handling from cookies to signed JWTs.
-...
-watch out
-logout() no longer clears server state ...
-· 8.4s · claude-opus-5 · 1.2k in · 340 out
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme/explain-dark.svg">
+  <img alt="wd explain HEAD~3..: streams a summary and a watch out section" src="readme/explain-light.svg" width="720">
+</picture>
 
 Reads a diff, preprocesses it (lockfiles, vendored paths, minified and
 binary files are dropped; big diffs are capped per file and in total, per
@@ -175,6 +158,16 @@ Three modes, one diff:
 | (default) | a review | `summary`, `watch out` |
 | `--changelog` | release notes, one line per user-visible change | `added`, `changed`, `fixed`, `removed` (empty ones left out) |
 | `--describe` | a pull request to paste | `title` (in the repo's own subject style), `description`, `testing` when the diff shows how to verify |
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme/changelog-dark.svg">
+  <img alt="wd explain --changelog v1.1..v1.2: release notes in added, changed, fixed sections" src="readme/changelog-light.svg" width="720">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme/describe-dark.svg">
+  <img alt="wd explain --describe: a pr draft with title, description, testing" src="readme/describe-light.svg" width="720">
+</picture>
 
 Ranges:
 
@@ -206,6 +199,11 @@ are mutually exclusive.
 `wd init zsh` (or `bash`, `fish`) prints a small `wd()` function that
 forwards every command and turns `wd switch` into a `cd`. Nothing is
 written; you `eval` it from your rc file.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme/init-dark.svg">
+  <img alt="wd init zsh prints the wd() wrapper; after eval, wd switch really cds" src="readme/init-light.svg" width="720">
+</picture>
 
 ## configuration (explain)
 
@@ -304,6 +302,8 @@ Phrasing is flexible: `explain`, `summarize`, `show me`, `what changed in`
 work as leading verbs, a trailing `?` is fine, and cli-style input (`wd
 explain HEAD~3..`) works verbatim. `/wd` lists the cli commands.
 
+<img alt="the web terminal: what changed in pr #42, answered with summary and watch out" src="readme/web-pr-dark.svg" width="720">
+
 | ask | examples |
 |---|---|
 | a diff range | `diff main..release`, `compare v1.1..v1.2`, `main..` (to the default tip), `..dev` |
@@ -346,6 +346,8 @@ branches are walked (the default first, up to 12 heads; the footer says how
 many were left out), 40 rows by default, up to 200. A log filtered by
 `since` or `by` is drawn flat, without lanes, since its rows are no longer
 a contiguous walk (so `explain 2..5` asks for one row at a time).
+
+<img alt="log draws the commit graph in the transcript, then explain 3 explains that row" src="readme/web-log-dark.svg" width="720">
 
 `prs` lists open pull requests, most recently updated first (30 of them):
 number, title, `head → base`, author, age, and `draft`, `merged`, or
@@ -478,6 +480,7 @@ web/     next.js app: wd explain for any github repo
 site/    landing page
 shared/  explain spec: prompt template, preprocessing rules, provider
          wording, and golden fixtures both implementations must reproduce
+readme/  the animated svgs embedded above (see scripts/readme-anim.mjs)
 ```
 
 The rule for `shared/`: spec once, implement twice. Change the spec first,
@@ -494,11 +497,17 @@ cd cli && cargo build --release   # binary at target/release/wd
 cd cli && cargo test              # unit + integration (isolated git config)
 cd web && npm test                # vitest: grammar, preprocessing, providers, usage
 cd web && npm run build
+node scripts/readme-anim.mjs      # regenerate the readme animations
 ```
 
 CI runs fmt, clippy, tests, a 3.2MiB size gate on the binary, the web tests
 and build, and a brand check (no em dashes outside the landing mock).
 Tagged releases (`v*`) build the four static binaries and open a draft
 GitHub release with checksums.
+
+The animations above are plain animated svgs (css keyframes, no gif, no
+javascript) written by `scripts/readme-anim.mjs`; they hold their last frame
+under `prefers-reduced-motion`. Wording and pacing live in that script, not
+in the svg files.
 
 MIT license.

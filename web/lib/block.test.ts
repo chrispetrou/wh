@@ -46,3 +46,31 @@ describe("blockText", () => {
     expect(blockText(b, NOW)).toEqual(["#12 alice  fix  f → main  3h · draft", "1 open pr"]);
   });
 });
+
+describe("blockText for a plan", () => {
+  it("flattens to the warnings and the paste block", () => {
+    const b: Block = {
+      kind: "plan",
+      mode: "pick",
+      base: { sha: "0".repeat(40) },
+      onto: "release/1.x",
+      footer: [],
+      rows: [
+        {
+          sha: "c".repeat(40),
+          parents: [],
+          subject: "fix typo",
+          author: "chris",
+          date: T,
+          refs: [],
+          idx: 0,
+          message: "fix typo",
+          files: [],
+          clash: [],
+          action: "pick",
+        },
+      ],
+    };
+    expect(blockText(b, NOW)).toEqual(["git switch release/1.x", `git cherry-pick -x ${"c".repeat(40)}`]);
+  });
+});
