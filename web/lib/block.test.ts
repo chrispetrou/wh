@@ -71,6 +71,6 @@ describe("blockText for a plan", () => {
         },
       ],
     };
-    expect(blockText(b, NOW)).toEqual(["git switch release/1.x", `git cherry-pick -x ${"c".repeat(40)}`]);
+    expect(blockText(b, NOW)).toEqual(["git switch 'release/1.x'", `git cherry-pick -x ${"c".repeat(40)}`]);
   });
 });

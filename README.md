@@ -333,6 +333,8 @@ explain HEAD~3..`) works verbatim. `/wd` lists the cli commands.
 | time and people | `since yesterday`, `this week`, `since v1.2 by alice`, `what did i do this week`, `standup` |
 | release notes | `changelog v1.1..v1.2`, `changelog since v1.2`, `release notes for pr #42`, `changelog` (since the newest tag) |
 | a pr draft | `describe pr #42`, `describe feat/auth`, `draft a pr for feat/auth`, `describe main..dev` |
+| a rebase plan | `rebase feat/auth`, `rebase main..feat/auth`, `rebase pr #42`, `rebase 2..5` (log rows) |
+| a cherry-pick plan | `pick 3 5 onto release/1.x`, `backport pr #42 to release/1.x` |
 | a file's story | `history src/git.rs`, `history src/ on feat/auth` |
 | one line | `why src/git.rs:42`, `why line 42 of src/git.rs on v1.2` |
 | cut to a path | any explain plus `in <path>`: `explain the last 5 commits in src/`, `changelog of pr 42 in docs/` |
@@ -379,6 +381,40 @@ with their +/−, and `explain`, `changelog`, `describe`, `github ↗`
 actions; hovering a file offers `explain`, `history`, and `copy`), esc
 steps back out. A command launched from an open panel leaves it open so the
 answer still shows where it came from; `/clear` closes them all.
+
+### rebase and cherry-pick plans
+
+wd never writes to GitHub, but it can plan a history rewrite and hand you
+the exact commands to run, the way `describe` hands you a pr draft.
+`rebase feat/auth` (a branch, a range `rebase main..feat/auth`, a pull
+request `rebase pr #42`, the last few commits `rebase last 5 on feat/auth`,
+or a span of log rows `rebase 2..5`) lists those commits as an editable
+plan, newest first. Reorder a row by dragging it or with shift+up/down, and
+set what happens to it with `p` `r` `s` `f` `d` `e` (pick, reword, squash,
+fixup, drop, edit) or the buttons in its panel. Edit a message inline, or
+let the model draft one from the diff with `draft message`.
+
+`pick 3 5 onto release/1.x` (log rows, shas, or `backport pr #42 to
+release/1.x`) is the same block for a cherry-pick: pick or drop, reorder,
+done.
+
+Rows can be dragged, too: press a row of a `log`, `prs`, or `history` block
+(it shows a grab cursor) and drop it on a branch in a `branches` listing to
+start a cherry-pick onto that branch, or into an open plan to add it there,
+its files checked against the target on the way in. Esc abandons a drag.
+
+Under the rows sits the block to paste. For a rebase it is the messages and
+the todo as heredocs under `/tmp/wd-*` and one `git rebase -i` with
+`GIT_SEQUENCE_EDITOR` pointing at the todo, so nothing opens an editor; a
+reword or squash with a drafted message becomes `pick` or `fixup` plus
+`exec git commit --amend -F`. For a cherry-pick it is `git switch` and `git
+cherry-pick -x` (every branch name is shell-quoted). `copy` takes it,
+`reset` (once you have changed something) puts the rows back. Before you
+paste, a row whose files also changed on the target is flagged in amber and
+a verdict line sums up the conflict risk from file overlap; git's own
+conflict handling takes over if the guess was wrong. Plans stop at 30
+commits and refuse merge commits, since reordering needs a linear history.
+Nothing here runs: the commands run in your local clone, and you push.
 
 ### keys, models, effort
 
@@ -432,6 +468,8 @@ Typing `/` opens a menu of all of them with their options.
 | esc | stop a running explain; close a menu or panel |
 | tab, enter, esc (menu open) | complete; use; dismiss |
 | arrows, enter, esc (after a log, prs, or history) | walk rows; open one; step out |
+| p r s f d e, shift+up/down (in a plan) | set a row's action; move it (drag works too) |
+| drag a log / prs row | onto a branch: cherry-pick; into a plan: add it |
 | cmd+k / ctrl+k | repo picker |
 | ctrl+t, ctrl+1..9, × | new repo tab; switch tabs; close |
 
