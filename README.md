@@ -1,6 +1,23 @@
-# wd
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="readme/logo-dark.svg">
+    <img alt="wd" src="readme/logo-light.svg" width="56" height="56">
+  </picture>
+</p>
 
-Tiny git companion. Worktrees, minus the ceremony. Diffs, in plain English.
+<h1 align="center">wd</h1>
+
+<p align="center">Tiny git companion. Worktrees, minus the ceremony. Diffs, in plain English.</p>
+
+<p align="center">
+  <a href="https://github.com/chrispetrou/wd/actions/workflows/ci.yml"><img alt="ci" src="https://img.shields.io/github/actions/workflow/status/chrispetrou/wd/ci.yml?branch=main&style=flat-square&label=ci&labelColor=1a1a1a&color=2f9e44"></a>
+  <a href="https://github.com/chrispetrou/wd/releases"><img alt="v0.1.0" src="https://img.shields.io/badge/version-v0.1.0-8a8a8a?style=flat-square&labelColor=1a1a1a"></a>
+  <img alt="binary 0.6MiB" src="https://img.shields.io/badge/binary-0.6MiB-8a8a8a?style=flat-square&labelColor=1a1a1a">
+  <img alt="rust" src="https://img.shields.io/badge/rust-stable-8a8a8a?style=flat-square&labelColor=1a1a1a">
+  <a href="LICENSE"><img alt="mit license" src="https://img.shields.io/badge/license-MIT-8a8a8a?style=flat-square&labelColor=1a1a1a"></a>
+  <img alt="status experimental" src="https://img.shields.io/badge/status-experimental-b08900?style=flat-square&labelColor=1a1a1a">
+  <img alt="no telemetry" src="https://img.shields.io/badge/telemetry-none-8a8a8a?style=flat-square&labelColor=1a1a1a">
+</p>
 
 **wd** is a single-binary git companion with two jobs: managing worktrees so
 branch-switching never touches your working state, and explaining diffs in
@@ -480,7 +497,7 @@ web/     next.js app: wd explain for any github repo
 site/    landing page
 shared/  explain spec: prompt template, preprocessing rules, provider
          wording, and golden fixtures both implementations must reproduce
-readme/  the animated svgs embedded above (see scripts/readme-anim.mjs)
+readme/  the logo and the animated svgs embedded above (see scripts/readme-anim.mjs)
 ```
 
 The rule for `shared/`: spec once, implement twice. Change the spec first,
