@@ -8,12 +8,15 @@ import {
   historyBlock,
   lastNCommits,
   logBlock,
+  mergeInputs,
+  planBlock,
   prInput,
   prsBlock,
   sinceInput,
   tagsText,
   whyInput,
   type ExplainInput,
+  type PlanSource,
 } from "@/lib/github";
 import { describeTurn } from "@/lib/explain/context";
 import { filterDiff } from "@/lib/explain/filter";
@@ -274,6 +277,29 @@ export async function POST(req: NextRequest) {
   }
   // row numbers only mean something next to the client's last log
   if (command.kind === "row") return err(400, "run log first, then explain a row number");
+  // plans: rows to edit and commands to paste, never run here
+  if (command.kind === "plan") {
+    if (command.source.kind === "row") return err(400, "run log first, then rebase a row span");
+    try {
+      const plan = await planBlock(session.token, owner, repo, command.source as PlanSource);
+      return plain({ block: plan.block }, "");
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
+  if (command.kind === "pick") {
+    if (command.rows) return err(400, "run log first, then pick row numbers");
+    const source: PlanSource = command.pr
+      ? { kind: "pr", num: command.pr }
+      : { kind: "shas", shas: command.shas ?? [] };
+    if (source.kind === "shas" && !source.shas.length) return err(400, "nothing to pick");
+    try {
+      const plan = await planBlock(session.token, owner, repo, source, command.onto);
+      return plain({ block: plan.block }, "");
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
 
   let data: ExplainInput;
   // after the payload: why sends the line itself, describe its context block
@@ -302,6 +328,13 @@ export async function POST(req: NextRequest) {
       });
       if ("empty" in r) return plain({ empty: r.empty }, "");
       data = r;
+    } else if (command.kind === "message") {
+      // a commit message for one commit, or the few being squashed into it
+      const token = session.token;
+      data = mergeInputs(
+        await Promise.all(command.shas.map((sha) => commitInput(token, owner, repo, sha)))
+      );
+      mode = "message";
     } else {
       data =
         command.kind === "last"

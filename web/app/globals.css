@@ -306,7 +306,7 @@
   align-items: center;
   height: 1.7em;
   border-radius: 3px;
-  cursor: default;
+  cursor: grab; /* rows are draggable (onto a branch, or to reorder) */
 }
 .log-row:hover {
   background: color-mix(in srgb, var(--wd-sel) 60%, transparent);
@@ -319,6 +319,7 @@
   color: var(--muted-foreground);
   border-bottom: 1px solid var(--border);
   margin-bottom: 2px;
+  cursor: default;
 }
 .log-head:hover {
   background: transparent;
@@ -535,6 +536,89 @@ button {
   .log-cell.log-author,
   .log-cell.log-age {
     display: none;
+  }
+}
+
+/* a plan block: rows drag to reorder. the dragged row rides the pointer
+   over its siblings, which slide aside; the message field is the bordered
+   paste field, the commands sit in a pre */
+.log-row.row-drag {
+  background: var(--wd-sel);
+  outline: 1px solid var(--border);
+  position: relative;
+  z-index: 1;
+  cursor: grabbing;
+}
+.log-row.row-shift {
+  transition: transform 100ms cubic-bezier(0.215, 0.61, 0.355, 1);
+}
+.plan-row {
+  grid-template-columns: var(--plan-cols);
+}
+@media (max-width: 560px) {
+  .plan-row {
+    grid-template-columns: var(--plan-cols-narrow);
+  }
+  .plan-note {
+    display: none;
+  }
+}
+.plan-action {
+  padding: 0 6px;
+}
+/* a row carried across the transcript: a chip follows the pointer, the
+   target under it lights up, the page stops selecting text */
+.drag-ghost {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--card);
+  color: var(--foreground);
+  white-space: nowrap;
+  line-height: 1.7;
+}
+.drop-over {
+  background: var(--wd-sel);
+  outline: 1px solid var(--border);
+  border-radius: 3px;
+}
+body.dragging,
+body.dragging * {
+  cursor: grabbing;
+  user-select: none;
+}
+.plan-fold {
+  color: var(--muted-foreground);
+}
+.plan-drop {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+  text-decoration-color: var(--wd-faint);
+}
+.plan-pre {
+  white-space: pre;
+  overflow-x: auto;
+  margin: 4px 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.plan-text {
+  display: block;
+  width: 100%;
+  min-height: calc(3 * 1.7em + 8px);
+  resize: vertical;
+  white-space: pre-wrap;
+  line-height: 1.7;
+  margin: 4px 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .log-row.row-shift {
+    transition: none;
   }
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import type { Block, CommitRow } from "@/lib/block";
+import type { CommitRow, ListBlock } from "@/lib/block";
 import { chatStore } from "@/lib/chat-store";
 import { layout, laneCount } from "@/lib/graph";
 import { LogBlock } from "@/components/log-block";
@@ -33,7 +33,7 @@ const history: Array<[string, string[], string, number, string[]]> = [
   ["2c22b93", [], "Setting up repo", 100, []],
 ];
 
-function build(): Block {
+function build(): ListBlock {
   const laid = layout(history.map(([sha, parents, , h]) => ({ sha, parents, date: NOW - h * 3600_000 })));
   const bySha = new Map(history.map((h) => [h[0], h]));
   const rows: CommitRow[] = laid.map(({ sha, ...graph }) => {
@@ -54,7 +54,7 @@ function build(): Block {
   return { kind: "log", rows, lanes: laneCount(laid), footer: ["19 commits · 4 branches"] };
 }
 
-const prs: Block = {
+const prs: ListBlock = {
   kind: "prs",
   footer: ["2 open prs"],
   rows: [

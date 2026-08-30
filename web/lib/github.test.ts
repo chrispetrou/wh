@@ -5,6 +5,8 @@ import {
   historyBlock,
   latestTag,
   logBlock,
+  planBlock,
+  planRow,
   prFlags,
   prInput,
   prsBlock,
@@ -640,5 +642,151 @@ describe("commitInput", () => {
     await expect(commitInput("t", "o", "r", "0000000")).rejects.toThrow(
       "commit 0000000 not found"
     );
+  });
+});
+
+describe("planBlock", () => {
+  const withFiles = (c: ReturnType<typeof commit>, files: string[]) => ({
+    ...c,
+    files: files.map((filename) => ({ filename, additions: 1, deletions: 0, status: "modified" })),
+  });
+  const B = commit("b", ["a"], "add auth", "2026-08-27T03:00:00Z");
+  const D = commit("d", ["b"], "fix typo", "2026-08-27T04:00:00Z");
+
+  it("plans a rebase over a range, newest first, with the target's clashes", async () => {
+    const calls = stub({
+      "/repos/o/r/compare/main...feat": {
+        total_commits: 2,
+        base_commit: { sha: SHA("m") },
+        commits: [B, D],
+      },
+      [`/repos/o/r/commits/${SHA("b")}`]: withFiles(B, ["src/auth.rs", "README.md"]),
+      [`/repos/o/r/commits/${SHA("d")}`]: withFiles(D, ["src/auth.rs"]),
+      [`/repos/o/r/compare/${SHA("d")}...${SHA("m")}`]: {
+        files: [{ filename: "README.md" }, { filename: "ci.yml" }],
+      },
+    });
+    const { block } = await planBlock("t", "o", "r", { kind: "range", base: "main", head: "feat" });
+    if (block.kind !== "plan") throw new Error("expected a plan");
+    expect(block.mode).toBe("rebase");
+    expect(block.base).toEqual({ sha: SHA("m"), ref: "main" });
+    expect(block.head).toBe("feat");
+    expect(block.rows.map((r) => [r.sha[0], r.idx, r.action, r.files, r.clash])).toEqual([
+      ["d", 0, "pick", ["src/auth.rs"], []],
+      ["b", 1, "pick", ["src/auth.rs", "README.md"], ["README.md"]],
+    ]);
+    expect(block.rows[1].message).toBe("add auth\n\nbody");
+    expect(block.footer).toEqual(["2 commits, feat onto main"]);
+    expect(calls.filter((c) => c.startsWith("/repos/o/r/compare/"))).toHaveLength(2);
+  });
+
+  it("refuses merges, too many commits, an empty range, and unknown refs", async () => {
+    stub({
+      "/repos/o/r/compare/main...feat": { total_commits: 2, base_commit: { sha: SHA("c") }, commits: [F, M] },
+      "/repos/o/r/compare/main...big": { total_commits: 31, base_commit: { sha: SHA("c") }, commits: [] },
+      "/repos/o/r/compare/main...same": { total_commits: 0, base_commit: { sha: SHA("c") }, commits: [] },
+    });
+    await expect(planBlock("t", "o", "r", { kind: "range", base: "main", head: "feat" })).rejects.toThrow(
+      "rebase plans need a linear history; row 1 is a merge"
+    );
+    await expect(planBlock("t", "o", "r", { kind: "range", base: "main", head: "big" })).rejects.toThrow(
+      "that is 31 commits; plans stop at 30"
+    );
+    await expect(planBlock("t", "o", "r", { kind: "range", base: "main", head: "same" })).rejects.toThrow(
+      "nothing to rebase: same is up to date with main"
+    );
+    await expect(planBlock("t", "o", "r", { kind: "range", base: "main", head: "nope" })).rejects.toThrow(
+      "unknown ref in main..nope"
+    );
+  });
+
+  it("plans a pr's commits onto its base", async () => {
+    stub({
+      "/repos/o/r/pulls/7": {
+        merged: false,
+        commits: 1,
+        base: { ref: "main", sha: SHA("m") },
+        head: { ref: "feat" },
+      },
+      "/repos/o/r/pulls/7/commits": [B],
+      [`/repos/o/r/commits/${SHA("b")}`]: withFiles(B, ["src/auth.rs"]),
+      [`/repos/o/r/compare/${SHA("b")}...${SHA("m")}`]: { files: [] },
+    });
+    const { block } = await planBlock("t", "o", "r", { kind: "pr", num: 7 });
+    if (block.kind !== "plan") throw new Error("expected a plan");
+    expect(block.head).toBe("feat");
+    expect(block.base).toEqual({ sha: SHA("m"), ref: "main" });
+    expect(block.rows.map((r) => r.sha[0])).toEqual(["b"]);
+    expect(block.footer).toEqual(["1 commit, feat onto main"]);
+  });
+
+  it("plans a cherry-pick of shas onto a branch, checking each against the target", async () => {
+    const calls = stub({
+      [`/repos/o/r/commits/${SHA("b")}`]: withFiles(B, ["src/auth.rs"]),
+      [`/repos/o/r/commits/${SHA("d")}`]: withFiles(D, ["src/auth.rs", "docs.md"]),
+      "/repos/o/r/commits/rel": { sha: SHA("r") },
+      [`/repos/o/r/compare/${SHA("b")}...rel`]: { files: [{ filename: "src/auth.rs" }] },
+      [`/repos/o/r/compare/${SHA("d")}...rel`]: { files: [{ filename: "other.rs" }] },
+    });
+    const { block } = await planBlock("t", "o", "r", { kind: "shas", shas: [SHA("d"), SHA("b")] }, "rel");
+    if (block.kind !== "plan") throw new Error("expected a plan");
+    expect(block.mode).toBe("pick");
+    expect(block.onto).toBe("rel");
+    expect(block.base).toEqual({ sha: SHA("r"), ref: "rel" });
+    // oldest last on screen, whatever order the shas came in
+    expect(block.rows.map((r) => [r.sha[0], r.clash])).toEqual([
+      ["d", []],
+      ["b", ["src/auth.rs"]],
+    ]);
+    expect(block.footer).toEqual(["2 commits onto rel"]);
+    expect(calls).not.toContain("/repos/o/r/compare/rel");
+    await expect(
+      planBlock("t", "o", "r", { kind: "shas", shas: [SHA("b")] }, "gone")
+    ).rejects.toThrow("unknown ref gone");
+  });
+
+  it("plans the last n commits on a branch", async () => {
+    const fetchMock = stub({});
+    void fetchMock;
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+      const path = url.replace("https://api.github.com", "");
+      if (path.startsWith("/repos/o/r/commits?")) {
+        expect(new URL(url).searchParams.get("sha")).toBe("feat");
+        return Response.json([D, B, A]);
+      }
+      if (path === `/repos/o/r/commits/${SHA("d")}`) return Response.json(withFiles(D, ["x"]));
+      if (path === `/repos/o/r/commits/${SHA("b")}`) return Response.json(withFiles(B, ["y"]));
+      if (path.startsWith("/repos/o/r/compare/")) return Response.json({ files: [] });
+      return new Response("{}", { status: 404 });
+    });
+    const { block } = await planBlock("t", "o", "r", { kind: "last", n: 2, ref: "feat" });
+    if (block.kind !== "plan") throw new Error("expected a plan");
+    expect(block.rows.map((r) => r.sha[0])).toEqual(["d", "b"]);
+    expect(block.base).toEqual({ sha: SHA("a") });
+    expect(block.head).toBe("feat");
+  });
+});
+
+describe("planRow", () => {
+  it("fetches one commit with its files and clashes against a target", async () => {
+    const B = commit("b", ["a"], "add auth", "2026-08-27T03:00:00Z");
+    stub({
+      [`/repos/o/r/commits/${SHA("b")}`]: {
+        ...B,
+        files: [{ filename: "src/auth.rs" }, { filename: "README.md" }],
+      },
+      [`/repos/o/r/compare/${SHA("b")}...rel`]: { files: [{ filename: "README.md" }] },
+    });
+    const r = await planRow("t", "o", "r", SHA("b"), "rel");
+    expect([r.sha[0], r.subject, r.files, r.clash, r.action, r.idx]).toEqual([
+      "b",
+      "add auth",
+      ["src/auth.rs", "README.md"],
+      ["README.md"],
+      "pick",
+      0,
+    ]);
+    await expect(planRow("t", "o", "r", SHA("b"), "gone")).rejects.toThrow("unknown ref gone");
+    await expect(planRow("t", "o", "r", SHA("m"), "rel")).rejects.toThrow("not found");
   });
 });

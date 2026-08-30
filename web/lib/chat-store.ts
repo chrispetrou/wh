@@ -13,6 +13,8 @@ export interface ChatLine {
   block?: Block;
   // a line that is a button
   action?: "signin";
+  // a drop target for a dragged row: "branch:<name>"
+  drop?: string;
 }
 
 // the block the arrow keys drive right now. what is open in a block is
@@ -75,6 +77,14 @@ export interface ChatMessage {
   content: string;
 }
 
+// a message being drafted for a plan row: which block (by line, checked
+// against the plan's base sha since lines shift) and which row (by sha)
+export interface PendingDraft {
+  line: number;
+  base: string;
+  sha: string;
+}
+
 interface Entry {
   lines: ChatLine[];
   streaming: boolean;
@@ -91,6 +101,7 @@ interface Entry {
   // rows of the last prs list
   prs?: PrPick[];
   live?: Live;
+  draft?: PendingDraft;
   // open rows per block line: shas, or pr numbers as strings
   expanded?: Map<number, string[]>;
   details?: Map<string, DetailState>;
@@ -175,6 +186,20 @@ export const chatStore = {
     e.lines = lines;
     persist(key);
     emit(key);
+  },
+  // a block edited in place (a plan's rows): the line keeps its place
+  setBlock(key: string, line: number, block: Block) {
+    const e = load(key);
+    if (!e.lines[line]?.block) return;
+    e.lines = e.lines.map((l, i) => (i === line ? { ...l, block } : l));
+    persist(key);
+    emit(key);
+  },
+  draft(key: string): PendingDraft | undefined {
+    return entry(key).draft;
+  },
+  setDraft(key: string, d: PendingDraft | undefined) {
+    entry(key).draft = d;
   },
   streaming(key: string): boolean {
     return entry(key).streaming;

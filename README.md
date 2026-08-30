@@ -1,6 +1,23 @@
-# wd
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="readme/logo-dark.svg">
+    <img alt="wd" src="readme/logo-light.svg" width="56" height="56">
+  </picture>
+</p>
 
-Tiny git companion. Worktrees, minus the ceremony. Diffs, in plain English.
+<h1 align="center">wd</h1>
+
+<p align="center">Tiny git companion. Worktrees, minus the ceremony. Diffs, in plain English.</p>
+
+<p align="center">
+  <a href="https://github.com/chrispetrou/wd/actions/workflows/ci.yml"><img alt="ci" src="https://img.shields.io/github/actions/workflow/status/chrispetrou/wd/ci.yml?branch=main&style=flat-square&label=ci&labelColor=1a1a1a&color=2f9e44"></a>
+  <a href="https://github.com/chrispetrou/wd/releases"><img alt="v0.1.0" src="https://img.shields.io/badge/version-v0.1.0-8a8a8a?style=flat-square&labelColor=1a1a1a"></a>
+  <img alt="binary 0.6MiB" src="https://img.shields.io/badge/binary-0.6MiB-8a8a8a?style=flat-square&labelColor=1a1a1a">
+  <img alt="rust" src="https://img.shields.io/badge/rust-stable-8a8a8a?style=flat-square&labelColor=1a1a1a">
+  <a href="LICENSE"><img alt="mit license" src="https://img.shields.io/badge/license-MIT-8a8a8a?style=flat-square&labelColor=1a1a1a"></a>
+  <img alt="status experimental" src="https://img.shields.io/badge/status-experimental-b08900?style=flat-square&labelColor=1a1a1a">
+  <img alt="no telemetry" src="https://img.shields.io/badge/telemetry-none-8a8a8a?style=flat-square&labelColor=1a1a1a">
+</p>
 
 **wd** is a single-binary git companion with two jobs: managing worktrees so
 branch-switching never touches your working state, and explaining diffs in
@@ -62,12 +79,10 @@ declined prompt), 1 for any error or a cancelled picker, 2 for bad usage.
 
 ### wd new
 
-```
-$ wd new feat/auth
-created worktree ../repo.feat-auth
-copied .env .env.local
-→ ready feat/auth checked out
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme/new-dark.svg">
+  <img alt="wd new feat/auth: creates a sibling worktree, copies .env files" src="readme/new-light.svg" width="720">
+</picture>
 
 The worktree lands next to the main one as `<repo>.<branch>` (`/` and other
 unsafe characters become `-`), anchored to the main worktree, never to
@@ -87,13 +102,10 @@ already checked out somewhere.
 
 ### wd ls
 
-```
-$ wd ls
-main          clean
-feat/auth     clean
-fix/nav-323   2 dirty   ·  ahead 3
-spike/wasm    clean     ·  behind 12
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme/ls-dark.svg">
+  <img alt="wd ls: worktrees with dirty count and ahead/behind" src="readme/ls-light.svg" width="720">
+</picture>
 
 Main worktree first, then alphabetical. Status is `clean`, `N dirty`, or
 `stale` (a worktree git can no longer read, or one it would prune); the
@@ -102,12 +114,10 @@ detached worktree shows as `<sha> detached`.
 
 ### wd switch
 
-```
-$ wd switch
-? select worktree au▏
-› feat/auth    clean
-→ switched ../repo.feat-auth
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme/switch-dark.svg">
+  <img alt="wd switch: type to filter the picker, enter to cd into the worktree" src="readme/switch-light.svg" width="720">
+</picture>
 
 Type to filter, arrows (or ctrl-p/ctrl-n) to move, enter to select, esc to
 cancel. The picker draws on `/dev/tty` and prints only the chosen path to
@@ -124,14 +134,10 @@ An exact name wins over a substring match.
 
 ### wd rm
 
-```
-$ wd rm
-skipped ../repo.fix-nav-323 (fix/nav-323): 2 dirty
-would remove ../repo.feat-auth (feat/auth)
-remove 1 worktree? [y/N] y
-removed ../repo.feat-auth (feat/auth)
-→ pruned 1 worktree
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme/rm-dark.svg">
+  <img alt="wd rm: skips dirty worktrees, prompts, prunes the merged one" src="readme/rm-light.svg" width="720">
+</picture>
 
 With no name, `wd rm` prunes worktrees whose branches are merged into the
 default branch and deletes those branches. It never touches dirty, locked,
@@ -151,16 +157,10 @@ ancestor detection cannot see; it needs a name. Named removals print
 
 ### wd explain
 
-```
-$ wd explain HEAD~3..
-reading 3 commits · 14 files · +212 −87
-summary
-Moves session handling from cookies to signed JWTs.
-...
-watch out
-logout() no longer clears server state ...
-· 8.4s · claude-opus-5 · 1.2k in · 340 out
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme/explain-dark.svg">
+  <img alt="wd explain HEAD~3..: streams a summary and a watch out section" src="readme/explain-light.svg" width="720">
+</picture>
 
 Reads a diff, preprocesses it (lockfiles, vendored paths, minified and
 binary files are dropped; big diffs are capped per file and in total, per
@@ -175,6 +175,16 @@ Three modes, one diff:
 | (default) | a review | `summary`, `watch out` |
 | `--changelog` | release notes, one line per user-visible change | `added`, `changed`, `fixed`, `removed` (empty ones left out) |
 | `--describe` | a pull request to paste | `title` (in the repo's own subject style), `description`, `testing` when the diff shows how to verify |
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme/changelog-dark.svg">
+  <img alt="wd explain --changelog v1.1..v1.2: release notes in added, changed, fixed sections" src="readme/changelog-light.svg" width="720">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme/describe-dark.svg">
+  <img alt="wd explain --describe: a pr draft with title, description, testing" src="readme/describe-light.svg" width="720">
+</picture>
 
 Ranges:
 
@@ -206,6 +216,11 @@ are mutually exclusive.
 `wd init zsh` (or `bash`, `fish`) prints a small `wd()` function that
 forwards every command and turns `wd switch` into a `cd`. Nothing is
 written; you `eval` it from your rc file.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme/init-dark.svg">
+  <img alt="wd init zsh prints the wd() wrapper; after eval, wd switch really cds" src="readme/init-light.svg" width="720">
+</picture>
 
 ## configuration (explain)
 
@@ -304,6 +319,8 @@ Phrasing is flexible: `explain`, `summarize`, `show me`, `what changed in`
 work as leading verbs, a trailing `?` is fine, and cli-style input (`wd
 explain HEAD~3..`) works verbatim. `/wd` lists the cli commands.
 
+<img alt="the web terminal: what changed in pr #42, answered with summary and watch out" src="readme/web-pr-dark.svg" width="720">
+
 | ask | examples |
 |---|---|
 | a diff range | `diff main..release`, `compare v1.1..v1.2`, `main..` (to the default tip), `..dev` |
@@ -316,6 +333,8 @@ explain HEAD~3..`) works verbatim. `/wd` lists the cli commands.
 | time and people | `since yesterday`, `this week`, `since v1.2 by alice`, `what did i do this week`, `standup` |
 | release notes | `changelog v1.1..v1.2`, `changelog since v1.2`, `release notes for pr #42`, `changelog` (since the newest tag) |
 | a pr draft | `describe pr #42`, `describe feat/auth`, `draft a pr for feat/auth`, `describe main..dev` |
+| a rebase plan | `rebase feat/auth`, `rebase main..feat/auth`, `rebase pr #42`, `rebase 2..5` (log rows) |
+| a cherry-pick plan | `pick 3 5 onto release/1.x`, `backport pr #42 to release/1.x` |
 | a file's story | `history src/git.rs`, `history src/ on feat/auth` |
 | one line | `why src/git.rs:42`, `why line 42 of src/git.rs on v1.2` |
 | cut to a path | any explain plus `in <path>`: `explain the last 5 commits in src/`, `changelog of pr 42 in docs/` |
@@ -347,6 +366,8 @@ many were left out), 40 rows by default, up to 200. A log filtered by
 `since` or `by` is drawn flat, without lanes, since its rows are no longer
 a contiguous walk (so `explain 2..5` asks for one row at a time).
 
+<img alt="log draws the commit graph in the transcript, then explain 3 explains that row" src="readme/web-log-dark.svg" width="720">
+
 `prs` lists open pull requests, most recently updated first (30 of them):
 number, title, `head → base`, author, age, and `draft`, `merged`, or
 `closed` where it applies. `history <path>` lists the commits touching a
@@ -360,6 +381,40 @@ with their +/−, and `explain`, `changelog`, `describe`, `github ↗`
 actions; hovering a file offers `explain`, `history`, and `copy`), esc
 steps back out. A command launched from an open panel leaves it open so the
 answer still shows where it came from; `/clear` closes them all.
+
+### rebase and cherry-pick plans
+
+wd never writes to GitHub, but it can plan a history rewrite and hand you
+the exact commands to run, the way `describe` hands you a pr draft.
+`rebase feat/auth` (a branch, a range `rebase main..feat/auth`, a pull
+request `rebase pr #42`, the last few commits `rebase last 5 on feat/auth`,
+or a span of log rows `rebase 2..5`) lists those commits as an editable
+plan, newest first. Reorder a row by dragging it or with shift+up/down, and
+set what happens to it with `p` `r` `s` `f` `d` `e` (pick, reword, squash,
+fixup, drop, edit) or the buttons in its panel. Edit a message inline, or
+let the model draft one from the diff with `draft message`.
+
+`pick 3 5 onto release/1.x` (log rows, shas, or `backport pr #42 to
+release/1.x`) is the same block for a cherry-pick: pick or drop, reorder,
+done.
+
+Rows can be dragged, too: press a row of a `log`, `prs`, or `history` block
+(it shows a grab cursor) and drop it on a branch in a `branches` listing to
+start a cherry-pick onto that branch, or into an open plan to add it there,
+its files checked against the target on the way in. Esc abandons a drag.
+
+Under the rows sits the block to paste. For a rebase it is the messages and
+the todo as heredocs under `/tmp/wd-*` and one `git rebase -i` with
+`GIT_SEQUENCE_EDITOR` pointing at the todo, so nothing opens an editor; a
+reword or squash with a drafted message becomes `pick` or `fixup` plus
+`exec git commit --amend -F`. For a cherry-pick it is `git switch` and `git
+cherry-pick -x` (every branch name is shell-quoted). `copy` takes it,
+`reset` (once you have changed something) puts the rows back. Before you
+paste, a row whose files also changed on the target is flagged in amber and
+a verdict line sums up the conflict risk from file overlap; git's own
+conflict handling takes over if the guess was wrong. Plans stop at 30
+commits and refuse merge commits, since reordering needs a linear history.
+Nothing here runs: the commands run in your local clone, and you push.
 
 ### keys, models, effort
 
@@ -413,6 +468,8 @@ Typing `/` opens a menu of all of them with their options.
 | esc | stop a running explain; close a menu or panel |
 | tab, enter, esc (menu open) | complete; use; dismiss |
 | arrows, enter, esc (after a log, prs, or history) | walk rows; open one; step out |
+| p r s f d e, shift+up/down (in a plan) | set a row's action; move it (drag works too) |
+| drag a log / prs row | onto a branch: cherry-pick; into a plan: add it |
 | cmd+k / ctrl+k | repo picker |
 | ctrl+t, ctrl+1..9, × | new repo tab; switch tabs; close |
 
@@ -478,6 +535,7 @@ web/     next.js app: wd explain for any github repo
 site/    landing page
 shared/  explain spec: prompt template, preprocessing rules, provider
          wording, and golden fixtures both implementations must reproduce
+readme/  the logo and the animated svgs embedded above (see scripts/readme-anim.mjs)
 ```
 
 The rule for `shared/`: spec once, implement twice. Change the spec first,
@@ -494,11 +552,17 @@ cd cli && cargo build --release   # binary at target/release/wd
 cd cli && cargo test              # unit + integration (isolated git config)
 cd web && npm test                # vitest: grammar, preprocessing, providers, usage
 cd web && npm run build
+node scripts/readme-anim.mjs      # regenerate the readme animations
 ```
 
 CI runs fmt, clippy, tests, a 3.2MiB size gate on the binary, the web tests
 and build, and a brand check (no em dashes outside the landing mock).
 Tagged releases (`v*`) build the four static binaries and open a draft
 GitHub release with checksums.
+
+The animations above are plain animated svgs (css keyframes, no gif, no
+javascript) written by `scripts/readme-anim.mjs`; they hold their last frame
+under `prefers-reduced-motion`. Wording and pacing live in that script, not
+in the svg files.
 
 MIT license.

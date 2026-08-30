@@ -1,0 +1,204 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="250" viewBox="0 0 720 250" font-family="ui-monospace,SFMono-Regular,'SF Mono','Cascadia Mono','JetBrains Mono',Menlo,Consolas,monospace" font-size="13" role="img" aria-label="wd explain --changelog">
+<style>
+text{fill:#e8e8e8;white-space:pre}
+.o{fill:#7a7a7a}.g{fill:#69db7c}.a{fill:#e0b420}.x{fill:#91a7ff}.f{fill:#3a3a3a}
+.c{font-weight:600}.b{font-weight:600}.inv{fill:#111111}.sm{font-size:12px}
+@keyframes blink{50%{opacity:0}}
+.r0x1_841{opacity:0;animation:r0x1_841 8.69s linear infinite}
+.r0_806x2_647{opacity:0;animation:r0_806x2_647 8.69s linear infinite}
+.r2_417x4_258{opacity:0;animation:r2_417x4_258 8.69s linear infinite}
+.r3_222x5_063{opacity:0;animation:r3_222x5_063 8.69s linear infinite}
+.r4_028x5_869{opacity:0;animation:r4_028x5_869 8.69s linear infinite}
+.r4_833x6_674{opacity:0;animation:r4_833x6_674 8.69s linear infinite}
+.r5_639x7_48{opacity:0;animation:r5_639x7_48 8.69s linear infinite}
+.r6_444x8_285{opacity:0;animation:r6_444x8_285 8.69s linear infinite}
+.r7_25x9_091{opacity:0;animation:r7_25x9_091 8.69s linear infinite}
+.r8_861x10_702{opacity:0;animation:r8_861x10_702 8.69s linear infinite}
+.r9_666x11_507{opacity:0;animation:r9_666x11_507 8.69s linear infinite}
+.r10_472x12_313{opacity:0;animation:r10_472x12_313 8.69s linear infinite}
+.r11_277x13_119{opacity:0;animation:r11_277x13_119 8.69s linear infinite}
+.r12_083x13_924{opacity:0;animation:r12_083x13_924 8.69s linear infinite}
+.r12_888x14_73{opacity:0;animation:r12_888x14_73 8.69s linear infinite}
+.r13_694x15_535{opacity:0;animation:r13_694x15_535 8.69s linear infinite}
+.r14_499x16_341{opacity:0;animation:r14_499x16_341 8.69s linear infinite}
+.r15_305x17_146{opacity:0;animation:r15_305x17_146 8.69s linear infinite}
+.r16_11x17_952{opacity:0;animation:r16_11x17_952 8.69s linear infinite}
+.r16_916x18_757{opacity:0;animation:r16_916x18_757 8.69s linear infinite}
+.r18_527x20_368{opacity:0;animation:r18_527x20_368 8.69s linear infinite}
+.r19_333x21_174{opacity:0;animation:r19_333x21_174 8.69s linear infinite}
+.r20_138x21_979{opacity:0;animation:r20_138x21_979 8.69s linear infinite}
+.r20_944x22_785{opacity:0;animation:r20_944x22_785 8.69s linear infinite}
+.r21_749x23_59{opacity:0;animation:r21_749x23_59 8.69s linear infinite}
+.r22_555x24_396{opacity:0;animation:r22_555x24_396 8.69s linear infinite}
+.r23_36x25_201{opacity:0;animation:r23_36x25_201 8.69s linear infinite}
+.r24_166x26_007{opacity:0;animation:r24_166x26_007 8.69s linear infinite}
+.r24_971x26_812{opacity:0;animation:r24_971x26_812 8.69s linear infinite}
+.r25_777x27_618{opacity:0;animation:r25_777x27_618 8.69s linear infinite}
+.k31{animation:k31 8.69s steps(33) infinite,blink 1s steps(1) infinite}
+.k31v{opacity:0;animation:k31v 8.69s linear infinite}
+.r32_911x34_753{opacity:0;animation:r32_911x34_753 8.69s linear infinite}
+.r38_665x40_506{opacity:0;animation:r38_665x40_506 8.69s linear infinite}
+.r40_967x42_808{opacity:0;animation:r40_967x42_808 8.69s linear infinite}
+.r41_945x43_786{opacity:0;animation:r41_945x43_786 8.69s linear infinite}
+.r42_923x44_764{opacity:0;animation:r42_923x44_764 8.69s linear infinite}
+.r43_901x45_742{opacity:0;animation:r43_901x45_742 8.69s linear infinite}
+.r44_879x46_72{opacity:0;animation:r44_879x46_72 8.69s linear infinite}
+.r45_857x47_699{opacity:0;animation:r45_857x47_699 8.69s linear infinite}
+.r46_835x48_677{opacity:0;animation:r46_835x48_677 8.69s linear infinite}
+.r48_389x50_23{opacity:0;animation:r48_389x50_23 8.69s linear infinite}
+.r49_367x51_208{opacity:0;animation:r49_367x51_208 8.69s linear infinite}
+.r50_345x52_186{opacity:0;animation:r50_345x52_186 8.69s linear infinite}
+.r51_323x53_165{opacity:0;animation:r51_323x53_165 8.69s linear infinite}
+.r52_301x54_143{opacity:0;animation:r52_301x54_143 8.69s linear infinite}
+.r53_28x55_121{opacity:0;animation:r53_28x55_121 8.69s linear infinite}
+.r55_984x57_825{opacity:0;animation:r55_984x57_825 8.69s linear infinite}
+.r58_285x60_127{opacity:0;animation:r58_285x60_127 8.69s linear infinite}
+.r59_264x61_105{opacity:0;animation:r59_264x61_105 8.69s linear infinite}
+.r60_242x62_083{opacity:0;animation:r60_242x62_083 8.69s linear infinite}
+.r61_22x63_061{opacity:0;animation:r61_22x63_061 8.69s linear infinite}
+.r62_198x64_039{opacity:0;animation:r62_198x64_039 8.69s linear infinite}
+.r63_176x65_017{opacity:0;animation:r63_176x65_017 8.69s linear infinite}
+.r64_154x65_995{opacity:0;animation:r64_154x65_995 8.69s linear infinite}
+.r66_858x68_7{opacity:0;animation:r66_858x68_7 8.69s linear infinite}
+.r69_16x71_001{opacity:0;animation:r69_16x71_001 8.69s linear infinite}
+.r70_138x71_979{opacity:0;animation:r70_138x71_979 8.69s linear infinite}
+.r71_116x72_957{opacity:0;animation:r71_116x72_957 8.69s linear infinite}
+.r72_094x73_936{opacity:0;animation:r72_094x73_936 8.69s linear infinite}
+.r73_072x74_914{opacity:0;animation:r73_072x74_914 8.69s linear infinite}
+.r74_051x75_892{opacity:0;animation:r74_051x75_892 8.69s linear infinite}
+.r75_029x76_87{opacity:0;animation:r75_029x76_87 8.69s linear infinite}
+.r77_733x79_574{opacity:0;animation:r77_733x79_574 8.69s linear infinite}
+@keyframes r0x1_841{0%,0%{opacity:0}1.841%,100%{opacity:1}}
+@keyframes r0_806x2_647{0%,0.806%{opacity:0}2.647%,100%{opacity:1}}
+@keyframes r2_417x4_258{0%,2.417%{opacity:0}4.258%,100%{opacity:1}}
+@keyframes r3_222x5_063{0%,3.222%{opacity:0}5.063%,100%{opacity:1}}
+@keyframes r4_028x5_869{0%,4.028%{opacity:0}5.869%,100%{opacity:1}}
+@keyframes r4_833x6_674{0%,4.833%{opacity:0}6.674%,100%{opacity:1}}
+@keyframes r5_639x7_48{0%,5.639%{opacity:0}7.48%,100%{opacity:1}}
+@keyframes r6_444x8_285{0%,6.444%{opacity:0}8.285%,100%{opacity:1}}
+@keyframes r7_25x9_091{0%,7.25%{opacity:0}9.091%,100%{opacity:1}}
+@keyframes r8_861x10_702{0%,8.861%{opacity:0}10.702%,100%{opacity:1}}
+@keyframes r9_666x11_507{0%,9.666%{opacity:0}11.507%,100%{opacity:1}}
+@keyframes r10_472x12_313{0%,10.472%{opacity:0}12.313%,100%{opacity:1}}
+@keyframes r11_277x13_119{0%,11.277%{opacity:0}13.119%,100%{opacity:1}}
+@keyframes r12_083x13_924{0%,12.083%{opacity:0}13.924%,100%{opacity:1}}
+@keyframes r12_888x14_73{0%,12.888%{opacity:0}14.73%,100%{opacity:1}}
+@keyframes r13_694x15_535{0%,13.694%{opacity:0}15.535%,100%{opacity:1}}
+@keyframes r14_499x16_341{0%,14.499%{opacity:0}16.341%,100%{opacity:1}}
+@keyframes r15_305x17_146{0%,15.305%{opacity:0}17.146%,100%{opacity:1}}
+@keyframes r16_11x17_952{0%,16.11%{opacity:0}17.952%,100%{opacity:1}}
+@keyframes r16_916x18_757{0%,16.916%{opacity:0}18.757%,100%{opacity:1}}
+@keyframes r18_527x20_368{0%,18.527%{opacity:0}20.368%,100%{opacity:1}}
+@keyframes r19_333x21_174{0%,19.333%{opacity:0}21.174%,100%{opacity:1}}
+@keyframes r20_138x21_979{0%,20.138%{opacity:0}21.979%,100%{opacity:1}}
+@keyframes r20_944x22_785{0%,20.944%{opacity:0}22.785%,100%{opacity:1}}
+@keyframes r21_749x23_59{0%,21.749%{opacity:0}23.59%,100%{opacity:1}}
+@keyframes r22_555x24_396{0%,22.555%{opacity:0}24.396%,100%{opacity:1}}
+@keyframes r23_36x25_201{0%,23.36%{opacity:0}25.201%,100%{opacity:1}}
+@keyframes r24_166x26_007{0%,24.166%{opacity:0}26.007%,100%{opacity:1}}
+@keyframes r24_971x26_812{0%,24.971%{opacity:0}26.812%,100%{opacity:1}}
+@keyframes r25_777x27_618{0%,25.777%{opacity:0}27.618%,100%{opacity:1}}
+@keyframes k31{0%{transform:translateX(0)}26.582%,100%{transform:translateX(257.40px)}}
+@keyframes k31v{0%,0%{opacity:0}0%,30.61%{opacity:1}30.910%,100%{opacity:0}}
+@keyframes r32_911x34_753{0%,32.911%{opacity:0}34.753%,100%{opacity:1}}
+@keyframes r38_665x40_506{0%,38.665%{opacity:0}40.506%,100%{opacity:1}}
+@keyframes r40_967x42_808{0%,40.967%{opacity:0}42.808%,100%{opacity:1}}
+@keyframes r41_945x43_786{0%,41.945%{opacity:0}43.786%,100%{opacity:1}}
+@keyframes r42_923x44_764{0%,42.923%{opacity:0}44.764%,100%{opacity:1}}
+@keyframes r43_901x45_742{0%,43.901%{opacity:0}45.742%,100%{opacity:1}}
+@keyframes r44_879x46_72{0%,44.879%{opacity:0}46.72%,100%{opacity:1}}
+@keyframes r45_857x47_699{0%,45.857%{opacity:0}47.699%,100%{opacity:1}}
+@keyframes r46_835x48_677{0%,46.835%{opacity:0}48.677%,100%{opacity:1}}
+@keyframes r48_389x50_23{0%,48.389%{opacity:0}50.23%,100%{opacity:1}}
+@keyframes r49_367x51_208{0%,49.367%{opacity:0}51.208%,100%{opacity:1}}
+@keyframes r50_345x52_186{0%,50.345%{opacity:0}52.186%,100%{opacity:1}}
+@keyframes r51_323x53_165{0%,51.323%{opacity:0}53.165%,100%{opacity:1}}
+@keyframes r52_301x54_143{0%,52.301%{opacity:0}54.143%,100%{opacity:1}}
+@keyframes r53_28x55_121{0%,53.28%{opacity:0}55.121%,100%{opacity:1}}
+@keyframes r55_984x57_825{0%,55.984%{opacity:0}57.825%,100%{opacity:1}}
+@keyframes r58_285x60_127{0%,58.285%{opacity:0}60.127%,100%{opacity:1}}
+@keyframes r59_264x61_105{0%,59.264%{opacity:0}61.105%,100%{opacity:1}}
+@keyframes r60_242x62_083{0%,60.242%{opacity:0}62.083%,100%{opacity:1}}
+@keyframes r61_22x63_061{0%,61.22%{opacity:0}63.061%,100%{opacity:1}}
+@keyframes r62_198x64_039{0%,62.198%{opacity:0}64.039%,100%{opacity:1}}
+@keyframes r63_176x65_017{0%,63.176%{opacity:0}65.017%,100%{opacity:1}}
+@keyframes r64_154x65_995{0%,64.154%{opacity:0}65.995%,100%{opacity:1}}
+@keyframes r66_858x68_7{0%,66.858%{opacity:0}68.7%,100%{opacity:1}}
+@keyframes r69_16x71_001{0%,69.16%{opacity:0}71.001%,100%{opacity:1}}
+@keyframes r70_138x71_979{0%,70.138%{opacity:0}71.979%,100%{opacity:1}}
+@keyframes r71_116x72_957{0%,71.116%{opacity:0}72.957%,100%{opacity:1}}
+@keyframes r72_094x73_936{0%,72.094%{opacity:0}73.936%,100%{opacity:1}}
+@keyframes r73_072x74_914{0%,73.072%{opacity:0}74.914%,100%{opacity:1}}
+@keyframes r74_051x75_892{0%,74.051%{opacity:0}75.892%,100%{opacity:1}}
+@keyframes r75_029x76_87{0%,75.029%{opacity:0}76.87%,100%{opacity:1}}
+@keyframes r77_733x79_574{0%,77.733%{opacity:0}79.574%,100%{opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}.rv{opacity:1!important}.cv{opacity:0!important}}
+</style>
+<rect width="720" height="250" fill="#111111"/>
+<rect x="0.5" y="0.5" width="719" height="249" fill="none" stroke="#222222" rx="4"/>
+
+<text class="rv o r0x1_841" x="16" y="30">~/repo $</text>
+<text class="rv c r0x1_841" x="86.2" y="30">w</text>
+<text class="rv c r0_806x2_647" x="94" y="30">d</text>
+<text class="rv c r2_417x4_258" x="109.6" y="30">e</text>
+<text class="rv c r3_222x5_063" x="117.4" y="30">x</text>
+<text class="rv c r4_028x5_869" x="125.2" y="30">p</text>
+<text class="rv c r4_833x6_674" x="133" y="30">l</text>
+<text class="rv c r5_639x7_48" x="140.8" y="30">a</text>
+<text class="rv c r6_444x8_285" x="148.6" y="30">i</text>
+<text class="rv c r7_25x9_091" x="156.4" y="30">n</text>
+<text class="rv c r8_861x10_702" x="172" y="30">-</text>
+<text class="rv c r9_666x11_507" x="179.8" y="30">-</text>
+<text class="rv c r10_472x12_313" x="187.6" y="30">c</text>
+<text class="rv c r11_277x13_119" x="195.4" y="30">h</text>
+<text class="rv c r12_083x13_924" x="203.2" y="30">a</text>
+<text class="rv c r12_888x14_73" x="211" y="30">n</text>
+<text class="rv c r13_694x15_535" x="218.8" y="30">g</text>
+<text class="rv c r14_499x16_341" x="226.6" y="30">e</text>
+<text class="rv c r15_305x17_146" x="234.4" y="30">l</text>
+<text class="rv c r16_11x17_952" x="242.2" y="30">o</text>
+<text class="rv c r16_916x18_757" x="250" y="30">g</text>
+<text class="rv c r18_527x20_368" x="265.6" y="30">v</text>
+<text class="rv c r19_333x21_174" x="273.4" y="30">1</text>
+<text class="rv c r20_138x21_979" x="281.2" y="30">.</text>
+<text class="rv c r20_944x22_785" x="289" y="30">1</text>
+<text class="rv c r21_749x23_59" x="296.8" y="30">.</text>
+<text class="rv c r22_555x24_396" x="304.6" y="30">.</text>
+<text class="rv c r23_36x25_201" x="312.4" y="30">v</text>
+<text class="rv c r24_166x26_007" x="320.2" y="30">1</text>
+<text class="rv c r24_971x26_812" x="328" y="30">.</text>
+<text class="rv c r25_777x27_618" x="335.8" y="30">2</text>
+<g class="cv k31v"><rect fill="#e8e8e8" class="k31" x="86.2" y="18" width="7" height="15"/></g>
+<text class="rv o r32_911x34_753" x="16" y="52">reading 24 commits · 61 files · +1840 −520</text>
+<text class="rv a r38_665x40_506" x="16" y="74">added</text>
+<text class="rv  r40_967x42_808" x="16" y="96">Signed</text>
+<text class="rv  r41_945x43_786" x="70.6" y="96">jwt</text>
+<text class="rv  r42_923x44_764" x="101.8" y="96">sessions,</text>
+<text class="rv  r43_901x45_742" x="179.8" y="96">kept</text>
+<text class="rv  r44_879x46_72" x="218.8" y="96">across</text>
+<text class="rv  r45_857x47_699" x="273.4" y="96">a</text>
+<text class="rv  r46_835x48_677" x="289" y="96">restart.</text>
+<text class="rv  r48_389x50_23" x="16" y="118">wd</text>
+<text class="rv  r49_367x51_208" x="39.4" y="118">rm</text>
+<text class="rv  r50_345x52_186" x="62.8" y="118">--force</text>
+<text class="rv  r51_323x53_165" x="125.2" y="118">removes</text>
+<text class="rv  r52_301x54_143" x="187.6" y="118">squash-merged</text>
+<text class="rv  r53_28x55_121" x="296.8" y="118">branches.</text>
+<text class="rv a r55_984x57_825" x="16" y="140">changed</text>
+<text class="rv  r58_285x60_127" x="16" y="162">explain</text>
+<text class="rv  r59_264x61_105" x="78.4" y="162">streams</text>
+<text class="rv  r60_242x62_083" x="140.8" y="162">its</text>
+<text class="rv  r61_22x63_061" x="172" y="162">answer</text>
+<text class="rv  r62_198x64_039" x="226.6" y="162">line</text>
+<text class="rv  r63_176x65_017" x="265.6" y="162">by</text>
+<text class="rv  r64_154x65_995" x="289" y="162">line.</text>
+<text class="rv a r66_858x68_7" x="16" y="184">fixed</text>
+<text class="rv  r69_16x71_001" x="16" y="206">switch</text>
+<text class="rv  r70_138x71_979" x="70.6" y="206">keeps</text>
+<text class="rv  r71_116x72_957" x="117.4" y="206">the</text>
+<text class="rv  r72_094x73_936" x="148.6" y="206">query</text>
+<text class="rv  r73_072x74_914" x="195.4" y="206">when</text>
+<text class="rv  r74_051x75_892" x="234.4" y="206">you</text>
+<text class="rv  r75_029x76_87" x="265.6" y="206">backspace.</text>
+<text class="rv o r77_733x79_574" x="16" y="228">· 6.1s · claude-opus-5 · 3.4k in · 210 out</text>
+</svg>

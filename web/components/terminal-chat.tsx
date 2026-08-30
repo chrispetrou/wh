@@ -2,11 +2,22 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { blockText, type Block } from "@/lib/block";
+import { blockText, type Block, type PlanAction, type PlanRow } from "@/lib/block";
 import { chatStore, type LogRow, type PrPick } from "@/lib/chat-store";
 import { commandHint, parseCommand } from "@/lib/commands";
+import {
+  insertRow,
+  messageText,
+  move,
+  parseMessage,
+  setAction,
+  setText,
+  type PlanBlock as Plan,
+} from "@/lib/plan";
 import { signInAgain, takeResume } from "@/lib/signin";
 import { LogBlock } from "./log-block";
+import { PlanBlock } from "./plan-block";
+import { DragLayer, type Drop } from "./drag-layer";
 import { ModelGlyph } from "./glyph";
 import { relTime } from "@/lib/utils";
 import {
@@ -39,6 +50,7 @@ interface Line {
   tail?: Head; // trailing span, e.g. the muted status words of a branch row
   block?: Block; // a structured entry (log, history, prs) rendered as a grid
   action?: "signin"; // a line that is a button: sign in again, in a popup
+  drop?: string; // a drop target for a dragged row: "branch:<name>"
 }
 
 const CLS: Record<Cls, string> = {
@@ -74,6 +86,7 @@ function branchLine(text: string): Line {
     text: m[2],
     cls: "",
     tail: { text: m[3], cls: "o" },
+    drop: `branch:${m[2]}`, // a log row dropped here is picked onto it
   };
 }
 
@@ -103,6 +116,8 @@ const LABELS = new Set([
   "description",
   "testing",
   "why",
+  "subject",
+  "body",
 ]);
 
 // urls in output become quiet accent links
@@ -171,6 +186,8 @@ const HELP: HelpRow[] = [
   ["since yesterday [by me]", "a period, a ref, one author; standup"],
   ["changelog [range]", "release notes: added, changed, fixed, removed"],
   ["describe pr #N | <branch> | range", "a pr title and description, ready to paste (/copy)"],
+  ["rebase <branch> | main..feat | pr #N | 2..5", "a rebase plan: reorder, squash, reword, drop; paste the commands"],
+  ["pick 3 5 onto <branch>", "a cherry-pick plan (backport pr #N to <branch> works too)"],
   ["history <path>", "commits touching a file or dir, numbered"],
   ["... in <path>", "any explain, cut down to a file or dir"],
   ["why <path>:<line>", "why a line exists (blame, in plain words)"],
@@ -201,6 +218,7 @@ const HELP: HelpRow[] = [
   ["tab", "complete"],
   ["up/down", "history; after a log, walk its rows"],
   ["enter / esc", "open a row, step back out"],
+  ["p r s f d e, shift+up/down", "on a plan row: set its action, move it (drag works too)"],
   ["ctrl+r", "search history"],
   ["esc", "stop, or close the menu"],
   ["cmd+k / ctrl+k", "repo picker"],
@@ -321,7 +339,10 @@ function branchSlot(input: string): BranchSlot | null {
   // "since <ref>" anywhere at the end, and the first side of a changelog range
   m = /^((?:wd\s+)?(?:.*\s)?since\s+)([^\s.]*)$/i.exec(input);
   if (m) return { prefix: m[1], partial: m[2] };
-  m = /^((?:wd\s+)?(?:changelog|release\s+notes|describe)\s+)([^\s.]*)$/i.exec(input);
+  m = /^((?:wd\s+)?(?:changelog|release\s+notes|describe|rebase)\s+)([^\s.]*)$/i.exec(input);
+  if (m) return { prefix: m[1], partial: m[2] };
+  // the target of a cherry-pick plan
+  m = /^((?:wd\s+)?(?:(?:cherry-)?pick\s+.+?\s+onto\s+|backport\s+.+?\s+to\s+))(\S*)$/i.exec(input);
   if (m) return { prefix: m[1], partial: m[2] };
   m = /^((?:(?:wd\s+)?(?:diff|compare|explain)\s+)?\S*?\.{2,3})(\S*)$/i.exec(input);
   if (m && m[1].includes("..")) return { prefix: m[1], partial: m[2] };
@@ -330,9 +351,10 @@ function branchSlot(input: string): BranchSlot | null {
   return null;
 }
 
-// "explain " with a log on screen offers its row numbers
+// "explain " with a log on screen offers its row numbers; so do a rebase
+// and a pick (which takes several)
 function rowSlot(input: string): BranchSlot | null {
-  const m = /^((?:wd\s+)?(?:explain|show)\s+)(\d{0,3})$/i.exec(input);
+  const m = /^((?:wd\s+)?(?:explain|show|rebase|(?:cherry-)?pick)\s+(?:\d{1,3}\s+)*)(\d{0,3})$/i.exec(input);
   return m ? { prefix: m[1], partial: m[2] } : null;
 }
 
@@ -840,9 +862,12 @@ export function TerminalChat({
 
   const run = async (command: string, raw = false) => {
     const kind = parseCommand(command)?.kind;
-    const lookup = ["branches", "log", "tags", "prs", "history"].includes(kind ?? "");
+    const lookup = ["branches", "log", "tags", "prs", "history", "plan", "pick"].includes(kind ?? "");
+    // a message drafted for a plan row is a side quest: it neither starts
+    // nor ends a conversation
+    const draft = kind === "message";
     // a new diff command starts a new context; lookups leave it alone
-    if (!raw && !lookup) chatStore.clearContext(storeKey);
+    if (!raw && !lookup && !draft) chatStore.clearContext(storeKey);
     let context = "";
     let empty = false;
     const full = await stream(
@@ -865,7 +890,7 @@ export function TerminalChat({
             enter([{ text: "", cls: "", block: meta.block }]);
             if (meta.block.kind === "prs") {
               chatStore.setPrRows(storeKey, (meta.rows as PrPick[] | undefined) ?? []);
-            } else {
+            } else if (meta.block.kind === "log") {
               chatStore.setLogRows(
                 storeKey,
                 (meta.rows as LogRow[] | undefined) ?? [],
@@ -897,6 +922,10 @@ export function TerminalChat({
         },
       }
     );
+    if (draft) {
+      applyDraft(full);
+      return;
+    }
     if (empty) return;
     if (!raw && context && full?.trim()) {
       chatStore.setContext(storeKey, context, full.trim());
@@ -905,6 +934,80 @@ export function TerminalChat({
         muted(["(ask follow-ups in plain words, or run another command)"]);
       }
     }
+  };
+
+  // the drafted message lands in the plan row that asked for it. the
+  // block is looked up by line and checked by its base sha, since lines
+  // shift as the transcript grows
+  const applyDraft = (full: string | null) => {
+    const d = chatStore.draft(storeKey);
+    chatStore.setDraft(storeKey, undefined);
+    if (!d || !full?.trim()) return;
+    const all = chatStore.lines(storeKey);
+    const isIt = (l: { block?: Block } | undefined) =>
+      l?.block?.kind === "plan" && l.block.base.sha === d.base;
+    const line = isIt(all[d.line]) ? d.line : all.findIndex(isIt);
+    const block = line >= 0 ? (all[line].block as Plan) : null;
+    const i = block ? block.rows.findIndex((r) => r.sha === d.sha) : -1;
+    if (!block || i < 0) {
+      muted(["the plan is no longer on screen; the message is above, /copy takes it"]);
+      return;
+    }
+    const text = messageText(parseMessage(full));
+    if (!text) return;
+    chatStore.setBlock(storeKey, line, { ...block, rows: setText(block.rows, i, text) });
+    ok("message set", `on row ${i + 1}`);
+  };
+
+  // a row dropped on a branch line is a cherry-pick plan onto it; dropped
+  // into a plan it joins the rows where it landed (a fetch for its files
+  // and clashes first)
+  const onDrop = ({ target, payload, row }: Drop) => {
+    const colon = target.indexOf(":");
+    const kind = target.slice(0, colon);
+    const rest = target.slice(colon + 1);
+    if (kind === "branch") {
+      submit(payload.kind === "pr" ? `pick pr #${payload.id} onto ${rest}` : `pick ${payload.id} onto ${rest}`);
+      return;
+    }
+    if (kind !== "plan") return;
+    const line = Number(rest);
+    const block = chatStore.lines(storeKey)[line]?.block;
+    if (!block || block.kind !== "plan") return;
+    if (payload.kind === "pr") {
+      muted(["a pr goes onto a branch: drop it on one, or pick pr #N onto <branch>"]);
+      return;
+    }
+    if (block.rows.some((r) => r.sha === payload.id)) {
+      muted([`${payload.id.slice(0, 7)} is already in the plan`]);
+      return;
+    }
+    void addToPlan(line, block.base.sha, payload.id, block.onto ?? block.base.sha, row ?? block.rows.length);
+  };
+  const addToPlan = async (line: number, base: string, sha: string, onto: string, at: number) => {
+    const res = await fetch(
+      `/api/detail?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&kind=planrow&id=${encodeURIComponent(sha)}&onto=${encodeURIComponent(onto)}`
+    );
+    if (!res.ok) {
+      const j = (await res.json().catch(() => null)) as { error?: string } | null;
+      err(j?.error ?? `request failed (${res.status})`);
+      return;
+    }
+    const row = (await res.json()) as PlanRow;
+    // the plan may have moved while the fetch ran: found by its base sha
+    const all = chatStore.lines(storeKey);
+    const isIt = (l: { block?: Block } | undefined) =>
+      l?.block?.kind === "plan" && l.block.base.sha === base;
+    const where = isIt(all[line]) ? line : all.findIndex(isIt);
+    if (where < 0) {
+      muted(["the plan is no longer on screen"]);
+      return;
+    }
+    const block = all[where].block as Plan;
+    const rows = insertRow(block.rows, row, at);
+    if (rows === block.rows) return;
+    chatStore.setBlock(storeKey, where, { ...block, rows });
+    ok("added", `${sha.slice(0, 7)} to the plan as row ${Math.min(at, block.rows.length) + 1}`);
   };
 
   const runFollowup = async (question: string) => {
@@ -950,6 +1053,7 @@ export function TerminalChat({
         chatStore.setPrRows(storeKey, undefined);
         chatStore.setLive(storeKey, undefined);
         chatStore.clearExpanded(storeKey);
+        chatStore.setDraft(storeKey, undefined);
         break;
       case "usage": {
         echo(raw);
@@ -1305,6 +1409,56 @@ export function TerminalChat({
       void run(resolved);
       return;
     }
+    // a rebase over rows of the last log, or a pick of rows: shas here too
+    if (cmd.kind === "plan" && cmd.source.kind === "row") {
+      const rows = chatStore.logRows(storeKey);
+      if (!rows) {
+        muted(["run log first, then rebase a row span: rebase 2..5"]);
+        return;
+      }
+      const { from, to } = cmd.source;
+      const a = rows[from - 1];
+      const b = to ? rows[to - 1] : a;
+      if (!a || !b) {
+        muted([`the log has ${rows.length} ${rows.length === 1 ? "row" : "rows"}`]);
+        return;
+      }
+      if (to && !chatStore.logSpans(storeKey)) {
+        muted(["these rows are not contiguous; pick them onto a branch instead: pick 2 5 onto <branch>"]);
+        return;
+      }
+      if (!b.parent) {
+        muted([`row ${to ?? from} is the first commit; there is nothing to rebase it onto`]);
+        return;
+      }
+      const resolved = `rebase ${b.parent}..${a.sha}`;
+      muted([
+        to
+          ? `rows ${from}..${to}: ${b.sha.slice(0, 7)} to ${a.sha.slice(0, 7)}`
+          : `row ${from}: ${a.sha.slice(0, 7)} ${a.subject}`,
+      ]);
+      lastCmdRef.current = resolved;
+      void run(resolved);
+      return;
+    }
+    if (cmd.kind === "pick" && cmd.rows) {
+      const rows = chatStore.logRows(storeKey);
+      if (!rows) {
+        muted(["run log first, then pick its rows: pick 3 5 onto <branch>"]);
+        return;
+      }
+      const missing = cmd.rows.find((n) => !rows[n - 1]);
+      if (missing) {
+        muted([`the log has ${rows.length} ${rows.length === 1 ? "row" : "rows"}`]);
+        return;
+      }
+      const shas = [...new Set(cmd.rows.map((n) => rows[n - 1].sha))];
+      const resolved = `pick ${shas.join(" ")} onto ${cmd.onto}`;
+      muted([`rows ${cmd.rows.join(" ")}: ${shas.map((s) => s.slice(0, 7)).join(" ")}`]);
+      lastCmdRef.current = resolved;
+      void run(resolved);
+      return;
+    }
     lastCmdRef.current = raw;
     void run(raw);
   };
@@ -1468,8 +1622,37 @@ export function TerminalChat({
     const liveBlock = live ? lines[live.line]?.block : undefined;
     if (live && liveBlock && input === "" && !menu) {
       const n = liveBlock.rows.length;
-      const idAt = (i: number) =>
-        liveBlock.kind === "log" ? liveBlock.rows[i].sha : String(liveBlock.rows[i].num);
+      const idAt = (i: number) => {
+        const r = liveBlock.rows[i];
+        return "num" in r ? String(r.num) : r.sha;
+      };
+      // a plan row under the cursor takes its action from a letter and
+      // moves with shift+arrows; with no row selected the letters type
+      if (liveBlock.kind === "plan" && live.selected !== null && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const i = live.selected;
+        const rows = liveBlock.rows;
+        const set = (next: PlanRow[]) =>
+          chatStore.setBlock(storeKey, live.line, { ...liveBlock, rows: next });
+        if (e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+          e.preventDefault();
+          const to = e.key === "ArrowUp" ? i - 1 : i + 1;
+          if (to >= 0 && to < n) {
+            set(move(rows, i, to));
+            chatStore.setLive(storeKey, { ...live, selected: to });
+          }
+          return;
+        }
+        const keys: Record<string, PlanAction> =
+          liveBlock.mode === "pick"
+            ? { p: "pick", d: "drop" }
+            : { p: "pick", r: "reword", s: "squash", f: "fixup", d: "drop", e: "edit" };
+        const action = keys[e.key];
+        if (action && !e.shiftKey) {
+          e.preventDefault();
+          set(setAction(rows, i, action));
+          return;
+        }
+      }
       if (e.key === "ArrowDown") {
         e.preventDefault();
         chatStore.setLive(storeKey, { ...live, selected: Math.min((live.selected ?? -1) + 1, n - 1) });
@@ -1556,8 +1739,10 @@ export function TerminalChat({
     }
   };
 
-  const focusInput = () => {
+  const focusInput = (e: React.MouseEvent) => {
     // a real terminal focuses on click, but never steal a text selection
+    // or a message being edited in a plan row
+    if ((e.target as HTMLElement).closest?.("textarea")) return;
     if (!window.getSelection()?.toString()) inputRef.current?.focus();
   };
 
@@ -1577,20 +1762,31 @@ export function TerminalChat({
             className={`${l.prefix && i > 0 ? "mt-3" : ""} ${
               !l.block && freshRef.current.has(l) ? "line-in" : ""
             }`}
+            data-drop={l.drop}
           >
             {l.prefix ? (
               <span className="text-muted-foreground">{l.prefix} </span>
             ) : null}
             {l.block ? (
-              <LogBlock
-                block={l.block}
-                line={i}
-                storeKey={storeKey}
-                owner={owner}
-                repo={repo}
-                submit={(c) => submit(c)}
-                fresh={freshRef.current.has(l)}
-              />
+              l.block.kind === "plan" ? (
+                <PlanBlock
+                  block={l.block}
+                  line={i}
+                  storeKey={storeKey}
+                  submit={(c) => submit(c)}
+                  fresh={freshRef.current.has(l)}
+                />
+              ) : (
+                <LogBlock
+                  block={l.block}
+                  line={i}
+                  storeKey={storeKey}
+                  owner={owner}
+                  repo={repo}
+                  submit={(c) => submit(c)}
+                  fresh={freshRef.current.has(l)}
+                />
+              )
             ) : l.action === "signin" ? (
               <button type="button" className="log-action" onClick={reauth}>
                 sign in again <span className="text-wd-green">→</span>
@@ -1604,6 +1800,7 @@ export function TerminalChat({
             )}
           </div>
         ))}
+        <DragLayer onDrop={onDrop} />
         {busy ? (
           <div>
             <span className="cursor" />

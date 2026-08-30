@@ -1,7 +1,9 @@
 // one commit or pull request in full, for the expanded row of a log or
-// prs block: parents, author, message, files. read-only, fetched lazily
+// prs block: parents, author, message, files; or one commit as a plan
+// row (files and clashes against a target) for a row dropped into a
+// plan. read-only, fetched lazily
 import { NextRequest, NextResponse } from "next/server";
-import { commitDetail, GithubError, prDetail } from "@/lib/github";
+import { commitDetail, GithubError, planRow, prDetail } from "@/lib/github";
 import { getSession, touch } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -26,6 +28,10 @@ export async function GET(req: NextRequest) {
     }
     if (kind === "pr" && /^\d{1,6}$/.test(id)) {
       return NextResponse.json(await prDetail(session.token, owner, repo, Number(id)));
+    }
+    const onto = q.get("onto") ?? "";
+    if (kind === "planrow" && /^[0-9a-f]{7,40}$/i.test(id) && onto && !onto.includes("..")) {
+      return NextResponse.json(await planRow(session.token, owner, repo, id, onto));
     }
     return NextResponse.json({ error: "bad request" }, { status: 400 });
   } catch (e) {

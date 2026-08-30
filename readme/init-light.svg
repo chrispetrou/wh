@@ -1,0 +1,181 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="360" viewBox="0 0 720 360" font-family="ui-monospace,SFMono-Regular,'SF Mono','Cascadia Mono','JetBrains Mono',Menlo,Consolas,monospace" font-size="13" role="img" aria-label="wd init zsh">
+<style>
+text{fill:#1a1a1a;white-space:pre}
+.o{fill:#8a8a8a}.g{fill:#2f9e44}.a{fill:#b08900}.x{fill:#4263eb}.f{fill:#c8c8c8}
+.c{font-weight:600}.b{font-weight:600}.inv{fill:#fcfcfc}.sm{font-size:12px}
+@keyframes blink{50%{opacity:0}}
+.r0x2_033{opacity:0;animation:r0x2_033 7.87s linear infinite}
+.r0_889x2_922{opacity:0;animation:r0_889x2_922 7.87s linear infinite}
+.r2_668x4_701{opacity:0;animation:r2_668x4_701 7.87s linear infinite}
+.r3_558x5_591{opacity:0;animation:r3_558x5_591 7.87s linear infinite}
+.r4_447x6_48{opacity:0;animation:r4_447x6_48 7.87s linear infinite}
+.r5_337x7_37{opacity:0;animation:r5_337x7_37 7.87s linear infinite}
+.r7_116x9_149{opacity:0;animation:r7_116x9_149 7.87s linear infinite}
+.r8_005x10_038{opacity:0;animation:r8_005x10_038 7.87s linear infinite}
+.r8_895x10_928{opacity:0;animation:r8_895x10_928 7.87s linear infinite}
+.k10{animation:k10 7.87s steps(11) infinite,blink 1s steps(1) infinite}
+.k10v{opacity:0;animation:k10v 7.87s linear infinite}
+.r16_773x18_806{opacity:0;animation:r16_773x18_806 7.87s linear infinite}
+.r18_424x20_457{opacity:0;animation:r18_424x20_457 7.87s linear infinite}
+.r20_076x22_109{opacity:0;animation:r20_076x22_109 7.87s linear infinite}
+.r21_728x23_761{opacity:0;animation:r21_728x23_761 7.87s linear infinite}
+.r23_38x25_413{opacity:0;animation:r23_38x25_413 7.87s linear infinite}
+.r25_032x27_065{opacity:0;animation:r25_032x27_065 7.87s linear infinite}
+.r26_684x28_717{opacity:0;animation:r26_684x28_717 7.87s linear infinite}
+.r28_335x30_368{opacity:0;animation:r28_335x30_368 7.87s linear infinite}
+.r29_987x32_02{opacity:0;animation:r29_987x32_02 7.87s linear infinite}
+.r31_639x33_672{opacity:0;animation:r31_639x33_672 7.87s linear infinite}
+.r39_644x41_677{opacity:0;animation:r39_644x41_677 7.87s linear infinite}
+.r40_216x42_249{opacity:0;animation:r40_216x42_249 7.87s linear infinite}
+.r40_788x42_821{opacity:0;animation:r40_788x42_821 7.87s linear infinite}
+.r41_36x43_393{opacity:0;animation:r41_36x43_393 7.87s linear infinite}
+.r42_503x44_536{opacity:0;animation:r42_503x44_536 7.87s linear infinite}
+.r43_075x45_108{opacity:0;animation:r43_075x45_108 7.87s linear infinite}
+.r43_647x45_68{opacity:0;animation:r43_647x45_68 7.87s linear infinite}
+.r44_219x46_252{opacity:0;animation:r44_219x46_252 7.87s linear infinite}
+.r44_79x46_823{opacity:0;animation:r44_79x46_823 7.87s linear infinite}
+.r45_934x47_967{opacity:0;animation:r45_934x47_967 7.87s linear infinite}
+.r46_506x48_539{opacity:0;animation:r46_506x48_539 7.87s linear infinite}
+.r47_078x49_111{opacity:0;animation:r47_078x49_111 7.87s linear infinite}
+.r47_649x49_682{opacity:0;animation:r47_649x49_682 7.87s linear infinite}
+.r48_793x50_826{opacity:0;animation:r48_793x50_826 7.87s linear infinite}
+.r49_365x51_398{opacity:0;animation:r49_365x51_398 7.87s linear infinite}
+.r49_936x51_97{opacity:0;animation:r49_936x51_97 7.87s linear infinite}
+.r50_508x52_541{opacity:0;animation:r50_508x52_541 7.87s linear infinite}
+.r51_08x53_113{opacity:0;animation:r51_08x53_113 7.87s linear infinite}
+.k40{animation:k40 7.87s steps(21) infinite,blink 1s steps(1) infinite}
+.k40v{opacity:0;animation:k40v 7.87s linear infinite}
+.r58_64x60_673{opacity:0;animation:r58_64x60_673 7.87s linear infinite}
+.r59_339x61_372{opacity:0;animation:r59_339x61_372 7.87s linear infinite}
+.r60_737x62_77{opacity:0;animation:r60_737x62_77 7.87s linear infinite}
+.r61_436x63_469{opacity:0;animation:r61_436x63_469 7.87s linear infinite}
+.r62_135x64_168{opacity:0;animation:r62_135x64_168 7.87s linear infinite}
+.r62_834x64_867{opacity:0;animation:r62_834x64_867 7.87s linear infinite}
+.r63_532x65_565{opacity:0;animation:r63_532x65_565 7.87s linear infinite}
+.r64_231x66_264{opacity:0;animation:r64_231x66_264 7.87s linear infinite}
+.r65_629x67_662{opacity:0;animation:r65_629x67_662 7.87s linear infinite}
+.r66_328x68_361{opacity:0;animation:r66_328x68_361 7.87s linear infinite}
+.r67_027x69_06{opacity:0;animation:r67_027x69_06 7.87s linear infinite}
+.r67_726x69_759{opacity:0;animation:r67_726x69_759 7.87s linear infinite}
+.k54{animation:k54 7.87s steps(14) infinite,blink 1s steps(1) infinite}
+.k54v{opacity:0;animation:k54v 7.87s linear infinite}
+.r75_413x77_446{opacity:0;animation:r75_413x77_446 7.87s linear infinite}
+@keyframes r0x2_033{0%,0%{opacity:0}2.033%,100%{opacity:1}}
+@keyframes r0_889x2_922{0%,0.889%{opacity:0}2.922%,100%{opacity:1}}
+@keyframes r2_668x4_701{0%,2.668%{opacity:0}4.701%,100%{opacity:1}}
+@keyframes r3_558x5_591{0%,3.558%{opacity:0}5.591%,100%{opacity:1}}
+@keyframes r4_447x6_48{0%,4.447%{opacity:0}6.48%,100%{opacity:1}}
+@keyframes r5_337x7_37{0%,5.337%{opacity:0}7.37%,100%{opacity:1}}
+@keyframes r7_116x9_149{0%,7.116%{opacity:0}9.149%,100%{opacity:1}}
+@keyframes r8_005x10_038{0%,8.005%{opacity:0}10.038%,100%{opacity:1}}
+@keyframes r8_895x10_928{0%,8.895%{opacity:0}10.928%,100%{opacity:1}}
+@keyframes k10{0%{transform:translateX(0)}9.784%,100%{transform:translateX(85.80px)}}
+@keyframes k10v{0%,0%{opacity:0}0%,14.231%{opacity:1}14.531%,100%{opacity:0}}
+@keyframes r16_773x18_806{0%,16.773%{opacity:0}18.806%,100%{opacity:1}}
+@keyframes r18_424x20_457{0%,18.424%{opacity:0}20.457%,100%{opacity:1}}
+@keyframes r20_076x22_109{0%,20.076%{opacity:0}22.109%,100%{opacity:1}}
+@keyframes r21_728x23_761{0%,21.728%{opacity:0}23.761%,100%{opacity:1}}
+@keyframes r23_38x25_413{0%,23.38%{opacity:0}25.413%,100%{opacity:1}}
+@keyframes r25_032x27_065{0%,25.032%{opacity:0}27.065%,100%{opacity:1}}
+@keyframes r26_684x28_717{0%,26.684%{opacity:0}28.717%,100%{opacity:1}}
+@keyframes r28_335x30_368{0%,28.335%{opacity:0}30.368%,100%{opacity:1}}
+@keyframes r29_987x32_02{0%,29.987%{opacity:0}32.02%,100%{opacity:1}}
+@keyframes r31_639x33_672{0%,31.639%{opacity:0}33.672%,100%{opacity:1}}
+@keyframes r39_644x41_677{0%,39.644%{opacity:0}41.677%,100%{opacity:1}}
+@keyframes r40_216x42_249{0%,40.216%{opacity:0}42.249%,100%{opacity:1}}
+@keyframes r40_788x42_821{0%,40.788%{opacity:0}42.821%,100%{opacity:1}}
+@keyframes r41_36x43_393{0%,41.36%{opacity:0}43.393%,100%{opacity:1}}
+@keyframes r42_503x44_536{0%,42.503%{opacity:0}44.536%,100%{opacity:1}}
+@keyframes r43_075x45_108{0%,43.075%{opacity:0}45.108%,100%{opacity:1}}
+@keyframes r43_647x45_68{0%,43.647%{opacity:0}45.68%,100%{opacity:1}}
+@keyframes r44_219x46_252{0%,44.219%{opacity:0}46.252%,100%{opacity:1}}
+@keyframes r44_79x46_823{0%,44.79%{opacity:0}46.823%,100%{opacity:1}}
+@keyframes r45_934x47_967{0%,45.934%{opacity:0}47.967%,100%{opacity:1}}
+@keyframes r46_506x48_539{0%,46.506%{opacity:0}48.539%,100%{opacity:1}}
+@keyframes r47_078x49_111{0%,47.078%{opacity:0}49.111%,100%{opacity:1}}
+@keyframes r47_649x49_682{0%,47.649%{opacity:0}49.682%,100%{opacity:1}}
+@keyframes r48_793x50_826{0%,48.793%{opacity:0}50.826%,100%{opacity:1}}
+@keyframes r49_365x51_398{0%,49.365%{opacity:0}51.398%,100%{opacity:1}}
+@keyframes r49_936x51_97{0%,49.936%{opacity:0}51.97%,100%{opacity:1}}
+@keyframes r50_508x52_541{0%,50.508%{opacity:0}52.541%,100%{opacity:1}}
+@keyframes r51_08x53_113{0%,51.08%{opacity:0}53.113%,100%{opacity:1}}
+@keyframes k40{39.644%{transform:translateX(0)}51.652%,100%{transform:translateX(163.80px)}}
+@keyframes k40v{0%,39.444%{opacity:0}39.644%,56.099%{opacity:1}56.399%,100%{opacity:0}}
+@keyframes r58_64x60_673{0%,58.64%{opacity:0}60.673%,100%{opacity:1}}
+@keyframes r59_339x61_372{0%,59.339%{opacity:0}61.372%,100%{opacity:1}}
+@keyframes r60_737x62_77{0%,60.737%{opacity:0}62.77%,100%{opacity:1}}
+@keyframes r61_436x63_469{0%,61.436%{opacity:0}63.469%,100%{opacity:1}}
+@keyframes r62_135x64_168{0%,62.135%{opacity:0}64.168%,100%{opacity:1}}
+@keyframes r62_834x64_867{0%,62.834%{opacity:0}64.867%,100%{opacity:1}}
+@keyframes r63_532x65_565{0%,63.532%{opacity:0}65.565%,100%{opacity:1}}
+@keyframes r64_231x66_264{0%,64.231%{opacity:0}66.264%,100%{opacity:1}}
+@keyframes r65_629x67_662{0%,65.629%{opacity:0}67.662%,100%{opacity:1}}
+@keyframes r66_328x68_361{0%,66.328%{opacity:0}68.361%,100%{opacity:1}}
+@keyframes r67_027x69_06{0%,67.027%{opacity:0}69.06%,100%{opacity:1}}
+@keyframes r67_726x69_759{0%,67.726%{opacity:0}69.759%,100%{opacity:1}}
+@keyframes k54{58.64%{transform:translateX(0)}68.424%,100%{transform:translateX(109.20px)}}
+@keyframes k54v{0%,58.44%{opacity:0}58.64%,72.872%{opacity:1}73.172%,100%{opacity:0}}
+@keyframes r75_413x77_446{0%,75.413%{opacity:0}77.446%,100%{opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}.rv{opacity:1!important}.cv{opacity:0!important}}
+</style>
+<rect width="720" height="360" fill="#fcfcfc"/>
+<rect x="0.5" y="0.5" width="719" height="359" fill="none" stroke="#e6e6e6" rx="4"/>
+
+<text class="rv o r0x2_033" x="16" y="30">~/repo $</text>
+<text class="rv c r0x2_033" x="86.2" y="30">w</text>
+<text class="rv c r0_889x2_922" x="94" y="30">d</text>
+<text class="rv c r2_668x4_701" x="109.6" y="30">i</text>
+<text class="rv c r3_558x5_591" x="117.4" y="30">n</text>
+<text class="rv c r4_447x6_48" x="125.2" y="30">i</text>
+<text class="rv c r5_337x7_37" x="133" y="30">t</text>
+<text class="rv c r7_116x9_149" x="148.6" y="30">z</text>
+<text class="rv c r8_005x10_038" x="156.4" y="30">s</text>
+<text class="rv c r8_895x10_928" x="164.2" y="30">h</text>
+<g class="cv k10v"><rect fill="#1a1a1a" class="k10" x="86.2" y="18" width="7" height="15"/></g>
+<text class="rv o r16_773x18_806" x="16" y="52"># wd shell integration: add to your rc file</text>
+<text xml:space="preserve" class="rv o r18_424x20_457" x="16" y="74">#   eval "$(wd init zsh)"</text>
+<text class="rv  r20_076x22_109" x="16" y="96">wd() {</text>
+<text xml:space="preserve" class="rv  r21_728x23_761" x="16" y="118">  if [ "$1" = "switch" ]; then</text>
+<text xml:space="preserve" class="rv  r23_38x25_413" x="16" y="140">    local _wd_dir</text>
+<text xml:space="preserve" class="rv  r25_032x27_065" x="16" y="162">    _wd_dir="$(command wd "$@")" &amp;&amp; cd "$_wd_dir"</text>
+<text xml:space="preserve" class="rv  r26_684x28_717" x="16" y="184">  else</text>
+<text xml:space="preserve" class="rv  r28_335x30_368" x="16" y="206">    command wd "$@"</text>
+<text xml:space="preserve" class="rv  r29_987x32_02" x="16" y="228">  fi</text>
+<text class="rv  r31_639x33_672" x="16" y="250">}</text>
+<text class="rv o r39_644x41_677" x="16" y="294">~/repo $</text>
+<text class="rv c r39_644x41_677" x="86.2" y="294">e</text>
+<text class="rv c r40_216x42_249" x="94" y="294">v</text>
+<text class="rv c r40_788x42_821" x="101.8" y="294">a</text>
+<text class="rv c r41_36x43_393" x="109.6" y="294">l</text>
+<text class="rv c r42_503x44_536" x="125.2" y="294">"</text>
+<text class="rv c r43_075x45_108" x="133" y="294">$</text>
+<text class="rv c r43_647x45_68" x="140.8" y="294">(</text>
+<text class="rv c r44_219x46_252" x="148.6" y="294">w</text>
+<text class="rv c r44_79x46_823" x="156.4" y="294">d</text>
+<text class="rv c r45_934x47_967" x="172" y="294">i</text>
+<text class="rv c r46_506x48_539" x="179.8" y="294">n</text>
+<text class="rv c r47_078x49_111" x="187.6" y="294">i</text>
+<text class="rv c r47_649x49_682" x="195.4" y="294">t</text>
+<text class="rv c r48_793x50_826" x="211" y="294">z</text>
+<text class="rv c r49_365x51_398" x="218.8" y="294">s</text>
+<text class="rv c r49_936x51_97" x="226.6" y="294">h</text>
+<text class="rv c r50_508x52_541" x="234.4" y="294">)</text>
+<text class="rv c r51_08x53_113" x="242.2" y="294">"</text>
+<g class="cv k40v"><rect fill="#1a1a1a" class="k40" x="86.2" y="282" width="7" height="15"/></g>
+<text class="rv o r58_64x60_673" x="16" y="316">~/repo $</text>
+<text class="rv c r58_64x60_673" x="86.2" y="316">w</text>
+<text class="rv c r59_339x61_372" x="94" y="316">d</text>
+<text class="rv c r60_737x62_77" x="109.6" y="316">s</text>
+<text class="rv c r61_436x63_469" x="117.4" y="316">w</text>
+<text class="rv c r62_135x64_168" x="125.2" y="316">i</text>
+<text class="rv c r62_834x64_867" x="133" y="316">t</text>
+<text class="rv c r63_532x65_565" x="140.8" y="316">c</text>
+<text class="rv c r64_231x66_264" x="148.6" y="316">h</text>
+<text class="rv c r65_629x67_662" x="164.2" y="316">a</text>
+<text class="rv c r66_328x68_361" x="172" y="316">u</text>
+<text class="rv c r67_027x69_06" x="179.8" y="316">t</text>
+<text class="rv c r67_726x69_759" x="187.6" y="316">h</text>
+<g class="cv k54v"><rect fill="#1a1a1a" class="k54" x="86.2" y="304" width="7" height="15"/></g>
+<text class="rv g r75_413x77_446" x="16" y="338">→</text>
+<text class="rv  r75_413x77_446" x="31.6" y="338">switched ../repo.feat-auth</text>
+</svg>

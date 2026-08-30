@@ -2,7 +2,7 @@
 // (unified diff + numstat lines + commit lines) so the shared preprocess
 // spec applies unchanged.
 
-import type { Block, CommitRow, Ref } from "./block";
+import type { Block, CommitRow, PlanRow, Ref } from "./block";
 import type { CommitDetail, PrDetail } from "./chat-store";
 import { LATEST_TAG } from "./commands";
 import { filterDiff } from "./explain/filter";
@@ -539,6 +539,27 @@ async function refWindow(token: string, base: string, ref: string): Promise<Wind
   return { since: c.commit.committer.date, skip: c.sha, label: `since ${ref}` };
 }
 
+// several commits as one input: diffs concatenated, commit lines joined,
+// numstat summed per path
+export function mergeInputs(inputs: ExplainInput[]): ExplainInput {
+  const numstat = new Map<string, [number, number]>();
+  for (const i of inputs) {
+    for (const row of i.numstat.split("\n").filter(Boolean)) {
+      const [a, d, ...rest] = row.split("\t");
+      const path = rest.join("\t");
+      const cur = numstat.get(path) ?? [0, 0];
+      numstat.set(path, [cur[0] + Number(a), cur[1] + Number(d)]);
+    }
+  }
+  return {
+    diff: inputs.map((i) => i.diff).join(""),
+    commits: inputs.map((i) => i.commits).join("\n"),
+    numstat: [...numstat].map(([p, [a, d]]) => `${a}\t${d}\t${p}`).join("\n"),
+    commitCount: inputs.reduce((n, i) => n + i.commitCount, 0),
+    truncated: inputs.some((i) => i.truncated),
+  };
+}
+
 export async function sinceInput(
   token: string,
   owner: string,
@@ -587,21 +608,8 @@ export async function sinceInput(
     const inputs = await Promise.all(
       list.map((c) => commitInput(token, owner, repo, c.sha))
     );
-    const numstat = new Map<string, [number, number]>();
-    for (const i of inputs) {
-      for (const row of i.numstat.split("\n").filter(Boolean)) {
-        const [a, d, ...rest] = row.split("\t");
-        const path = rest.join("\t");
-        const cur = numstat.get(path) ?? [0, 0];
-        numstat.set(path, [cur[0] + Number(a), cur[1] + Number(d)]);
-      }
-    }
     return {
-      diff: inputs.map((i) => i.diff).join(""),
-      commits: inputs.map((i) => i.commits).join("\n"),
-      numstat: [...numstat].map(([p, [a, d]]) => `${a}\t${d}\t${p}`).join("\n"),
-      commitCount: list.length,
-      truncated: inputs.some((i) => i.truncated),
+      ...mergeInputs(inputs),
       note: `${list.length} ${list.length === 1 ? "commit" : "commits"}${who}, ${label}`,
     };
   }
@@ -1065,4 +1073,231 @@ export function numstatFromDiff(diff: string): string {
   }
   flush();
   return rows.join("\n");
+}
+
+// a rebase or cherry-pick plan: the commits between a base and a head
+// (or a pr's, or the last n, or given shas), each with its files, and
+// which of those files also changed on the target since the merge base.
+// nothing is written; the block flattens to commands the user pastes
+export const PLAN_CAP = 30;
+export const PLAN_CLASH_CAP = 20;
+
+export type PlanSource =
+  | { kind: "range"; base: string; head: string }
+  | { kind: "pr"; num: number }
+  | { kind: "last"; n: number; ref?: string }
+  | { kind: "shas"; shas: string[] };
+
+interface PlanSet {
+  commits: CommitJson[]; // oldest first
+  base: { sha: string; ref?: string };
+  head?: string;
+}
+
+function tooMany(n: number): GithubError {
+  return new GithubError(422, `that is ${n} commits; plans stop at ${PLAN_CAP}`);
+}
+
+async function planSet(token: string, root: string, source: PlanSource): Promise<PlanSet> {
+  if (source.kind === "range") {
+    let { base, head } = source;
+    if (!head || !base) {
+      const info = await gh(token, root);
+      const def = ((await info.json()) as { default_branch: string }).default_branch;
+      head = head || def;
+      base = base || def;
+    }
+    let res: Response;
+    try {
+      res = await gh(token, `${root}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`);
+    } catch (e) {
+      if (e instanceof GithubError && e.status === 404) {
+        throw new GithubError(404, `unknown ref in ${base}..${head}; run branches to see refs`);
+      }
+      throw e;
+    }
+    const json = (await res.json()) as {
+      total_commits: number;
+      base_commit: { sha: string };
+      commits: CommitJson[];
+    };
+    if (json.total_commits > PLAN_CAP) throw tooMany(json.total_commits);
+    if (!json.commits.length) {
+      throw new GithubError(422, `nothing to rebase: ${head} is up to date with ${base}`);
+    }
+    return { commits: json.commits, base: { sha: json.base_commit.sha, ref: base }, head };
+  }
+  if (source.kind === "pr") {
+    const path = `${root}/pulls/${source.num}`;
+    let prRes: Response;
+    let listRes: Response;
+    try {
+      [prRes, listRes] = await Promise.all([
+        gh(token, path),
+        gh(token, `${path}/commits?per_page=${PLAN_CAP + 1}`),
+      ]);
+    } catch (e) {
+      if (e instanceof GithubError && e.status === 404) {
+        throw new GithubError(404, `pr #${source.num} not found in this repo`);
+      }
+      throw e;
+    }
+    const pr = (await prRes.json()) as {
+      merged: boolean;
+      commits: number;
+      base: { ref: string; sha: string };
+      head: { ref: string };
+    };
+    if (pr.merged) throw new GithubError(422, `pr #${source.num} is merged; nothing to plan`);
+    if (pr.commits > PLAN_CAP) throw tooMany(pr.commits);
+    const commits = (await listRes.json()) as CommitJson[];
+    return { commits, base: { sha: pr.base.sha, ref: pr.base.ref }, head: pr.head.ref };
+  }
+  if (source.kind === "last") {
+    if (source.n > PLAN_CAP) throw tooMany(source.n);
+    const q = new URLSearchParams({ per_page: String(Math.min(source.n, PLAN_CAP) + 1) });
+    if (source.ref) q.set("sha", source.ref);
+    let res: Response;
+    try {
+      res = await gh(token, `${root}/commits?${q}`);
+    } catch (e) {
+      if (source.ref && e instanceof GithubError && e.status === 404) {
+        throw new GithubError(404, `branch ${source.ref} not found; run branches to see refs`);
+      }
+      throw e;
+    }
+    const list = (await res.json()) as CommitJson[];
+    if (list.length < 2) throw new GithubError(422, "not enough history to plan a rebase");
+    const shown = Math.min(source.n, list.length - 1);
+    const commits = list.slice(0, shown).reverse();
+    return { commits, base: { sha: list[shown].sha }, head: source.ref };
+  }
+  if (source.shas.length > PLAN_CAP) throw tooMany(source.shas.length);
+  const commits = await Promise.all(source.shas.map((sha) => commitJson(token, root, sha)));
+  commits.sort((a, b) => Date.parse(a.commit.committer.date) - Date.parse(b.commit.committer.date));
+  return { commits, base: { sha: commits[0].sha } };
+}
+
+async function commitJson(token: string, root: string, sha: string): Promise<CommitJson> {
+  let res: Response;
+  try {
+    res = await gh(token, `${root}/commits/${encodeURIComponent(sha)}`);
+  } catch (e) {
+    if (e instanceof GithubError && e.status === 404) {
+      throw new GithubError(404, `commit ${sha} not found in this repo`);
+    }
+    if (e instanceof GithubError && e.status === 422) {
+      throw new GithubError(422, `${sha} is not a commit sha`);
+    }
+    throw e;
+  }
+  return (await res.json()) as CommitJson;
+}
+
+// the files changed on `target` since its merge base with `from`
+async function changedOn(token: string, root: string, from: string, target: string): Promise<Set<string>> {
+  const res = await gh(token, `${root}/compare/${encodeURIComponent(from)}...${encodeURIComponent(target)}`);
+  const json = (await res.json()) as { files?: Array<{ filename: string }> };
+  return new Set((json.files ?? []).map((f) => f.filename));
+}
+
+export async function planBlock(
+  token: string,
+  owner: string,
+  repo: string,
+  source: PlanSource,
+  onto?: string
+): Promise<{ block: Block }> {
+  const root = `/repos/${owner}/${repo}`;
+  const set = await planSet(token, root, source);
+  // a cherry-pick lands on the target's tip; the lookup also proves it exists
+  if (onto) {
+    let res: Response;
+    try {
+      res = await gh(token, `${root}/commits/${encodeURIComponent(onto)}`);
+    } catch (e) {
+      if (e instanceof GithubError && e.status === 404) {
+        throw new GithubError(404, `unknown ref ${onto}; run branches to see refs`);
+      }
+      throw e;
+    }
+    set.base = { sha: ((await res.json()) as CommitJson).sha, ref: onto };
+  }
+  const n = set.commits.length;
+  const merge = set.commits.findIndex((c) => c.parents.length > 1);
+  if (merge >= 0) {
+    throw new GithubError(422, `rebase plans need a linear history; row ${n - merge} is a merge`);
+  }
+  // files per commit: the compare and list endpoints carry none
+  const detailed = await Promise.all(
+    set.commits.map((c) => (c.files ? Promise.resolve(c) : commitJson(token, root, c.sha)))
+  );
+  const rows: PlanRow[] = [...detailed].reverse().map((c, i) => ({
+    ...commitRow(c),
+    idx: i,
+    message: c.commit.message,
+    files: (c.files ?? []).map((f) => f.filename),
+    clash: [],
+    action: "pick",
+  }));
+  const footer: string[] = [];
+  if (onto) {
+    const checked = rows.slice(0, PLAN_CLASH_CAP);
+    const changed = await Promise.all(checked.map((r) => changedOn(token, root, r.sha, onto)));
+    checked.forEach((r, i) => (r.clash = r.files.filter((f) => changed[i].has(f))));
+    footer.push(`${n} ${n === 1 ? "commit" : "commits"} onto ${onto}`);
+    if (rows.length > PLAN_CLASH_CAP) {
+      footer.push(`(conflict check on the newest ${PLAN_CLASH_CAP} only)`);
+    }
+  } else {
+    const changed = await changedOn(token, root, rows[0].sha, set.base.sha);
+    for (const r of rows) r.clash = r.files.filter((f) => changed.has(f));
+    const where = set.base.ref ?? set.base.sha.slice(0, 7);
+    footer.push(`${n} ${n === 1 ? "commit" : "commits"}, ${set.head ?? "these commits"} onto ${where}`);
+    if (changed.size >= 300) footer.push("(the target changed more than 300 files; the check is partial)");
+  }
+  return {
+    block: {
+      kind: "plan",
+      mode: onto ? "pick" : "rebase",
+      base: set.base,
+      head: set.head,
+      onto,
+      rows,
+      footer,
+    },
+  };
+}
+
+// one commit as a plan row, for a log row dropped into a plan: its files
+// and, of those, the ones changed on the target since the merge base.
+// the client gives it a position and an idx
+export async function planRow(
+  token: string,
+  owner: string,
+  repo: string,
+  sha: string,
+  target: string
+): Promise<PlanRow> {
+  const root = `/repos/${owner}/${repo}`;
+  const c = await commitJson(token, root, sha);
+  if (c.parents.length > 1) throw new GithubError(422, `${sha.slice(0, 7)} is a merge; plans need plain commits`);
+  const files = (c.files ?? []).map((f) => f.filename);
+  let changed: Set<string>;
+  try {
+    changed = await changedOn(token, root, c.sha, target);
+  } catch (e) {
+    if (e instanceof GithubError && e.status === 404) {
+      throw new GithubError(404, `unknown ref ${target}; run branches to see refs`);
+    }
+    throw e;
+  }
+  return {
+    ...commitRow(c),
+    idx: 0,
+    message: c.commit.message,
+    files,
+    clash: files.filter((f) => changed.has(f)),
+    action: "pick",
+  };
 }
