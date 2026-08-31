@@ -3,15 +3,26 @@
 // sessionStorage (200-line cap) exactly like the old in-component state.
 import type { Block } from "./block";
 
+// the color classes a line can carry: p prompt, c command, o muted, g
+// green, a amber, x accent, r removed, f faint, "" fg
+export type Cls = "p" | "c" | "o" | "g" | "a" | "x" | "r" | "f" | "";
+
+// a leading span in its own color: the green "→ verb" of a success line,
+// the amber "error:" label, or the fg command column of a help table
+export interface Head {
+  text: string;
+  cls: Cls;
+}
+
 export interface ChatLine {
   text: string;
-  cls: string;
-  prefix?: string;
-  head?: { text: string; cls: string };
-  tail?: { text: string; cls: string };
+  cls: Cls;
+  prefix?: string; // muted prompt rendered before the text
+  head?: Head;
+  tail?: Head; // trailing span, e.g. the muted status words of a branch row
   // a structured entry (commit graph, history, prs) rendered as a grid
   block?: Block;
-  // a line that is a button
+  // a line that is a button: sign in again, in a popup
   action?: "signin";
   // a drop target for a dragged row: "branch:<name>"
   drop?: string;

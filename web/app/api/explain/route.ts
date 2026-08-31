@@ -22,6 +22,7 @@ import { describeTurn } from "@/lib/explain/context";
 import { filterDiff } from "@/lib/explain/filter";
 import { defaultCaps, defaultRules, preprocess, stats } from "@/lib/explain/preprocess";
 import { prompt, type PromptMode } from "@/lib/explain/prompt";
+import type { DiffMeta, ExplainMeta } from "@/lib/explain/meta";
 import {
   buildFollowupRequest,
   buildRequest,
@@ -52,7 +53,7 @@ function err(status: number, message: string): NextResponse {
 }
 
 // a lookup answer: meta line, then text, no model
-function plain(meta: object, text: string): NextResponse {
+function plain(meta: ExplainMeta, text: string): NextResponse {
   return new NextResponse(JSON.stringify(meta) + "\n" + text, {
     headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
   });
@@ -205,7 +206,7 @@ export async function POST(req: NextRequest) {
       request,
       provider,
       model || DEFAULT_MODELS[provider],
-      JSON.stringify({ followup: true }) + "\n"
+      JSON.stringify({ followup: true } satisfies ExplainMeta) + "\n"
     );
   }
 
@@ -366,7 +367,7 @@ export async function POST(req: NextRequest) {
   if (mode === "describe") question = describeTurn(data.describe);
 
   const { files, added, deleted } = stats(data.numstat);
-  const metaBase = {
+  const metaBase: DiffMeta = {
     commits: data.commitCount,
     files,
     additions: added,
@@ -397,6 +398,6 @@ export async function POST(req: NextRequest) {
   const user = userBase + question;
   const request = buildRequest(provider, key, system, user, model || undefined, effort || undefined);
   // context lets the client hold the conversation for follow-up turns
-  const meta = JSON.stringify({ ...metaBase, context: user }) + "\n";
+  const meta = JSON.stringify({ ...metaBase, context: user } satisfies ExplainMeta) + "\n";
   return streamProvider(request, provider, model || DEFAULT_MODELS[provider], meta);
 }
