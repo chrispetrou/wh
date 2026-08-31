@@ -7,7 +7,7 @@
 
 <h1 align="center">wd</h1>
 
-<p align="center">Tiny git companion. Worktrees, minus the ceremony. Diffs, in plain English.</p>
+<p align="center">Tiny git companion. Worktrees, minus the ceremony. History, diffs, and pull requests in plain English: in the terminal, or in the browser for any GitHub repo.</p>
 
 <p align="center">
   <a href="https://github.com/chrispetrou/wd/actions/workflows/ci.yml"><img alt="ci" src="https://img.shields.io/github/actions/workflow/status/chrispetrou/wd/ci.yml?branch=main&style=flat-square&label=ci&labelColor=1a1a1a&color=2f9e44"></a>
@@ -19,17 +19,23 @@
   <img alt="no telemetry" src="https://img.shields.io/badge/telemetry-none-8a8a8a?style=flat-square&labelColor=1a1a1a">
 </p>
 
-**wd** is a single-binary git companion with two jobs: managing worktrees so
-branch-switching never touches your working state, and explaining diffs in
-plain English so review starts with understanding, not archaeology.
+**wd** is a git companion with two surfaces. The cli manages worktrees so
+branch-switching never touches your working state, and explains diffs in
+plain English so review starts with understanding, not archaeology. The web
+app is a terminal for any repo you can see on GitHub, cloned or not: what
+changed, the commit graph, pull requests, a file's history, why a line
+exists, and rebase or cherry-pick plans written out as commands to paste.
+Nothing is ever written to the repo or to GitHub.
 
 Local-first and telemetry-free. Explanations run on your own key (Anthropic,
-OpenAI, Groq's free tier) or a local model via Ollama. Everything else needs
-nothing but git.
+OpenAI, Groq's free tier) or, in the cli, a local model via Ollama. The cli
+needs nothing but git; the web needs a GitHub sign-in and keys that stay in
+your browser.
 
-Written in Rust. One binary (0.6MiB, budget 3.2MiB), one dependency, no
-runtime. The same explain logic also runs as a web app for any repo you can
-see on GitHub, including ones you never cloned.
+Written in Rust and TypeScript. The cli is one binary (0.6MiB, budget
+3.2MiB), two dependencies (clap, serde_json), no runtime. The web app is a
+Next.js app you run yourself. One explain spec (`shared/prompts/`) sits
+behind both, so an answer reads the same wherever you ask.
 
 ## install
 
@@ -151,8 +157,10 @@ wd rm feat/auth                   # one worktree, by branch or directory
 wd rm feat/auth --force           # even if dirty or unmerged
 ```
 
-`--force` is the escape hatch for squash-merged branches, which plain
-ancestor detection cannot see; it needs a name. Named removals print
+Merged means the branch is an ancestor of the default branch, every one of
+its commits has an equivalent patch there (a rebase merge), or its whole
+tree landed as a single commit (a squash merge). `--force` is for dirty or
+genuinely unmerged worktrees; it needs a name. Named removals print
 `removed <path> (<branch>)` and no summary line.
 
 ### wd explain
@@ -267,18 +275,18 @@ lost the connection to api.groq.com
 ```
 
 A key nearly out of headroom gets an amber warning after the answer (`low on
-groq tokens: 8.2k of 100k left, resets in 42s`). No provider exposes an
-account balance to an api key, so the cli keeps no running total; the web
-terminal counts one per key in your browser. The wording is a shared
+groq tokens: 8.2k of 100k left, resets in 42s`). The wording is a shared
 contract in `shared/prompts/provider.md`.
 
 ## web
 
-`web/` is wd explain for any GitHub repo, in the browser: sign in with
-GitHub, pick a repo, ask in a full-page terminal. No worktrees (those are
-local by nature), but everything else the cli explains, plus the things
-only a hosted repo can answer: pull requests, the commit graph, who did what
-since when, and a file's story.
+`web/` is a terminal for any GitHub repo, in the browser: sign in with
+GitHub, pick a repo, ask in plain words. It explains everything the cli
+explains, and answers the things only a hosted repo can: pull requests, the
+commit graph, who did what since when, a file's story, why a line exists.
+It also lays out rebase and cherry-pick plans as git commands to paste;
+nothing is ever executed or written to GitHub. No worktrees (those are
+local by nature).
 
 ### run it
 
@@ -291,35 +299,23 @@ npm run dev
 ```
 
 Open http://localhost:3000. The first run shows a one-time setup screen that
-links to a prefilled GitHub OAuth-app form and saves the pasted client id and
-secret to `web/.env.local` for you (localhost only, while unconfigured).
-Deployed instances are configured through the environment instead:
-
-```
-GITHUB_CLIENT_ID       oauth app; callback must be $APP_URL/api/auth/callback
-GITHUB_CLIENT_SECRET
-SESSION_SECRET         32+ random chars (openssl rand -hex 32)
-APP_URL                base url of this instance
-GITHUB_API_URL         optional, for github enterprise (and GITHUB_GRAPHQL_URL)
-WD_ANTHROPIC_URL       optional provider gateways, same names as the cli
-WD_OPENAI_URL
-WD_GROQ_URL
-```
-
-Sign-in requests the `repo` scope so private repos appear in the picker
-(GitHub has no read-only scope for private repos; wd only ever reads). The
-session slides: every request renews it, so it ends after a week of silence
-or 30 days after sign-in, whichever comes first. An ended session says so in
-the transcript and `sign in again →` brings you back to the same repo with
-the transcript intact and reruns what failed.
+links to a prefilled GitHub OAuth-app form and saves the client id and
+secret to `web/.env.local` for you. Sign-in asks for the `repo` scope so
+private repos appear in the picker (GitHub has no read-only scope for
+private repos; wd only ever reads). Deployed instances, sessions, and the
+api limits are in [web/README.md](web/README.md).
 
 ### commands
 
 Phrasing is flexible: `explain`, `summarize`, `show me`, `what changed in`
 work as leading verbs, a trailing `?` is fine, and cli-style input (`wd
-explain HEAD~3..`) works verbatim. `/wd` lists the cli commands.
+explain HEAD~3..`) works verbatim. Wherever a branch, tag, pr number, or
+log row belongs, a completion menu drops down, filtered as you type.
 
-<img alt="the web terminal: what changed in pr #42, answered with summary and watch out" src="readme/web-pr-dark.svg" width="720">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme/web-pr-dark.svg">
+  <img alt="the web terminal: what changed in pr #42, answered with summary and watch out" src="readme/web-pr-light.svg" width="720">
+</picture>
 
 | ask | examples |
 |---|---|
@@ -341,89 +337,49 @@ explain HEAD~3..`) works verbatim. `/wd` lists the cli commands.
 | lists | `branches`, `tags`, `prs`, `closed prs`, `my prs` |
 | follow-ups | plain words after an explain: `why is that risky?`, `which files touch auth?` |
 
-Periods: `today`, `yesterday`, `this week`, `last week`, `since monday`
-(any weekday), `since 3 days ago`, `since 2026-08-20`, `since v1.2` (any
-ref). `by <login>` keeps one person's commits, `by me` yours; `standup` is
-your commits since the last working day. Days follow your browser's clock;
-an empty window says `nothing since yesterday` and costs no model call.
-
-Wherever a branch, tag, pr number, or log row belongs, a completion menu
-drops down, filtered as you type.
-
-`changelog` and `describe` wrap any diff command and share the cli's output
-contracts: the same four sections, the same `title`/`description`/`testing`
-draft. `describe pr #42` sees the pr's current title and body and keeps
-their intent where the diff still supports it. Nothing is written to
-GitHub; `/copy` puts the draft on your clipboard.
+Periods are plain words: `today`, `yesterday`, `this week`, `since monday`,
+`since 3 days ago`, `since v1.2`; `by <login>` keeps one person's commits,
+`by me` yours, and `standup` is your commits since the last working day.
+`changelog` and `describe` wrap any diff command and produce the same
+sections as the cli; `describe pr #42` keeps the pr's own title and body
+where the diff still supports them.
 
 ### the log, prs, and history
 
-`log` draws the commit graph inside the transcript: colored lanes with
-curves where branches fork and join, a dot per commit (a ring for merges),
-branch and tag chips, subject, author, age, sha, every row numbered. All
-branches are walked (the default first, up to 12 heads; the footer says how
-many were left out), 40 rows by default, up to 200. A log filtered by
-`since` or `by` is drawn flat, without lanes, since its rows are no longer
-a contiguous walk (so `explain 2..5` asks for one row at a time).
+`log` draws the commit graph inside the transcript: lanes, a dot per
+commit, branch and tag chips, subject, author, age, sha, every row
+numbered. `prs`, `history <path>`, `branches`, and `tags` are lists of the
+same kind. All of them are blocks you can walk: arrows move, enter opens a
+commit or pr in place (its files with their +/−, and `explain`,
+`changelog`, `describe` actions), esc steps back out.
 
-<img alt="log draws the commit graph in the transcript, then explain 3 explains that row" src="readme/web-log-dark.svg" width="720">
-
-`prs` lists open pull requests, most recently updated first (30 of them):
-number, title, `head → base`, author, age, and `draft`, `merged`, or
-`closed` where it applies. `history <path>` lists the commits touching a
-file or directory (30 rows, no lanes). `branches` numbers branches with
-ahead/behind against the default (the web cousin of `wd ls`); `tags` lists
-tags newest first with sha and age.
-
-All of these are blocks you can walk: arrows move (`›` marks the row),
-enter opens a commit or pr in place (sha, parents, author, message, files
-with their +/−, and `explain`, `changelog`, `describe`, `github ↗`
-actions; hovering a file offers `explain`, `history`, and `copy`), esc
-steps back out. A command launched from an open panel leaves it open so the
-answer still shows where it came from; `/clear` closes them all.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="readme/web-log-dark.svg">
+  <img alt="log draws the commit graph in the transcript, then explain 3 explains that row" src="readme/web-log-light.svg" width="720">
+</picture>
 
 ### rebase and cherry-pick plans
 
-wd never writes to GitHub, but it can plan a history rewrite and hand you
-the exact commands to run, the way `describe` hands you a pr draft.
-`rebase feat/auth` (a branch, a range `rebase main..feat/auth`, a pull
-request `rebase pr #42`, the last few commits `rebase last 5 on feat/auth`,
-or a span of log rows `rebase 2..5`) lists those commits as an editable
-plan, newest first. Reorder a row by dragging it or with shift+up/down, and
-set what happens to it with `p` `r` `s` `f` `d` `e` (pick, reword, squash,
-fixup, drop, edit) or the buttons in its panel. Edit a message inline, or
-let the model draft one from the diff with `draft message`.
+`rebase feat/auth` (or a range, `pr #42`, `last 5 on feat/auth`, log rows
+`2..5`) lists those commits as an editable plan: reorder a row by dragging
+it or with shift+up/down, set its action with `p` `r` `s` `f` `d` `e`
+(pick, reword, squash, fixup, drop, edit), edit a message inline or let the
+model draft one. `pick 3 5 onto release/1.x` (or `backport pr #42 to
+release/1.x`) is the same block for a cherry-pick; dragging a row from a
+`log` or `prs` block onto a branch starts one too.
 
-`pick 3 5 onto release/1.x` (log rows, shas, or `backport pr #42 to
-release/1.x`) is the same block for a cherry-pick: pick or drop, reorder,
-done.
-
-Rows can be dragged, too: press a row of a `log`, `prs`, or `history` block
-(it shows a grab cursor) and drop it on a branch in a `branches` listing to
-start a cherry-pick onto that branch, or into an open plan to add it there,
-its files checked against the target on the way in. Esc abandons a drag.
-
-Under the rows sits the block to paste. For a rebase it is the messages and
-the todo as heredocs under `/tmp/wd-*` and one `git rebase -i` with
-`GIT_SEQUENCE_EDITOR` pointing at the todo, so nothing opens an editor; a
-reword or squash with a drafted message becomes `pick` or `fixup` plus
-`exec git commit --amend -F`. For a cherry-pick it is `git switch` and `git
-cherry-pick -x` (every branch name is shell-quoted). `copy` takes it,
-`reset` (once you have changed something) puts the rows back. Before you
-paste, a row whose files also changed on the target is flagged in amber and
-a verdict line sums up the conflict risk from file overlap; git's own
-conflict handling takes over if the guess was wrong. Plans stop at 30
-commits and refuse merge commits, since reordering needs a linear history.
-Nothing here runs: the commands run in your local clone, and you push.
+Under the rows sits the block to paste: one `git rebase -i` driven by a
+todo file, or `git switch` and `git cherry-pick -x`, every name
+shell-quoted. Rows whose files also changed on the target are flagged in
+amber before you paste. Nothing here runs: the commands run in your local
+clone, and you push.
 
 ### keys, models, effort
 
 The first time a repo opens with no key stored, the terminal asks for one:
-paste it as the first message. Keys live in your browser only (one per
-provider; the prefix decides which: `sk-ant-` anthropic, `gsk_` groq,
-anything else openai), travel per request in a header, and are never
-stored, logged, or echoed back by the server. The provider whose key was
-pasted last is active.
+paste it as the first message. Keys live in your browser only, one per
+provider (the prefix decides which), travel per request in a header, and
+are never stored, logged, or echoed back by the server.
 
 | provider | default model | effort | free tier |
 |---|---|---|---|
@@ -431,17 +387,11 @@ pasted last is active.
 | openai | gpt-5-mini | minimal, low, medium, high | |
 | groq | llama-3.3-70b-versatile | (ignored) | console.groq.com |
 
-`/model` switches models (any id accepted; the menu marks each one's
-provider, `free`, and `no key`), and picking another provider's model
-makes that provider active. `/effort` sets the reasoning effort where the
-provider supports it. Both are remembered per provider. Follow-ups resend
-the conversation from your browser, with a prompt-cache breakpoint on the
-diff for anthropic keys so they stay cheap.
-
-`/usage` shows what each key has cost since it was saved (`anthropic  1.2m
-in · 84.3k out · 41 answers · since aug 12`) and the headroom the provider
-last reported; `/usage reset [provider]` starts over. Tokens only, never
-money: the provider's dashboard is the bill.
+`/model` switches models (any id; picking another provider's model makes
+that provider active) and `/effort` sets the reasoning effort where the
+provider supports it, both remembered per provider. `/usage` shows what
+each key has cost since it was saved, in tokens only: the provider's
+dashboard is the bill.
 
 ### slash commands
 
@@ -460,38 +410,9 @@ Typing `/` opens a menu of all of them with their options.
 | `/account`, `/info` | who you are; repo, provider, keys, usage, prefs |
 | `/stop`, `/clear`, `/logout` | abort a running explain; new transcript; sign out |
 
-### keyboard
-
-| keys | |
-|---|---|
-| enter, up/down, ctrl+r | send; recall history; search it |
-| esc | stop a running explain; close a menu or panel |
-| tab, enter, esc (menu open) | complete; use; dismiss |
-| arrows, enter, esc (after a log, prs, or history) | walk rows; open one; step out |
-| p r s f d e, shift+up/down (in a plan) | set a row's action; move it (drag works too) |
-| drag a log / prs row | onto a branch: cherry-pick; into a plan: add it |
-| cmd+k / ctrl+k | repo picker |
-| ctrl+t, ctrl+1..9, × | new repo tab; switch tabs; close |
-
-Repos open as tabs, each with its own transcript; a streaming explain keeps
-going while you are on another tab (a dot after the tab name says so). A
-status line under the prompt shows provider, model, effort, and tokens in
-use. Hover any control for its purpose and shortcut.
-
-### how it reads
-
-Like the cli: your command in the accent color, section labels in amber, a
-green `→` line when something changed, an amber `error:` label with the
-same plain-words vocabulary as the cli, muted gray for status. Each answer
-closes with its elapsed time, model, and token cost (`· stopped after 2.1s`
-if you pressed esc). Motion is short and stops under
-`prefers-reduced-motion`.
-
-`base..head` uses GitHub's three-dot compare (changes on head since it
-diverged from base). Ahead/behind counts are computed for the first 15
-branches and tag dates for the newest 15. A `since` window covers the
-latest 100 commits; `by <login>` fetches that person's commits one by one
-up to 20, past which the answer covers the whole span and a note says so.
+Repos open as tabs (ctrl+t, ctrl+1..9), each with its own transcript;
+ctrl+r searches history, esc stops a running explain, cmd+k opens the repo
+picker. `/help` lists every key; so does [web/README.md](web/README.md).
 
 ## terminal or web
 
@@ -510,6 +431,7 @@ time and people     git log --since, --author     since yesterday by me, standup
 release notes       wd explain --changelog v1..   changelog v1.1..v1.2
 a pr description    wd explain --describe         describe pr #42, describe <branch>
 a file's story      git log -p -- <path>          history <path>, why <path>:<line>
+rebase, cherry-pick git rebase -i, git cherry-pick rebase <branch>, pick 3 5 onto <branch>
 branches            wd ls (worktrees, dirty)      branches (ahead/behind), tags
 follow-ups          (not yet)                     plain words after an explain
 raw payload         wd explain --dry-run          /show
@@ -531,19 +453,16 @@ two.
 
 ```
 cli/     rust cli: the wd binary
-web/     next.js app: wd explain for any github repo
+web/     next.js app: the web terminal
 site/    landing page
 shared/  explain spec: prompt template, preprocessing rules, provider
          wording, and golden fixtures both implementations must reproduce
 readme/  the logo and the animated svgs embedded above (see scripts/readme-anim.mjs)
 ```
 
-The rule for `shared/`: spec once, implement twice. Change the spec first,
-then both implementations; the golden fixtures under `shared/fixtures/`
-must be reproduced byte for byte by the Rust and the TypeScript
-preprocessors. The web embeds the spec at build time via
-`scripts/sync-shared.mjs`; edit `shared/prompts/`, never the generated
-file.
+`shared/` is spec once, implement twice: change the spec first, then both
+implementations, and the golden fixtures under `shared/fixtures/` must be
+reproduced byte for byte by the Rust and the TypeScript preprocessors.
 
 ## building
 
@@ -558,11 +477,8 @@ node scripts/readme-anim.mjs      # regenerate the readme animations
 CI runs fmt, clippy, tests, a 3.2MiB size gate on the binary, the web tests
 and build, and a brand check (no em dashes outside the landing mock).
 Tagged releases (`v*`) build the four static binaries and open a draft
-GitHub release with checksums.
-
-The animations above are plain animated svgs (css keyframes, no gif, no
-javascript) written by `scripts/readme-anim.mjs`; they hold their last frame
-under `prefers-reduced-motion`. Wording and pacing live in that script, not
-in the svg files.
+GitHub release with checksums. The animations above are plain animated svgs
+(css keyframes, no gif, no javascript) written by `scripts/readme-anim.mjs`;
+wording and pacing live in that script, not in the svg files.
 
 GPL-3.0 license.

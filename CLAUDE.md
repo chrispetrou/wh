@@ -10,8 +10,10 @@ plain-English diff explanations. Local-first, telemetry-free, BYO LLM key.
 - `web/`: Next.js + shadcn/ui app: GitHub OAuth, repo picker, a
   terminal-flavored chat that answers questions about a repo by fetching
   diffs/commits via the GitHub API and running them through the same explain
-  logic as the CLI. Keep it minimal: no dashboards, no analytics, no settings
-  sprawl.
+  logic as the CLI, plus the git features only a hosted repo can answer
+  (log graph, prs, history, blame, rebase and cherry-pick plans; paste-only,
+  never writes to GitHub). Keep it minimal: no dashboards, no analytics, no
+  settings sprawl.
 - `site/`: the landing page. **Complete. Do not modify** except to
   eventually add real links.
 - `shared/prompts/`: explain prompt templates and diff-preprocessing
@@ -52,8 +54,8 @@ Brand rules, all surfaces:
 ## cli/ rules
 
 - Single static binary, small (**3.2MiB budget**: the size is part of the
-  brand), no telemetry. Keep dependencies near zero; clap is built with
-  trimmed features.
+  brand), no telemetry. Keep dependencies near zero: clap with trimmed
+  features and serde_json (no `preserve_order`) are the whole runtime tree.
 - **Shell out to system `git`: never add git2/gix.** All git invocations go
   through `src/git.rs` (explicit `-C <path>`, `GIT_OPTIONAL_LOCKS=0` on
   reads). Parse only `--porcelain` scripting formats.
@@ -85,7 +87,7 @@ cd web && npm run dev             # dev server
 cd web && npm run build
 ```
 
-web/ needs Node 20+ (see `web/.nvmrc`; the shadcn CLI requires it: run it as
+web/ needs Node 22 (see `web/.nvmrc`; the shadcn CLI requires it: run it as
 `npx shadcn@latest`).
 
 ## testing rules (cli)
