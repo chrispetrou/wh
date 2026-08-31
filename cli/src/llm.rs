@@ -1,9 +1,12 @@
 //! Provider plumbing for wd explain. HTTP goes through the system curl
-//! (same philosophy as shelling out to git): no TLS or JSON dependencies,
-//! and the API key travels via curl's config stdin, never argv.
+//! (same philosophy as shelling out to git): no TLS dependency, request
+//! bodies and stream frames via serde_json, and the API key travels via
+//! curl's config stdin, never argv.
 
 use crate::usage::Usage;
 use crate::WdError;
+use serde::Serialize;
+use serde_json::Value;
 use std::env;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -193,76 +196,126 @@ pub fn prompt(payload: &str, mode: Mode) -> (String, String) {
     )
 }
 
-pub fn json_escape(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 8);
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c => out.push(c),
-        }
-    }
-    out
+#[derive(Serialize)]
+struct Message<'a> {
+    role: &'static str,
+    content: &'a str,
 }
 
-/// Value of `"key":"..."` in a raw JSON line, unescaped. Scanning raw
-/// bytes is sound because a quote inside a JSON string is always \",
-/// so the pattern `"key":"` cannot occur inside a string value.
-pub fn extract_string_field(line: &str, key: &str) -> Option<String> {
-    let pat = format!("\"{key}\":\"");
-    let start = line.find(&pat)? + pat.len();
-    let bytes = line.as_bytes();
-    let mut out = String::new();
-    let mut i = start;
-    while i < bytes.len() {
-        let c = bytes[i];
-        if c == b'"' {
-            return Some(out);
+#[derive(Serialize)]
+struct StreamOptions {
+    include_usage: bool,
+}
+
+/// openai, groq (`stream_options` asks for the usage frame) and ollama
+/// (which has no such flag) share the chat shape.
+#[derive(Serialize)]
+struct ChatRequest<'a> {
+    model: &'a str,
+    stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream_options: Option<StreamOptions>,
+    messages: [Message<'a>; 2],
+}
+
+#[derive(Serialize)]
+struct AnthropicRequest<'a> {
+    model: &'a str,
+    max_tokens: u32,
+    stream: bool,
+    system: &'a str,
+    messages: [Message<'a>; 1],
+}
+
+/// The request body for a provider; field order is the struct order.
+fn request_body(
+    provider: &Provider,
+    model: &str,
+    system: &str,
+    user: &str,
+) -> Result<String, WdError> {
+    let user_msg = Message {
+        role: "user",
+        content: user,
+    };
+    let encoded = match provider {
+        Provider::Anthropic { .. } => serde_json::to_string(&AnthropicRequest {
+            model,
+            max_tokens: 4096,
+            stream: true,
+            system,
+            messages: [user_msg],
+        }),
+        Provider::OpenAi { .. } | Provider::Groq { .. } | Provider::Ollama { .. } => {
+            let stream_options = match provider {
+                Provider::Ollama { .. } => None,
+                _ => Some(StreamOptions {
+                    include_usage: true,
+                }),
+            };
+            serde_json::to_string(&ChatRequest {
+                model,
+                stream: true,
+                stream_options,
+                messages: [
+                    Message {
+                        role: "system",
+                        content: system,
+                    },
+                    user_msg,
+                ],
+            })
         }
-        if c != b'\\' {
-            let ch_start = i;
-            let mut end = i + 1;
-            while end < bytes.len() && (bytes[end] & 0xC0) == 0x80 {
-                end += 1;
+    };
+    encoded.map_err(|e| WdError::Msg(format!("could not encode the request: {e}")))
+}
+
+/// One stream frame or error body, parsed; None for anything that is not
+/// json (sse `event:` lines, html error pages).
+fn frame(json: &str) -> Option<Value> {
+    serde_json::from_str(json).ok()
+}
+
+/// The string at a json pointer path (`/error/message`).
+fn str_at<'a>(v: &'a Value, path: &str) -> Option<&'a str> {
+    v.pointer(path).and_then(Value::as_str)
+}
+
+/// The count at a json pointer path; a float is truncated.
+fn num_at(v: &Value, path: &str) -> Option<u64> {
+    let n = v.pointer(path)?;
+    n.as_u64().or_else(|| n.as_f64().map(|f| f as u64))
+}
+
+/// The text chunk in a frame, per provider (shared/prompts/provider.md).
+fn text_of<'a>(provider: &Provider, v: &'a Value) -> Option<&'a str> {
+    match provider {
+        Provider::Anthropic { .. } => {
+            if str_at(v, "/type") != Some("content_block_delta") {
+                return None;
             }
-            out.push_str(&line[ch_start..end]);
-            i = end;
-            continue;
+            str_at(v, "/delta/text")
         }
-        i += 1;
-        match bytes.get(i)? {
-            b'"' => out.push('"'),
-            b'\\' => out.push('\\'),
-            b'/' => out.push('/'),
-            b'n' => out.push('\n'),
-            b'r' => out.push('\r'),
-            b't' => out.push('\t'),
-            b'b' => out.push('\u{8}'),
-            b'f' => out.push('\u{c}'),
-            b'u' => {
-                let hex = line.get(i + 1..i + 5)?;
-                let mut cp = u32::from_str_radix(hex, 16).ok()?;
-                i += 4;
-                if (0xD800..0xDC00).contains(&cp) && line.get(i + 1..i + 3) == Some("\\u") {
-                    let lo_hex = line.get(i + 3..i + 7)?;
-                    if let Ok(lo) = u32::from_str_radix(lo_hex, 16) {
-                        if (0xDC00..0xE000).contains(&lo) {
-                            cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
-                            i += 6;
-                        }
-                    }
-                }
-                out.push(char::from_u32(cp).unwrap_or('\u{FFFD}'));
-            }
-            _ => return None,
-        }
-        i += 1;
+        Provider::OpenAi { .. } | Provider::Groq { .. } => str_at(v, "/choices/0/delta/content"),
+        Provider::Ollama { .. } => str_at(v, "/message/content"),
     }
-    None
+}
+
+/// Where the provider puts its words: `error.message` (openai, groq,
+/// anthropic), `error` as a string (ollama), or a bare `message`.
+fn error_message(v: &Value) -> Option<&str> {
+    str_at(v, "/error/message")
+        .or_else(|| str_at(v, "/error"))
+        .or_else(|| str_at(v, "/message"))
+}
+
+/// The machine-readable codes: openai `error.code`, anthropic `error.type`
+/// and `error.details.error_code`.
+fn error_codes(v: &Value) -> Vec<&str> {
+    ["/error/code", "/error/type", "/error/details/error_code"]
+        .iter()
+        .filter_map(|p| str_at(v, p))
+        .collect()
 }
 
 struct TempBody(PathBuf);
@@ -284,14 +337,6 @@ fn write_body(body: &str) -> Result<TempBody, WdError> {
         .open(&path)?;
     f.write_all(body.as_bytes())?;
     Ok(TempBody(path))
-}
-
-fn messages_json(system: &str, user: &str) -> String {
-    format!(
-        r#"[{{"role":"system","content":"{}"}},{{"role":"user","content":"{}"}}]"#,
-        json_escape(system),
-        json_escape(user)
-    )
 }
 
 /// The status line and headers curl prints ahead of the body (`include`).
@@ -371,51 +416,21 @@ pub fn stream(
     on_text: &mut dyn FnMut(&str),
 ) -> Result<Reply, WdError> {
     let base = provider.base_url().trim_end_matches('/');
-    let (url, headers, body, text_key, delta_filter): (
-        String,
-        Vec<String>,
-        String,
-        &str,
-        Option<&str>,
-    ) = match provider {
+    let (url, headers): (String, Vec<String>) = match provider {
         Provider::Anthropic { key, .. } => (
             format!("{base}/v1/messages"),
             vec![
                 format!("x-api-key: {key}"),
                 "anthropic-version: 2023-06-01".to_string(),
             ],
-            format!(
-                r#"{{"model":"{}","max_tokens":4096,"stream":true,"system":"{}","messages":[{{"role":"user","content":"{}"}}]}}"#,
-                json_escape(model),
-                json_escape(system),
-                json_escape(user)
-            ),
-            "text",
-            Some("content_block_delta"),
         ),
         Provider::OpenAi { key, .. } | Provider::Groq { key, .. } => (
             format!("{base}/v1/chat/completions"),
             vec![format!("Authorization: Bearer {key}")],
-            format!(
-                r#"{{"model":"{}","stream":true,"stream_options":{{"include_usage":true}},"messages":{}}}"#,
-                json_escape(model),
-                messages_json(system, user)
-            ),
-            "content",
-            None,
         ),
-        Provider::Ollama { .. } => (
-            format!("{base}/api/chat"),
-            vec![],
-            format!(
-                r#"{{"model":"{}","stream":true,"messages":{}}}"#,
-                json_escape(model),
-                messages_json(system, user)
-            ),
-            "content",
-            None,
-        ),
+        Provider::Ollama { .. } => (format!("{base}/api/chat"), vec![]),
     };
+    let body = request_body(provider, model, system, user)?;
 
     if !valid_url(&url) {
         return Err(WdError::Msg("invalid provider url".into()));
@@ -497,22 +512,18 @@ pub fn stream(
             raw_tail.push_str(json);
             raw_tail.push('\n');
         }
-        if note_usage(provider, json, &mut usage) {
+        let Some(v) = frame(json) else { continue };
+        if note_usage(provider, &v, &mut usage) {
             saw_usage = true;
         }
-        if stream_error.is_none() && is_error_frame(provider, json) {
+        if stream_error.is_none() && is_error_frame(provider, &v) {
             stream_error = Some(json.to_string());
             continue;
         }
-        if let Some(f) = delta_filter {
-            if !json.contains(f) {
-                continue;
-            }
-        }
-        if let Some(text) = extract_string_field(json, text_key) {
+        if let Some(text) = text_of(provider, &v) {
             if !text.is_empty() {
                 got_text = true;
-                on_text(&text);
+                on_text(text);
             }
         }
     }
@@ -546,29 +557,31 @@ pub fn stream(
 
 /// Token counts from the frames that carry them (shared/prompts/provider.md,
 /// "usage"). Returns whether this frame had any.
-fn note_usage(provider: &Provider, json: &str, usage: &mut Usage) -> bool {
+fn note_usage(provider: &Provider, v: &Value, usage: &mut Usage) -> bool {
     match provider {
-        Provider::Anthropic { .. } => {
-            if json.contains("\"message_start\"") {
-                usage.input = extract_number_field(json, "input_tokens").unwrap_or(0)
-                    + extract_number_field(json, "cache_creation_input_tokens").unwrap_or(0)
-                    + extract_number_field(json, "cache_read_input_tokens").unwrap_or(0);
-                return true;
+        Provider::Anthropic { .. } => match str_at(v, "/type") {
+            Some("message_start") => {
+                let u = "/message/usage";
+                usage.input = num_at(v, &format!("{u}/input_tokens")).unwrap_or(0)
+                    + num_at(v, &format!("{u}/cache_creation_input_tokens")).unwrap_or(0)
+                    + num_at(v, &format!("{u}/cache_read_input_tokens")).unwrap_or(0);
+                true
             }
-            if json.contains("\"message_delta\"") {
-                if let Some(out) = extract_number_field(json, "output_tokens") {
+            Some("message_delta") => match num_at(v, "/usage/output_tokens") {
+                Some(out) => {
                     usage.output = out; // cumulative: the last one wins
-                    return true;
+                    true
                 }
-            }
-            false
-        }
+                None => false,
+            },
+            _ => false,
+        },
         Provider::Ollama { .. } => {
-            if !json.contains("\"done\":true") {
+            if v.pointer("/done").and_then(Value::as_bool) != Some(true) {
                 return false;
             }
-            let p = extract_number_field(json, "prompt_eval_count");
-            let e = extract_number_field(json, "eval_count");
+            let p = num_at(v, "/prompt_eval_count");
+            let e = num_at(v, "/eval_count");
             if p.is_none() && e.is_none() {
                 return false;
             }
@@ -577,8 +590,13 @@ fn note_usage(provider: &Provider, json: &str, usage: &mut Usage) -> bool {
             true
         }
         _ => {
-            let p = extract_number_field(json, "prompt_tokens");
-            let c = extract_number_field(json, "completion_tokens");
+            // groq mirrors the block under x_groq as well
+            let at = |k: &str| {
+                num_at(v, &format!("/usage/{k}"))
+                    .or_else(|| num_at(v, &format!("/x_groq/usage/{k}")))
+            };
+            let p = at("prompt_tokens");
+            let c = at("completion_tokens");
             if p.is_none() && c.is_none() {
                 return false;
             }
@@ -591,14 +609,10 @@ fn note_usage(provider: &Provider, json: &str, usage: &mut Usage) -> bool {
 
 /// An error the provider sends on a 200 stream: anthropic's `type:error`
 /// event, or an `{"error":...}` envelope where a chunk should be.
-fn is_error_frame(provider: &Provider, json: &str) -> bool {
+fn is_error_frame(provider: &Provider, v: &Value) -> bool {
     match provider {
-        Provider::Anthropic { .. } => json.starts_with("{\"type\":\"error\""),
-        _ => {
-            json.contains("\"error\":")
-                && !json.contains("\"choices\"")
-                && !json.contains("\"message\":{")
-        }
+        Provider::Anthropic { .. } => str_at(v, "/type") == Some("error"),
+        _ => v.get("error").is_some() && v.get("choices").is_none(),
     }
 }
 
@@ -650,12 +664,16 @@ pub fn provider_failure(
     model: &str,
     provider: &Provider,
 ) -> String {
-    let message = extract_string_field(body, "message")
-        .or_else(|| extract_string_field(body, "error"))
+    let parsed = frame(body);
+    let message = parsed
+        .as_ref()
+        .and_then(error_message)
+        .map(str::to_string)
         .unwrap_or_else(|| body.split_whitespace().collect::<Vec<_>>().join(" "));
     let message = truncate_chars(&message, 300);
     let lower = message.to_lowercase();
-    let has_code = |c: &str| body.contains(&format!("\"{c}\""));
+    let codes = parsed.as_ref().map(error_codes).unwrap_or_default();
+    let has_code = |c: &str| codes.contains(&c);
     let name = provider.name();
     let status = status.unwrap_or(0);
 
@@ -800,19 +818,6 @@ fn number_before(s: &str, key: &str) -> Option<u64> {
     digits.parse().ok()
 }
 
-/// Value of `"key":<digits>` in a raw JSON line. The leading quote keeps
-/// `"input_tokens":` from matching `cache_read_input_tokens`.
-pub fn extract_number_field(line: &str, key: &str) -> Option<u64> {
-    let pat = format!("\"{key}\":");
-    let rest = &line[line.find(&pat)? + pat.len()..];
-    let digits: String = rest
-        .trim_start()
-        .chars()
-        .take_while(|c| c.is_ascii_digit())
-        .collect();
-    digits.parse().ok()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -909,33 +914,91 @@ mod tests {
         assert!(!valid_url("api.groq.com"));
     }
 
-    #[test]
-    fn escapes_json() {
-        assert_eq!(json_escape("a\"b\\c\nd\te"), "a\\\"b\\\\c\\nd\\te");
-        assert_eq!(json_escape("\u{1}"), "\\u0001");
-        assert_eq!(json_escape("héllo"), "héllo");
+    fn v(s: &str) -> Value {
+        serde_json::from_str(s).unwrap()
     }
 
     #[test]
-    fn extracts_string_fields() {
+    fn request_bodies_match_the_wire_shape() {
+        let system = "say \"hi\"\nnow\u{1} héllo";
         assert_eq!(
-            extract_string_field(r#"{"delta":{"text":"hi"}}"#, "text"),
-            Some("hi".to_string())
+            request_body(&groq(), "m", system, "u").unwrap(),
+            r#"{"model":"m","stream":true,"stream_options":{"include_usage":true},"messages":[{"role":"system","content":"say \"hi\"\nnow\u0001 héllo"},{"role":"user","content":"u"}]}"#
+        );
+        let o = Provider::Ollama {
+            url: "http://x".into(),
+        };
+        assert_eq!(
+            request_body(&o, "m", "s", "u").unwrap(),
+            r#"{"model":"m","stream":true,"messages":[{"role":"system","content":"s"},{"role":"user","content":"u"}]}"#
         );
         assert_eq!(
-            extract_string_field(r#"{"text":"a\"b\\c\nd"}"#, "text"),
-            Some("a\"b\\c\nd".to_string())
+            request_body(&anthropic(), "m", "s", "u").unwrap(),
+            r#"{"model":"m","max_tokens":4096,"stream":true,"system":"s","messages":[{"role":"user","content":"u"}]}"#
+        );
+    }
+
+    #[test]
+    fn text_of_per_provider() {
+        let a = anthropic();
+        assert_eq!(
+            text_of(
+                &a,
+                &v(r#"{"type":"content_block_delta","delta":{"text":"hi"}}"#)
+            ),
+            Some("hi")
+        );
+        // nested text in another event never reaches stdout
+        assert_eq!(
+            text_of(
+                &a,
+                &v(r#"{"type":"message_start","message":{"content":[{"text":"x"}]}}"#)
+            ),
+            None
         );
         assert_eq!(
-            extract_string_field(r#"{"text":"A😀"}"#, "text"),
-            Some("A\u{1F600}".to_string())
+            text_of(&groq(), &v(r#"{"choices":[{"delta":{"content":"A😀"}}]}"#)),
+            Some("A\u{1F600}")
         );
-        assert_eq!(extract_string_field(r#"{"other":"x"}"#, "text"), None);
-        // unicode content passes through untouched
+        assert_eq!(text_of(&groq(), &v(r#"{"choices":[{"delta":{}}]}"#)), None);
+        let o = Provider::Ollama {
+            url: "http://x".into(),
+        };
         assert_eq!(
-            extract_string_field(r#"{"content":"héllo"}"#, "content"),
-            Some("héllo".to_string())
+            text_of(
+                &o,
+                &v(r#"{"message":{"role":"assistant","content":"héllo"},"done":false}"#)
+            ),
+            Some("héllo")
         );
+    }
+
+    #[test]
+    fn error_message_and_codes_follow_the_spec() {
+        let openai = v(
+            r#"{"error":{"message":"bad key","type":"invalid_request_error","code":"invalid_api_key"}}"#,
+        );
+        assert_eq!(error_message(&openai), Some("bad key"));
+        assert_eq!(
+            error_codes(&openai),
+            vec!["invalid_api_key", "invalid_request_error"]
+        );
+        let anthropic = v(
+            r#"{"type":"error","error":{"type":"invalid_request_error","message":"limit","details":{"error_code":"enforced_spend_limit_reached"}}}"#,
+        );
+        assert_eq!(error_message(&anthropic), Some("limit"));
+        assert_eq!(
+            error_codes(&anthropic),
+            vec!["invalid_request_error", "enforced_spend_limit_reached"]
+        );
+        let ollama = v(r#"{"error":"model not found"}"#);
+        assert_eq!(error_message(&ollama), Some("model not found"));
+        assert!(error_codes(&ollama).is_empty());
+        assert_eq!(error_message(&v("{}")), None);
+        // a code named inside the prose is not a code
+        let prose = v(r#"{"error":{"message":"see insufficient_quota in the docs"}}"#);
+        assert!(error_codes(&prose).is_empty());
+        assert!(frame("<html>bad gateway</html>").is_none());
     }
 
     #[test]
@@ -1147,43 +1210,29 @@ mod tests {
     }
 
     #[test]
-    fn extracts_number_fields() {
-        let start = r#"{"type":"message_start","message":{"usage":{"input_tokens":25,"cache_creation_input_tokens":3,"cache_read_input_tokens":100,"output_tokens":1}}}"#;
-        assert_eq!(extract_number_field(start, "input_tokens"), Some(25));
-        assert_eq!(
-            extract_number_field(start, "cache_read_input_tokens"),
-            Some(100)
-        );
-        assert_eq!(extract_number_field(start, "output_tokens"), Some(1));
-        let usage = r#"{"usage":{"prompt_tokens":9,"completion_tokens":4,"prompt_tokens_details":{"cached_tokens":0}}}"#;
-        assert_eq!(extract_number_field(usage, "prompt_tokens"), Some(9));
-        assert_eq!(extract_number_field(usage, "completion_tokens"), Some(4));
-        assert_eq!(extract_number_field(usage, "total_tokens"), None);
-        assert_eq!(extract_number_field(r#"{"n": 42}"#, "n"), Some(42));
-    }
-
-    #[test]
     fn notes_usage_per_provider() {
         let mut u = Usage::default();
         let a = anthropic();
         assert!(note_usage(
             &a,
-            r#"{"type":"message_start","message":{"usage":{"input_tokens":25,"cache_creation_input_tokens":3,"cache_read_input_tokens":100,"output_tokens":1}}}"#,
+            &v(
+                r#"{"type":"message_start","message":{"usage":{"input_tokens":25,"cache_creation_input_tokens":3,"cache_read_input_tokens":100,"output_tokens":1}}}"#
+            ),
             &mut u
         ));
         assert!(note_usage(
             &a,
-            r#"{"type":"message_delta","usage":{"output_tokens":7}}"#,
+            &v(r#"{"type":"message_delta","usage":{"output_tokens":7}}"#),
             &mut u
         ));
         assert!(note_usage(
             &a,
-            r#"{"type":"message_delta","usage":{"output_tokens":15}}"#,
+            &v(r#"{"type":"message_delta","usage":{"output_tokens":15}}"#),
             &mut u
         ));
         assert!(!note_usage(
             &a,
-            r#"{"type":"content_block_delta","delta":{"text":"hi"}}"#,
+            &v(r#"{"type":"content_block_delta","delta":{"text":"hi"}}"#),
             &mut u
         ));
         assert_eq!(
@@ -1198,12 +1247,12 @@ mod tests {
         let g = groq();
         assert!(!note_usage(
             &g,
-            r#"{"choices":[{"delta":{"content":"hi"}}]}"#,
+            &v(r#"{"choices":[{"delta":{"content":"hi"}}]}"#),
             &mut u
         ));
         assert!(note_usage(
             &g,
-            r#"{"choices":[],"x_groq":{"usage":{"prompt_tokens":9,"completion_tokens":4}}}"#,
+            &v(r#"{"choices":[],"x_groq":{"usage":{"prompt_tokens":9,"completion_tokens":4}}}"#),
             &mut u
         ));
         assert_eq!(
@@ -1220,12 +1269,12 @@ mod tests {
         };
         assert!(!note_usage(
             &o,
-            r#"{"message":{"content":"hi"},"done":false}"#,
+            &v(r#"{"message":{"content":"hi"},"done":false}"#),
             &mut u
         ));
         assert!(note_usage(
             &o,
-            r#"{"done":true,"prompt_eval_count":11,"eval_count":6}"#,
+            &v(r#"{"done":true,"prompt_eval_count":11,"eval_count":6}"#),
             &mut u
         ));
         assert_eq!(
@@ -1240,27 +1289,36 @@ mod tests {
     #[test]
     fn tells_error_frames_from_chunks() {
         let g = groq();
-        assert!(is_error_frame(&g, r#"{"error":{"message":"x"}}"#));
-        assert!(is_error_frame(&g, r#"{"error":"model not found"}"#));
+        assert!(is_error_frame(&g, &v(r#"{"error":{"message":"x"}}"#)));
+        assert!(is_error_frame(&g, &v(r#"{"error":"model not found"}"#)));
         assert!(!is_error_frame(
             &g,
-            r#"{"choices":[{"delta":{"content":"error: none"}}]}"#
+            &v(r#"{"choices":[{"delta":{"content":"error: none"}}]}"#)
         ));
         let o = Provider::Ollama {
             url: "http://x".into(),
         };
         assert!(!is_error_frame(
             &o,
-            r#"{"message":{"content":"\"error\": yes"},"done":false}"#
+            &v(r#"{"message":{"content":"\"error\": yes"},"done":false}"#)
         ));
         let a = anthropic();
         assert!(is_error_frame(
             &a,
-            r#"{"type":"error","error":{"type":"overloaded_error"}}"#
+            &v(r#"{"type":"error","error":{"type":"overloaded_error"}}"#)
         ));
         assert!(!is_error_frame(
             &a,
-            r#"{"type":"content_block_delta","delta":{"text":"\"error\":"}}"#
+            &v(r#"{"type":"content_block_delta","delta":{"text":"\"error\":"}}"#)
+        ));
+        // key order is the provider's business
+        assert!(is_error_frame(
+            &a,
+            &v(r#"{"error":{"type":"overloaded_error"},"type":"error"}"#)
+        ));
+        assert!(is_error_frame(
+            &g,
+            &v(r#"{"id":"x","error":{"message":"boom"}}"#)
         ));
     }
 
