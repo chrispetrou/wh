@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { LOG_DEFAULT, parseCommand } from "@/lib/commands";
 import { sameOrigin } from "@/lib/origin";
 import {
+  activityBlock,
   branchesText,
+  churnBlock,
   commitInput,
   compareRange,
   GithubError,
@@ -14,7 +16,9 @@ import {
   prInput,
   prsBlock,
   sinceInput,
+  staleText,
   tagsText,
+  whoBlock,
   whyInput,
   type ExplainInput,
   type PlanSource,
@@ -245,6 +249,20 @@ export async function POST(req: NextRequest) {
   // the browser's utc offset, so "today" is the user's day
   const tz = Math.max(-840, Math.min(840, Number(req.headers.get("x-wd-tz") ?? 0) || 0));
 
+  if (command.kind === "stale") {
+    try {
+      const text = await staleText(session.token, owner, repo, {
+        weeks: command.weeks,
+        since: command.since,
+        now: Date.now(),
+        tz,
+      });
+      return plain({ branches: true }, text);
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
+
   // blocks: structured rows the terminal renders as a grid, no model
   if (command.kind === "log") {
     try {
@@ -290,6 +308,40 @@ export async function POST(req: NextRequest) {
     try {
       const h = await historyBlock(session.token, owner, repo, command.path, command.ref);
       return plain({ block: h.block, rows: h.rows, spans: h.spans }, "");
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
+  if (command.kind === "who") {
+    try {
+      const w = await whoBlock(session.token, owner, repo, command.path, command.ref);
+      return plain({ block: w.block }, "");
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
+  if (command.kind === "activity") {
+    try {
+      const a = await activityBlock(session.token, owner, repo, {
+        since: command.since,
+        now: Date.now(),
+        tz,
+      });
+      return plain({ block: a.block }, "");
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
+  if (command.kind === "churn") {
+    try {
+      const c = await churnBlock(session.token, owner, repo, {
+        ref: command.ref,
+        since: command.since,
+        path: command.path,
+        now: Date.now(),
+        tz,
+      });
+      return plain({ block: c.block }, "");
     } catch (e) {
       return githubFailure(e, destroy);
     }

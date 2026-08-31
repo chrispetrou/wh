@@ -15,10 +15,13 @@ import {
 describe("modelFamily", () => {
   it("resolves suggestions exactly, then by prefix", () => {
     expect(modelFamily("claude-opus-5")).toBe("anthropic");
+    expect(modelFamily("claude-fable-5")).toBe("anthropic");
     expect(modelFamily("claude-3-7-sonnet")).toBe("anthropic");
+    expect(modelFamily("gpt-5.6-terra")).toBe("openai");
     expect(modelFamily("gpt-5")).toBe("openai");
-    expect(modelFamily("llama-3.3-70b-versatile")).toBe("groq");
     expect(modelFamily("openai/gpt-oss-120b")).toBe("groq");
+    // llama ids are served by several hosts, so they name no provider
+    expect(modelFamily("llama-3.3-70b-versatile")).toBeNull();
     expect(modelFamily("mixtral-8x7b")).toBeNull();
   });
   it("lists the default first for every provider", () => {
@@ -39,7 +42,7 @@ describe("detectProvider", () => {
 
 describe("groq defaults", () => {
   it("has a default model and no effort levels", () => {
-    expect(DEFAULT_MODELS.groq).toBe("llama-3.3-70b-versatile");
+    expect(DEFAULT_MODELS.groq).toBe("openai/gpt-oss-120b");
     expect(EFFORTS.groq).toEqual([]);
   });
 });
@@ -48,6 +51,7 @@ describe("MODEL_RE", () => {
   it("accepts vendor-prefixed groq ids", () => {
     expect(MODEL_RE.test("llama-3.3-70b-versatile")).toBe(true);
     expect(MODEL_RE.test("openai/gpt-oss-120b")).toBe(true);
+    expect(MODEL_RE.test("gpt-5.6-terra")).toBe(true);
     expect(MODEL_RE.test("claude-opus-5")).toBe(true);
   });
   it("rejects a leading slash, spaces, and overlong ids", () => {
@@ -67,7 +71,7 @@ describe("buildRequest for groq", () => {
     expect(r.url).toBe("https://api.groq.com/openai/v1/chat/completions");
     expect((r.headers as Record<string, string>).authorization).toBe("Bearer gsk_x");
     const body = JSON.parse(r.body);
-    expect(body.model).toBe("llama-3.3-70b-versatile");
+    expect(body.model).toBe("openai/gpt-oss-120b");
     expect(body.stream).toBe(true);
     expect(body.messages[0]).toEqual({ role: "system", content: "sys" });
     expect(body.messages[1]).toEqual({ role: "user", content: "usr" });

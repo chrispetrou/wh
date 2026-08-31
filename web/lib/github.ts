@@ -2,12 +2,13 @@
 // (unified diff + numstat lines + commit lines) so the shared preprocess
 // spec applies unchanged.
 
-import type { Block, CommitRow, PlanRow, Ref } from "./block";
+import type { Block, CommitRow, PlanRow, Ref, StatRow } from "./block";
 import type { CommitDetail, PrDetail } from "./chat-store";
 import { LATEST_TAG } from "./commands";
 import { filterDiff } from "./explain/filter";
 import { laneCount, layout } from "./graph";
 import { resolvePeriod } from "./time";
+import { relTime } from "./utils";
 
 // overridable for github enterprise (and tests), read per call so a
 // first-run setup that writes .env.local is seen without a restart
@@ -779,6 +780,318 @@ export async function historyBlock(
   return { block: { kind: "log", rows, lanes: 0, footer }, rows: logRefs(rows), spans: false };
 }
 
+// who knows a path: its history's authors ranked with recent work
+// weighing more (half-life 180 days), so whoever touched it lately
+// outranks a departed heavy committer. the counts and shares stay raw
+const WHO_COMMITS = 100;
+const WHO_ROWS = 10;
+
+export async function whoBlock(
+  token: string,
+  owner: string,
+  repo: string,
+  path: string,
+  ref?: string,
+  now = Date.now()
+): Promise<{ block: Block }> {
+  const q = new URLSearchParams({ path, per_page: String(WHO_COMMITS) });
+  if (ref) q.set("sha", ref);
+  let res: Response;
+  try {
+    res = await gh(token, `/repos/${owner}/${repo}/commits?${q}`);
+  } catch (e) {
+    if (ref && e instanceof GithubError && e.status === 404) {
+      throw new GithubError(404, `branch ${ref} not found; run branches to see refs`);
+    }
+    throw e;
+  }
+  const commits = (await res.json()) as CommitJson[];
+  const where = ref ? ` on ${ref}` : "";
+  if (!commits.length) {
+    return { block: { kind: "stat", rows: [], footer: [`no commits touch ${path}${where}`] } };
+  }
+
+  const byAuthor = new Map<string, { count: number; last: string; score: number }>();
+  for (const c of commits) {
+    const name = c.author?.login ?? c.commit.author.name;
+    const date = c.commit.committer.date;
+    const ageDays = Math.max(0, now - Date.parse(date)) / 86_400_000;
+    const cur = byAuthor.get(name) ?? { count: 0, last: date, score: 0 };
+    cur.count += 1;
+    cur.score += 0.5 ** (ageDays / 180);
+    if (date > cur.last) cur.last = date;
+    byAuthor.set(name, cur);
+  }
+  const ranked = [...byAuthor].sort((a, b) => b[1].score - a[1].score);
+  const rows: StatRow[] = ranked.slice(0, WHO_ROWS).map(([name, w]) => ({
+    label: name,
+    value: `${w.count} ${w.count === 1 ? "commit" : "commits"}`,
+    share: w.count / commits.length,
+    note: `last touched ${relTime(w.last, now)}`,
+  }));
+  const n = commits.length;
+  const footer = [
+    `${ranked.length} ${ranked.length === 1 ? "author" : "authors"} over ${n === WHO_COMMITS ? "the last " : ""}${n} ${n === 1 ? "commit" : "commits"} touching ${path}${where}`,
+    ranked.length > WHO_ROWS
+      ? `(top ${WHO_ROWS} shown, recent work weighs more)`
+      : "(recent work weighs more)",
+  ];
+  return { block: { kind: "stat", rows, footer } };
+}
+
+// the repo's pulse: the 52-week commit spark, top authors, languages.
+// the /stats endpoints answer 202 with an empty body while github
+// computes them (a cold repo can take a while), so they get one short
+// retry; gh() cannot help (202 is res.ok). null means still computing:
+// the commit list, which is always warm, stands in
+const STATS_TRIES = 2;
+const ACTIVITY_AUTHORS = 8;
+const ACTIVITY_LANGS = 6;
+const ACTIVITY_FALLBACK_CAP = 300; // commits walked when stats are cold
+
+async function ghStats<T>(token: string, path: string): Promise<T | null> {
+  for (let i = 0; i < STATS_TRIES; i++) {
+    const res = await fetch(`${api()}${path}`, {
+      headers: headers(token, "application/vnd.github+json"),
+      cache: "no-store",
+    });
+    if (res.status === 202) {
+      if (i < STATS_TRIES - 1) await new Promise((r) => setTimeout(r, 900 * (i + 1)));
+      continue;
+    }
+    if (!res.ok) throw failure(res);
+    return (await res.json()) as T;
+  }
+  return null;
+}
+
+interface WeekJson {
+  week: number; // unix seconds
+  total: number;
+}
+
+interface ContribJson {
+  total: number;
+  author: { login: string } | null;
+  weeks: Array<{ w: number; c: number }>;
+}
+
+export interface ActivityOpts {
+  since?: string; // a period phrase cutting the weekly buckets
+  now: number;
+  tz: number; // minutes, as getTimezoneOffset reports
+}
+
+export async function activityBlock(
+  token: string,
+  owner: string,
+  repo: string,
+  opts: ActivityOpts
+): Promise<{ block: Block }> {
+  const base = `/repos/${owner}/${repo}`;
+  const [weeksRaw, contribRaw, langs] = await Promise.all([
+    ghStats<WeekJson[]>(token, `${base}/stats/commit_activity`),
+    ghStats<ContribJson[]>(token, `${base}/stats/contributors`),
+    gh(token, `${base}/languages`).then((r) => r.json() as Promise<Record<string, number>>),
+  ]);
+  // null: still computing (202 through the retry); an empty array is
+  // github answering with nothing, which huge repos do
+  const allWeeks = weeksRaw ?? [];
+  const contrib = contribRaw ?? [];
+  if (weeksRaw !== null && contribRaw !== null && !allWeeks.length && !contrib.length) {
+    return { block: { kind: "stat", rows: [], footer: ["no activity data for this repo"] } };
+  }
+
+  const period = opts.since ? resolvePeriod(opts.since, opts.now, opts.tz) : null;
+  if (opts.since && !period) throw new GithubError(400, `unknown period ${opts.since}`);
+  const from = period ? Date.parse(period.since) : 0;
+  const until = period?.until ? Date.parse(period.until) : Infinity;
+  const inWindow = (sec: number) => sec * 1000 >= from && sec * 1000 < until;
+
+  // whatever is still computing is counted from the commit list instead
+  const start = period ? Date.parse(period.since) : opts.now - 52 * WEEK;
+  const end = period?.until ? Date.parse(period.until) : opts.now;
+  let fallback: CommitJson[] | null = null;
+  if (weeksRaw === null || contribRaw === null) {
+    const q = new URLSearchParams({ since: new Date(start).toISOString() });
+    if (period?.until) q.set("until", period.until);
+    fallback = await commitList(token, `${base}/commits`, q, ACTIVITY_FALLBACK_CAP);
+  }
+  const fallbackCut = (fallback?.length ?? 0) >= ACTIVITY_FALLBACK_CAP;
+
+  const weeks = allWeeks.filter((w) => inWindow(w.week));
+  let spark = weeks.length
+    ? {
+        values: weeks.map((w) => w.total),
+        label: `commits per week, ${period ? period.label : "last 52 weeks"}`,
+      }
+    : undefined;
+  if (weeksRaw === null && fallback?.length) {
+    const n = Math.max(1, Math.ceil((end - start) / WEEK));
+    const values = new Array<number>(n).fill(0);
+    for (const c of fallback) {
+      const i = Math.floor((Date.parse(c.commit.committer.date) - start) / WEEK);
+      if (i >= 0 && i < n) values[i] += 1;
+    }
+    spark = {
+      values,
+      label: `commits per week, ${period ? period.label : "last 52 weeks"}`,
+    };
+  }
+
+  let counted = contrib
+    .map((c) => ({
+      login: c.author?.login ?? "unknown",
+      count: c.weeks.reduce((n, w) => n + (inWindow(w.w) ? w.c : 0), 0),
+    }))
+    .filter((c) => c.count > 0)
+    .sort((a, b) => b.count - a.count);
+  if (contribRaw === null && fallback) {
+    const byAuthor = new Map<string, number>();
+    for (const c of fallback) {
+      const name = c.author?.login ?? c.commit.author.name;
+      byAuthor.set(name, (byAuthor.get(name) ?? 0) + 1);
+    }
+    counted = [...byAuthor]
+      .map(([login, count]) => ({ login, count }))
+      .sort((a, b) => b.count - a.count);
+  }
+  const authorTotal = counted.reduce((n, c) => n + c.count, 0);
+  const rows: StatRow[] = counted.slice(0, ACTIVITY_AUTHORS).map((c) => ({
+    label: c.login,
+    value: `${c.count} ${c.count === 1 ? "commit" : "commits"}`,
+    share: authorTotal ? c.count / authorTotal : 0,
+    group: "authors",
+  }));
+
+  const bytes = Object.entries(langs).sort((a, b) => b[1] - a[1]);
+  const byteTotal = bytes.reduce((n, [, b]) => n + b, 0);
+  for (const [name, b] of bytes.slice(0, ACTIVITY_LANGS)) {
+    const share = byteTotal ? b / byteTotal : 0;
+    const pct = Math.round(share * 100);
+    rows.push({ label: name.toLowerCase(), value: pct ? `${pct}%` : "<1%", share, group: "languages" });
+  }
+
+  const sum =
+    weeksRaw !== null
+      ? weeks.reduce((n, w) => n + w.total, 0)
+      : (spark?.values.reduce((n, v) => n + v, 0) ?? 0);
+  const footer = [
+    `${sum} ${sum === 1 ? "commit" : "commits"} ${period ? period.label : "in the last 52 weeks"} · ${counted.length} ${counted.length === 1 ? "contributor" : "contributors"}`,
+  ];
+  if (counted.length > ACTIVITY_AUTHORS) {
+    footer.push(`(top ${ACTIVITY_AUTHORS} of ${counted.length} authors shown)`);
+  }
+  if (fallback) {
+    footer.push(
+      `(counted from ${fallbackCut ? `the latest ${ACTIVITY_FALLBACK_CAP} commits` : "commits"} while github computes its stats)`
+    );
+  }
+  return { block: { kind: "stat", spark, rows, footer } };
+}
+
+// hotspots: commit counts per path over a window, from capped per-commit
+// detail fetches (a compare cannot count commits per file). merges are
+// skipped: their combined diffs would double-count every side branch
+const CHURN_COMMITS_CAP = 50;
+const CHURN_ROWS = 15;
+const CHURN_CHUNK = 10; // details fetched in bursts this small
+
+export interface ChurnOpts {
+  ref?: string;
+  since?: string; // a period, or a ref whose commit opens the window
+  path?: string;
+  now: number;
+  tz: number; // minutes, as getTimezoneOffset reports
+}
+
+export async function churnBlock(
+  token: string,
+  owner: string,
+  repo: string,
+  opts: ChurnOpts
+): Promise<{ block: Block }> {
+  const base = `/repos/${owner}/${repo}`;
+  const q = new URLSearchParams({ per_page: String(CHURN_COMMITS_CAP) });
+  let label = "";
+  let skip: string | undefined;
+  if (opts.since) {
+    const w: Window =
+      resolvePeriod(opts.since, opts.now, opts.tz) ?? (await refWindow(token, base, opts.since));
+    q.set("since", w.since);
+    if (w.until) q.set("until", w.until);
+    skip = w.skip;
+    label = ` ${w.label}`;
+  }
+  if (opts.ref) q.set("sha", opts.ref);
+  if (opts.path) q.set("path", opts.path);
+
+  let res: Response;
+  try {
+    res = await gh(token, `${base}/commits?${q}`);
+  } catch (e) {
+    if (opts.ref && e instanceof GithubError && e.status === 404) {
+      throw new GithubError(404, `branch ${opts.ref} not found; run branches to see refs`);
+    }
+    throw e;
+  }
+  const list = (await res.json()) as CommitJson[];
+  const cut = list.length >= CHURN_COMMITS_CAP;
+  const picked = list.filter((c) => c.sha !== (skip ?? null) && c.parents.length <= 1);
+
+  const where = `${label}${opts.ref ? ` on ${opts.ref}` : ""}${opts.path ? ` in ${opts.path}` : ""}`;
+  if (!picked.length) {
+    return { block: { kind: "stat", rows: [], footer: [`no commits${where}`] } };
+  }
+
+  const details: CommitJson[] = [];
+  for (let i = 0; i < picked.length; i += CHURN_CHUNK) {
+    details.push(
+      ...(await Promise.all(
+        picked.slice(i, i + CHURN_CHUNK).map(async (c) => {
+          const r = await gh(token, `${base}/commits/${encodeURIComponent(c.sha)}`);
+          return (await r.json()) as CommitJson;
+        })
+      ))
+    );
+  }
+
+  const dir = opts.path?.replace(/\/+$/, "");
+  const under = (f: string) => !dir || f === dir || f.startsWith(`${dir}/`);
+  const byFile = new Map<string, { commits: number; adds: number; dels: number }>();
+  for (const d of details) {
+    for (const f of d.files ?? []) {
+      if (!under(f.filename)) continue;
+      const cur = byFile.get(f.filename) ?? { commits: 0, adds: 0, dels: 0 };
+      cur.commits += 1;
+      cur.adds += f.additions;
+      cur.dels += f.deletions;
+      byFile.set(f.filename, cur);
+    }
+  }
+  const ranked = [...byFile].sort(
+    (a, b) => b[1].commits - a[1].commits || b[1].adds + b[1].dels - (a[1].adds + a[1].dels)
+  );
+  const max = Math.max(1, ...ranked.map(([, f]) => f.commits));
+  const rows: StatRow[] = ranked.slice(0, CHURN_ROWS).map(([path, f]) => ({
+    label: path,
+    value: `${f.commits} ${f.commits === 1 ? "commit" : "commits"}`,
+    share: f.commits / max,
+    note: `+${f.adds} −${f.dels}`,
+  }));
+
+  const n = picked.length;
+  const footer = [
+    `${byFile.size} ${byFile.size === 1 ? "file" : "files"} over ${n} ${n === 1 ? "commit" : "commits"}${where}`,
+  ];
+  const notes: string[] = [];
+  if (byFile.size > CHURN_ROWS) notes.push(`top ${CHURN_ROWS} shown`);
+  if (cut) notes.push(`the ${CHURN_COMMITS_CAP} newest commits only`);
+  notes.push("merges skipped");
+  footer.push(`(${notes.join(" · ")})`);
+  return { block: { kind: "stat", rows, footer } };
+}
+
 // why a line exists: blame the line on the ref, then the blaming commit
 // cut down to that file, with the line itself for the prompt
 interface BlameData {
@@ -1069,6 +1382,100 @@ export async function branchesText(
   lines.push(`${total} ${total === 1 ? "branch" : "branches"}`);
   if (others.length > BRANCH_COUNTS_CAP) {
     lines.push(`(counts shown for the first ${BRANCH_COUNTS_CAP})`);
+  }
+  return lines.join("\n") + "\n";
+}
+
+// branches gone quiet: heads older than a cutoff, oldest first, with
+// ahead/behind vs the default like branchesText. head dates come from one
+// graphql query; rest would cost a commit lookup per branch
+export const STALE_WEEKS_DEFAULT = 8;
+const WEEK = 7 * 86_400_000;
+
+const STALE_QUERY = `query($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    refs(refPrefix: "refs/heads/", first: 100) {
+      nodes { name target { ... on Commit { committedDate } } }
+    }
+  }
+}`;
+
+interface StaleRefsData {
+  repository: {
+    refs: { nodes: Array<{ name: string; target: { committedDate?: string } | null }> };
+  } | null;
+}
+
+export interface StaleOpts {
+  weeks?: number;
+  since?: string; // a period phrase; the cutoff is its start
+  now: number;
+  tz: number; // minutes, as getTimezoneOffset reports
+}
+
+export async function staleText(
+  token: string,
+  owner: string,
+  repo: string,
+  opts: StaleOpts
+): Promise<string> {
+  const [infoRes, data] = await Promise.all([
+    gh(token, `/repos/${owner}/${repo}`),
+    ghql<StaleRefsData>(token, STALE_QUERY, { owner, name: repo }),
+  ]);
+  const def = ((await infoRes.json()) as { default_branch: string }).default_branch;
+  const nodes = data.repository?.refs.nodes ?? [];
+
+  const period = opts.since ? resolvePeriod(opts.since, opts.now, opts.tz) : null;
+  if (opts.since && !period) throw new GithubError(400, `unknown period ${opts.since}`);
+  const weeks = opts.weeks ?? STALE_WEEKS_DEFAULT;
+  const cutoff = period ? Date.parse(period.since) : opts.now - weeks * WEEK;
+  const label = period
+    ? `no commits ${period.label}`
+    : `no commits in ${weeks} ${weeks === 1 ? "week" : "weeks"}`;
+
+  const stale = nodes
+    .filter((n) => n.name !== def && n.target?.committedDate)
+    .map((n) => ({ name: n.name, date: Date.parse(n.target!.committedDate!) }))
+    .filter((h) => h.date < cutoff)
+    .sort((a, b) => a.date - b.date);
+  if (!stale.length) return `no stale branches (${label})\n`;
+
+  const counts = new Map(
+    await Promise.all(
+      stale.slice(0, BRANCH_COUNTS_CAP).map(async (b): Promise<[string, string]> => {
+        try {
+          const res = await gh(
+            token,
+            `/repos/${owner}/${repo}/compare/${encodeURIComponent(def)}...${encodeURIComponent(b.name)}`
+          );
+          const j = (await res.json()) as { ahead_by: number; behind_by: number };
+          const parts: string[] = [];
+          if (j.ahead_by > 0) parts.push(`ahead ${j.ahead_by}`);
+          if (j.behind_by > 0) parts.push(`behind ${j.behind_by}`);
+          return [b.name, parts.join(" · ")];
+        } catch {
+          return [b.name, ""];
+        }
+      })
+    )
+  );
+
+  const age = (t: number) => {
+    const w = Math.floor((opts.now - t) / WEEK);
+    return w >= 1 ? `${w}w ago` : `${Math.max(1, Math.floor((opts.now - t) / 86_400_000))}d ago`;
+  };
+  const width = Math.max(...stale.map((b) => b.name.length)) + 2;
+  const numWidth = String(stale.length).length;
+  const lines = stale.map((b, i) => {
+    const status = [`last commit ${age(b.date)}`, counts.get(b.name) ?? ""]
+      .filter(Boolean)
+      .join(" · ");
+    return `${String(i + 1).padStart(numWidth)}  ${b.name.padEnd(width)}${status}`.trimEnd();
+  });
+  lines.push(`${stale.length} of ${nodes.length} branches stale (${label})`);
+  if (stale.length > BRANCH_COUNTS_CAP) {
+    lines.push(`(ahead/behind for the first ${BRANCH_COUNTS_CAP})`);
   }
   return lines.join("\n") + "\n";
 }

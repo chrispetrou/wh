@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  activityBlock,
+  churnBlock,
   commitDetail,
   commitInput,
   historyBlock,
@@ -11,8 +13,10 @@ import {
   prInput,
   prsBlock,
   sinceInput,
+  staleText,
   tagsText,
   validSlug,
+  whoBlock,
   whyInput,
 } from "./github";
 
@@ -864,5 +868,346 @@ describe("validSlug", () => {
     expect(validSlug("", "r")).toBe(false);
     expect(validSlug("o", "")).toBe(false);
     expect(validSlug("o", "a".repeat(101))).toBe(false);
+  });
+});
+
+describe("activityBlock", () => {
+  const NOW = Date.parse("2026-08-27T12:00:00Z");
+  const wk = (s: string) => Date.parse(s) / 1000;
+  const W1 = wk("2026-08-10T00:00:00Z");
+  const W2 = wk("2026-08-17T00:00:00Z");
+  const W3 = wk("2026-08-24T00:00:00Z");
+
+  function activityStub() {
+    stub({});
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+      const path = url.replace("https://api.github.com", "");
+      if (path.endsWith("/stats/commit_activity")) {
+        return Response.json([
+          { week: W1, total: 1 },
+          { week: W2, total: 4 },
+          { week: W3, total: 0 },
+        ]);
+      }
+      if (path.endsWith("/stats/contributors")) {
+        return Response.json([
+          { total: 3, author: { login: "alice" }, weeks: [{ w: W1, c: 2 }, { w: W3, c: 1 }] },
+          { total: 2, author: { login: "bob" }, weeks: [{ w: W1, c: 2 }] },
+        ]);
+      }
+      if (path.endsWith("/languages")) return Response.json({ Rust: 900, TOML: 100 });
+      return new Response("{}", { status: 404 });
+    });
+  }
+
+  it("shapes the spark, ranked authors, and languages", async () => {
+    activityStub();
+    const a = await activityBlock("t", "o", "r", { now: NOW, tz: 0 });
+    const b = a.block;
+    if (b.kind !== "stat") throw new Error("expected a stat block");
+    expect(b.spark).toEqual({ values: [1, 4, 0], label: "commits per week, last 52 weeks" });
+    expect(b.rows.map((r) => [r.label, r.value, r.share, r.group])).toEqual([
+      ["alice", "3 commits", 0.6, "authors"],
+      ["bob", "2 commits", 0.4, "authors"],
+      ["rust", "90%", 0.9, "languages"],
+      ["toml", "10%", 0.1, "languages"],
+    ]);
+    expect(b.footer).toEqual(["5 commits in the last 52 weeks · 2 contributors"]);
+  });
+
+  it("cuts the window on a period and drops idle authors", async () => {
+    activityStub();
+    const a = await activityBlock("t", "o", "r", { since: "7 days", now: NOW, tz: 0 });
+    const b = a.block;
+    if (b.kind !== "stat") throw new Error("expected a stat block");
+    expect(b.spark).toEqual({ values: [0], label: "commits per week, in the last 7 days" });
+    expect(b.rows.filter((r) => r.group === "authors").map((r) => [r.label, r.value])).toEqual([
+      ["alice", "1 commit"],
+    ]);
+    expect(b.footer).toEqual(["0 commits in the last 7 days · 1 contributor"]);
+  });
+
+  it("retries a 202 while github computes", async () => {
+    vi.useFakeTimers();
+    try {
+      stub({});
+      let tries = 0;
+      (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+        const path = url.replace("https://api.github.com", "");
+        if (path.endsWith("/stats/commit_activity")) {
+          tries++;
+          if (tries === 1) return new Response("", { status: 202 });
+          return Response.json([{ week: W3, total: 2 }]);
+        }
+        if (path.endsWith("/stats/contributors")) return Response.json([]);
+        if (path.endsWith("/languages")) return Response.json({});
+        return new Response("{}", { status: 404 });
+      });
+      const p = activityBlock("t", "o", "r", { now: NOW, tz: 0 });
+      await vi.advanceTimersByTimeAsync(1000);
+      const a = await p;
+      if (a.block.kind !== "stat") throw new Error("expected a stat block");
+      expect(a.block.spark?.values).toEqual([2]);
+      expect(tries).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("falls back to the commit list when stats stay cold", async () => {
+    vi.useFakeTimers();
+    try {
+      stub({});
+      (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+        const path = url.replace("https://api.github.com", "");
+        if (path.includes("/stats/")) return new Response("", { status: 202 });
+        if (path.endsWith("/languages")) return Response.json({ Rust: 100 });
+        if (path.startsWith("/repos/o/r/commits?")) return Response.json([M, A, F, C]);
+        return new Response("{}", { status: 404 });
+      });
+      const p = activityBlock("t", "o", "r", { now: NOW, tz: 0 });
+      await vi.advanceTimersByTimeAsync(5000);
+      const a = await p;
+      if (a.block.kind !== "stat") throw new Error("expected a stat block");
+      // 52 weekly buckets, all four commits in the newest one
+      expect(a.block.spark?.values).toHaveLength(52);
+      expect(a.block.spark?.values[51]).toBe(4);
+      expect(a.block.spark?.values.reduce((n, v) => n + v, 0)).toBe(4);
+      expect(a.block.rows.map((r) => [r.label, r.value, r.group])).toEqual([
+        ["chris", "4 commits", "authors"],
+        ["rust", "100%", "languages"],
+      ]);
+      expect(a.block.footer).toEqual([
+        "4 commits in the last 52 weeks · 1 contributor",
+        "(counted from commits while github computes its stats)",
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("mixes ready stats with the fallback for the cold half", async () => {
+    vi.useFakeTimers();
+    try {
+      stub({});
+      (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+        const path = url.replace("https://api.github.com", "");
+        if (path.endsWith("/stats/commit_activity")) return new Response("", { status: 202 });
+        if (path.endsWith("/stats/contributors")) {
+          return Response.json([
+            { total: 3, author: { login: "alice" }, weeks: [{ w: W3, c: 3 }] },
+          ]);
+        }
+        if (path.endsWith("/languages")) return Response.json({ Rust: 100 });
+        if (path.startsWith("/repos/o/r/commits?")) return Response.json([A]);
+        return new Response("{}", { status: 404 });
+      });
+      const p = activityBlock("t", "o", "r", { now: NOW, tz: 0 });
+      await vi.advanceTimersByTimeAsync(5000);
+      const a = await p;
+      if (a.block.kind !== "stat") throw new Error("expected a stat block");
+      // the spark comes from the commit list, the authors from real stats
+      expect(a.block.spark?.values[51]).toBe(1);
+      expect(a.block.rows.map((r) => [r.label, r.value, r.group])).toEqual([
+        ["alice", "3 commits", "authors"],
+        ["rust", "100%", "languages"],
+      ]);
+      expect(a.block.footer).toEqual([
+        "1 commit in the last 52 weeks · 1 contributor",
+        "(counted from commits while github computes its stats)",
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("says when a repo has no stats at all", async () => {
+    stub({});
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+      if (url.includes("/stats/")) return Response.json([]);
+      if (url.endsWith("/languages")) return Response.json({});
+      return new Response("{}", { status: 404 });
+    });
+    const a = await activityBlock("t", "o", "r", { now: NOW, tz: 0 });
+    expect(a.block).toEqual({
+      kind: "stat",
+      rows: [],
+      footer: ["no activity data for this repo"],
+    });
+  });
+});
+
+describe("churnBlock", () => {
+  const NOW = Date.parse("2026-08-27T12:00:00Z");
+
+  it("counts commits per file, skipping merges, and ranks by count", async () => {
+    stub({});
+    const detailed: Record<string, unknown> = {
+      [SHA("a")]: { ...A, files: [
+        { filename: "src/a.ts", additions: 2, deletions: 1, status: "modified" },
+        { filename: "src/b.ts", additions: 5, deletions: 0, status: "modified" },
+      ] },
+      [SHA("f")]: { ...F, files: [
+        { filename: "src/a.ts", additions: 1, deletions: 0, status: "modified" },
+      ] },
+    };
+    const calls: string[] = [];
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+      const path = url.replace("https://api.github.com", "");
+      calls.push(path);
+      if (path.startsWith("/repos/o/r/commits?")) return Response.json([M, A, F]);
+      const m = /\/commits\/([0-9a-f]{40})$/.exec(path);
+      if (m && detailed[m[1]]) return Response.json(detailed[m[1]]);
+      return new Response("{}", { status: 404 });
+    });
+    const c = await churnBlock("t", "o", "r", { now: NOW, tz: 0 });
+    const b = c.block;
+    if (b.kind !== "stat") throw new Error("expected a stat block");
+    expect(b.rows.map((r) => [r.label, r.value, r.share, r.note])).toEqual([
+      ["src/a.ts", "2 commits", 1, "+3 −1"],
+      ["src/b.ts", "1 commit", 0.5, "+5 −0"],
+    ]);
+    expect(b.footer).toEqual(["2 files over 2 commits", "(merges skipped)"]);
+    // the merge's detail is never fetched
+    expect(calls.some((p) => p.endsWith(`/commits/${SHA("m")}`))).toBe(false);
+  });
+
+  it("scopes to a path and window, counting only files under it", async () => {
+    stub({});
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+      const path = url.replace("https://api.github.com", "");
+      if (path.startsWith("/repos/o/r/commits?")) {
+        const q = new URL(url).searchParams;
+        expect(q.get("path")).toBe("src");
+        expect(q.get("since")).toBe("2026-08-26T00:00:00.000Z");
+        return Response.json([A]);
+      }
+      if (path.endsWith(`/commits/${SHA("a")}`)) {
+        return Response.json({ ...A, files: [
+          { filename: "src/a.ts", additions: 2, deletions: 0, status: "modified" },
+          { filename: "README.md", additions: 9, deletions: 0, status: "modified" },
+        ] });
+      }
+      return new Response("{}", { status: 404 });
+    });
+    const c = await churnBlock("t", "o", "r", { since: "yesterday", path: "src", now: NOW, tz: 0 });
+    const b = c.block;
+    if (b.kind !== "stat") throw new Error("expected a stat block");
+    expect(b.rows.map((r) => r.label)).toEqual(["src/a.ts"]);
+    expect(b.footer[0]).toBe("1 file over 1 commit yesterday in src");
+  });
+});
+
+describe("whoBlock", () => {
+  const NOW = Date.parse("2026-08-27T12:00:00Z");
+  const one = (login: string, date: string) => ({
+    sha: SHA("x"),
+    parents: [],
+    commit: { message: "m", committer: { date }, author: { name: login } },
+    author: { login },
+  });
+
+  it("ranks authors with recent work weighing more", async () => {
+    // bob has more commits, alice the recent ones: alice ranks first
+    stub({
+      "/repos/o/r/commits": [
+        one("alice", "2026-08-26T12:00:00Z"),
+        one("alice", "2026-08-20T12:00:00Z"),
+        one("bob", "2025-08-27T12:00:00Z"),
+        one("bob", "2025-08-20T12:00:00Z"),
+        one("bob", "2025-08-10T12:00:00Z"),
+      ],
+    });
+    const w = await whoBlock("t", "o", "r", "src/a.ts", undefined, NOW);
+    const b = w.block;
+    if (b.kind !== "stat") throw new Error("expected a stat block");
+    expect(b.rows.map((r) => [r.label, r.value, r.share, r.note])).toEqual([
+      ["alice", "2 commits", 0.4, "last touched 1d"],
+      ["bob", "3 commits", 0.6, "last touched 27 aug"],
+    ]);
+    expect(b.footer).toEqual([
+      "2 authors over 5 commits touching src/a.ts",
+      "(recent work weighs more)",
+    ]);
+  });
+
+  it("says when nothing touches the path, and names a bad ref", async () => {
+    stub({ "/repos/o/r/commits": [] });
+    const w = await whoBlock("t", "o", "r", "gone.ts", "dev", NOW);
+    expect(w.block).toEqual({
+      kind: "stat",
+      rows: [],
+      footer: ["no commits touch gone.ts on dev"],
+    });
+    stub({});
+    await expect(whoBlock("t", "o", "r", "a.ts", "nope", NOW)).rejects.toThrow(
+      "branch nope not found"
+    );
+  });
+});
+
+describe("staleText", () => {
+  const NOW = Date.parse("2026-08-27T12:00:00Z");
+
+  // main is fresh, feat/old is 20 weeks quiet, fix/x 12, feat/new 1 day
+  function staleStub() {
+    const calls: Array<{ url: string; body?: string }> = [];
+    stub({});
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      async (url: string, init?: { body?: string }) => {
+        calls.push({ url, body: init?.body });
+        const path = url.replace("https://api.github.com", "");
+        if (path === "/repos/o/r") return Response.json({ default_branch: "main" });
+        if (url.endsWith("/graphql")) {
+          return Response.json({
+            data: {
+              repository: {
+                refs: {
+                  nodes: [
+                    { name: "main", target: { committedDate: "2026-08-27T05:00:00Z" } },
+                    { name: "feat/new", target: { committedDate: "2026-08-26T12:00:00Z" } },
+                    { name: "fix/x", target: { committedDate: "2026-06-04T12:00:00Z" } },
+                    { name: "feat/old", target: { committedDate: "2026-04-09T12:00:00Z" } },
+                  ],
+                },
+              },
+            },
+          });
+        }
+        if (path.startsWith("/repos/o/r/compare/main...feat%2Fold")) {
+          return Response.json({ ahead_by: 2, behind_by: 40 });
+        }
+        if (path.startsWith("/repos/o/r/compare/main...fix%2Fx")) {
+          return Response.json({ ahead_by: 0, behind_by: 3 });
+        }
+        return new Response("{}", { status: 404 });
+      }
+    );
+    return calls;
+  }
+
+  it("lists quiet branches oldest first with ages and counts", async () => {
+    const calls = staleStub();
+    const text = await staleText("t", "o", "r", { now: NOW, tz: 0 });
+    expect(text.split("\n")).toEqual([
+      "1  feat/old  last commit 20w ago · ahead 2 · behind 40",
+      "2  fix/x     last commit 12w ago · behind 3",
+      "2 of 4 branches stale (no commits in 8 weeks)",
+      "",
+    ]);
+    const ql = calls.find((c) => c.url.endsWith("/graphql"))!;
+    expect(JSON.parse(ql.body!).variables).toEqual({ owner: "o", name: "r" });
+  });
+
+  it("takes a period cutoff and reports when nothing is stale", async () => {
+    staleStub();
+    const since = await staleText("t", "o", "r", { since: "2026-06-01", now: NOW, tz: 0 });
+    expect(since.split("\n")).toEqual([
+      "1  feat/old  last commit 20w ago · ahead 2 · behind 40",
+      "1 of 4 branches stale (no commits since 2026-06-01)",
+      "",
+    ]);
+    const none = await staleText("t", "o", "r", { weeks: 52, now: NOW, tz: 0 });
+    expect(none).toBe("no stale branches (no commits in 52 weeks)\n");
   });
 });

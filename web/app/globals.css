@@ -315,6 +315,12 @@
 .log-row.row-sel:hover {
   background: var(--wd-sel);
 }
+/* stat rows are read-only: no grab cursor, no hover highlight */
+.stat-row,
+.stat-row:hover {
+  cursor: default;
+  background: transparent;
+}
 .log-head {
   color: var(--muted-foreground);
   border-bottom: 1px solid var(--border);

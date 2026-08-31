@@ -1,7 +1,8 @@
 // resolves the period words of the chat grammar ("yesterday", "this
-// week", "monday", "3 days", "2026-08-20", "standup") into an instant
-// range, in the user's local day. pure: the clock and the utc offset
-// (minutes, as getTimezoneOffset reports it) come in as arguments.
+// week", "last month", "this year", "monday", "3 days", "12w",
+// "2026-08-20", "standup") into an instant range, in the user's local
+// day. pure: the clock and the utc offset (minutes, as
+// getTimezoneOffset reports it) come in as arguments.
 
 export interface Period {
   since: string; // iso
@@ -45,6 +46,19 @@ export function resolvePeriod(phrase: string, now: number, tz: number): Period |
     const monday = today - back * DAY;
     return { since: iso(monday - 7 * DAY), until: iso(monday), label: "last week" };
   }
+  // calendar months and years, in the local day like everything else
+  const local = new Date(now - tz * 60_000);
+  const y = local.getUTCFullYear();
+  const mo = local.getUTCMonth();
+  const at = (yy: number, mm: number) => Date.UTC(yy, mm, 1) + tz * 60_000;
+  if (p === "this month") return { since: iso(at(y, mo)), label: "this month" };
+  if (p === "last month") {
+    return { since: iso(at(y, mo - 1)), until: iso(at(y, mo)), label: "last month" };
+  }
+  if (p === "this year") return { since: iso(at(y, 0)), label: "this year" };
+  if (p === "last year") {
+    return { since: iso(at(y - 1, 0)), until: iso(at(y, 0)), label: "last year" };
+  }
   // the last working day: friday on a monday or a weekend, else yesterday
   if (p === "standup") {
     const wd = weekday(now, tz);
@@ -55,6 +69,14 @@ export function resolvePeriod(phrase: string, now: number, tz: number): Period |
   if (m) {
     const n = parseInt(m[1], 10);
     return { since: iso(today - n * DAY), label: `in the last ${n} ${n === 1 ? "day" : "days"}` };
+  }
+  m = /^(?:last )?(\d{1,3}) ?w(?:eeks?)?(?: ago)?$/.exec(p);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    return {
+      since: iso(today - n * 7 * DAY),
+      label: `in the last ${n} ${n === 1 ? "week" : "weeks"}`,
+    };
   }
   m = /^(?:last )?(sun|mon|tues|wednes|thurs|fri|satur)day$/.exec(p);
   if (m) {

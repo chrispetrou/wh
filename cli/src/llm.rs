@@ -133,8 +133,11 @@ pub fn model_for(provider: &Provider, get: &dyn Fn(&str) -> Option<String>) -> S
     }
     match provider {
         Provider::Anthropic { .. } => "claude-opus-5".to_string(),
-        Provider::OpenAi { .. } => "gpt-5-mini".to_string(),
-        Provider::Groq { .. } => "llama-3.3-70b-versatile".to_string(),
+        // gpt-5.6 superseded the gpt-5/-mini family; terra is the
+        // balanced tier, like mini was
+        Provider::OpenAi { .. } => "gpt-5.6-terra".to_string(),
+        // groq retired llama-3.3-70b-versatile on 2026-08-16
+        Provider::Groq { .. } => "openai/gpt-oss-120b".to_string(),
         Provider::Ollama { .. } => "llama3.2".to_string(),
     }
 }
@@ -901,7 +904,7 @@ mod tests {
                 },
                 &e
             ),
-            "llama-3.3-70b-versatile"
+            "openai/gpt-oss-120b"
         );
     }
 

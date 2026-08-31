@@ -20,6 +20,7 @@ import { rememberRecent } from "@/lib/terminal/prefs";
 import { resolveRows } from "@/lib/terminal/resolve";
 import { LogBlock } from "./log-block";
 import { PlanBlock } from "./plan-block";
+import { StatBlock } from "./stat-block";
 import { DragLayer, type Drop } from "./drag-layer";
 import { ModelGlyph } from "./glyph";
 import { LineText } from "./terminal-line";
@@ -362,7 +363,9 @@ export function TerminalChat({
     // its rows, enter opens one, esc steps back out (then history again)
     const live = chatStore.live(storeKey);
     const liveBlock = live ? lines[live.line]?.block : undefined;
-    if (live && liveBlock && input === "" && !menu) {
+    // a stat block is never live (nothing to walk), so the guard is for
+    // the type only
+    if (live && liveBlock && liveBlock.kind !== "stat" && input === "" && !menu) {
       const n = liveBlock.rows.length;
       const idAt = (i: number) => {
         const r = liveBlock.rows[i];
@@ -482,6 +485,8 @@ export function TerminalChat({
                   submit={(c) => submit(c)}
                   fresh={freshRef.current.has(l)}
                 />
+              ) : l.block.kind === "stat" ? (
+                <StatBlock block={l.block} fresh={freshRef.current.has(l)} />
               ) : (
                 <LogBlock
                   block={l.block}

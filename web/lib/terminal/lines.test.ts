@@ -39,6 +39,11 @@ describe("branch and tag rows", () => {
     expect(l.tail).toEqual({ text: "    behind 1", cls: "o" });
     expect(l.drop).toBe("branch:feat/x");
     expect(branchLine("2 branches")).toEqual({ text: "2 branches", cls: "o" });
+    // a stale row has the same shape, so it drops and paints the same way
+    const s = branchLine("1  feat/old  last commit 20w ago · behind 3");
+    expect(s.text).toBe("feat/old");
+    expect(s.drop).toBe("branch:feat/old");
+    expect(s.tail).toEqual({ text: "  last commit 20w ago · behind 3", cls: "o" });
   });
 
   it("keeps a short tags line muted", () => {

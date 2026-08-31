@@ -43,9 +43,27 @@ export interface PlanRow extends CommitRow {
   text?: string; // an edited or drafted message, replacing `message`
 }
 
+// a ranked stat line: the label, a preformatted value, and a 0..1 share
+// that draws the bar, so the renderer stays dumb
+export interface StatRow {
+  label: string; // path, author login, language
+  value: string; // "14 commits", "38%"
+  share: number; // 0..1
+  note?: string; // "last touched 3w ago"
+  group?: string; // amber section label, rendered once per run
+}
+
 export type Block =
   | { kind: "log"; rows: CommitRow[]; lanes: number; footer: string[] }
   | { kind: "prs"; rows: PrRow[]; footer: string[] }
+  // label/value rows with bars (who, churn, activity), optionally opened
+  // by a sparkline of weekly counts; read-only, nothing expands
+  | {
+      kind: "stat";
+      spark?: { values: number[]; label: string };
+      rows: StatRow[];
+      footer: string[];
+    }
   // a rebase or cherry-pick plan: rows newest first like the log, edited
   // in place, flattened to the commands to paste
   | {
@@ -63,9 +81,36 @@ export type ListBlock = Extract<Block, { kind: "log" | "prs" }>;
 
 // text rendering: numbered rows, rails as git log --graph glyphs; a plan
 // flattens to its paste block
+const SPARK = "▁▂▃▄▅▆▇█";
+const BAR_W = 20; // the text bar budget, in cells
+
 export function blockText(b: Block, now = Date.now()): string[] {
   if (b.kind === "plan") return [...warnings(b), ...paste(b)];
   const out: string[] = [];
+  if (b.kind === "stat") {
+    if (b.spark) {
+      const max = Math.max(1, ...b.spark.values);
+      out.push(
+        b.spark.values
+          .map((v) => (v ? SPARK[Math.min(7, Math.ceil((v / max) * 8) - 1)] : SPARK[0]))
+          .join("")
+      );
+      out.push(b.spark.label);
+    }
+    const labelW = Math.max(0, ...b.rows.map((r) => r.label.length)) + 2;
+    let group: string | undefined;
+    for (const r of b.rows) {
+      if (r.group && r.group !== group) {
+        group = r.group;
+        out.push(group);
+      }
+      const bar = "█".repeat(Math.max(r.share > 0 ? 1 : 0, Math.round(r.share * BAR_W)));
+      out.push(
+        `${r.label.padEnd(labelW)}${bar.padEnd(BAR_W + 2)}${r.value}${r.note ? `  ${r.note}` : ""}`.trimEnd()
+      );
+    }
+    return [...out, ...b.footer];
+  }
   if (b.kind === "prs") {
     const w = Math.max(0, ...b.rows.map((r) => String(r.num).length)) + 1;
     for (const r of b.rows) {

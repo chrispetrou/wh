@@ -291,6 +291,70 @@ describe("parseCommand", () => {
     expect(parseCommand("changelog prs")).toBeNull();
   });
 
+  it("parses stale branches", () => {
+    expect(parseCommand("stale")).toEqual({ kind: "stale" });
+    expect(parseCommand("stale branches")).toEqual({ kind: "stale" });
+    expect(parseCommand("stale 12w")).toEqual({ kind: "stale", weeks: 12 });
+    expect(parseCommand("stale 2 weeks")).toEqual({ kind: "stale", weeks: 2 });
+    expect(parseCommand("stale since 2026-06-01")).toEqual({
+      kind: "stale",
+      since: "2026-06-01",
+    });
+    expect(parseCommand("stale since last week")).toEqual({
+      kind: "stale",
+      since: "last week",
+    });
+    // a ref is not a cutoff date
+    expect(parseCommand("stale since v1.2")).toBeNull();
+    expect(parseCommand("changelog stale")).toBeNull();
+  });
+
+  it("parses activity", () => {
+    expect(parseCommand("activity")).toEqual({ kind: "activity" });
+    expect(parseCommand("activity since this week")).toEqual({
+      kind: "activity",
+      since: "this week",
+    });
+    expect(parseCommand("activity since 12w")).toEqual({ kind: "activity", since: "12w" });
+    // weekly buckets only cut on a period, never a ref
+    expect(parseCommand("activity since v1.2")).toBeNull();
+    expect(parseCommand("changelog activity")).toBeNull();
+  });
+
+  it("parses churn with its filters in any order", () => {
+    expect(parseCommand("churn")).toEqual({ kind: "churn" });
+    expect(parseCommand("hotspots")).toEqual({ kind: "churn" });
+    expect(parseCommand("churn since v1.2")).toEqual({ kind: "churn", since: "v1.2" });
+    expect(parseCommand("churn since this week")).toEqual({ kind: "churn", since: "this week" });
+    expect(parseCommand("churn on dev in src since v1.2")).toEqual({
+      kind: "churn",
+      ref: "dev",
+      path: "src",
+      since: "v1.2",
+    });
+    expect(parseCommand("hotspots in src/lib on main")).toEqual({
+      kind: "churn",
+      ref: "main",
+      path: "src/lib",
+    });
+    // a period typo or a range is not a window
+    expect(parseCommand("churn since the merge")).toBeNull();
+    expect(parseCommand("churn since main..dev")).toBeNull();
+    expect(parseCommand("changelog churn")).toBeNull();
+  });
+
+  it("parses who", () => {
+    expect(parseCommand("who src/git.rs")).toEqual({ kind: "who", path: "src/git.rs" });
+    expect(parseCommand("who knows src/git.rs")).toEqual({ kind: "who", path: "src/git.rs" });
+    expect(parseCommand("who touched src on dev")).toEqual({
+      kind: "who",
+      path: "src",
+      ref: "dev",
+    });
+    expect(parseCommand("who")).toBeNull();
+    expect(parseCommand("changelog who src")).toBeNull();
+  });
+
   it("parses history, path cuts, and why", () => {
     expect(parseCommand("history src/git.rs")).toEqual({ kind: "history", path: "src/git.rs" });
     expect(parseCommand("history of src on dev")).toEqual({

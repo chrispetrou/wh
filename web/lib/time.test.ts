@@ -49,9 +49,30 @@ describe("resolvePeriod", () => {
     expect(resolvePeriod("standup", sunday, 0)!.since).toBe("2026-08-28T00:00:00.000Z");
   });
 
+  it("takes calendar months and years", () => {
+    expect(resolvePeriod("this month", NOW, ATHENS)!.since).toBe("2026-07-31T21:00:00.000Z");
+    expect(resolvePeriod("last month", NOW, ATHENS)).toEqual({
+      since: "2026-06-30T21:00:00.000Z",
+      until: "2026-07-31T21:00:00.000Z",
+      label: "last month",
+    });
+    expect(resolvePeriod("this year", NOW, 0)!.since).toBe("2026-01-01T00:00:00.000Z");
+    expect(resolvePeriod("last year", NOW, ATHENS)).toEqual({
+      since: "2024-12-31T21:00:00.000Z",
+      until: "2025-12-31T21:00:00.000Z",
+      label: "last year",
+    });
+  });
+
   it("takes day counts and iso dates", () => {
     expect(resolvePeriod("3 days", NOW, 0)!.since).toBe("2026-08-23T00:00:00.000Z");
     expect(resolvePeriod("last 10 days", NOW, 0)!.label).toBe("in the last 10 days");
+    expect(resolvePeriod("2w", NOW, 0)).toEqual({
+      since: "2026-08-12T00:00:00.000Z",
+      label: "in the last 2 weeks",
+    });
+    expect(resolvePeriod("12 weeks", NOW, 0)!.label).toBe("in the last 12 weeks");
+    expect(resolvePeriod("last 1 week ago", NOW, 0)!.since).toBe("2026-08-19T00:00:00.000Z");
     expect(resolvePeriod("2026-08-20", NOW, ATHENS)!.since).toBe("2026-08-19T21:00:00.000Z");
     expect(resolvePeriod("2026-13-45", NOW, ATHENS)).toBeNull();
   });

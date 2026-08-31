@@ -48,8 +48,10 @@ the transcript intact and reruns what failed.
 
 ## periods
 
-`today`, `yesterday`, `this week`, `last week`, `since monday` (any
-weekday), `since 3 days ago`, `since 2026-08-20`, `since v1.2` (any ref).
+`today`, `yesterday`, `this week`, `last week`, `this month`, `last
+month`, `this year`, `last year`, `since monday` (any weekday), `since 3
+days ago`, `since 12 weeks` (or `12w`), `since 2026-08-20`, `since v1.2`
+(any ref).
 `by <login>` keeps one person's commits, `by me` yours; `standup` is your
 commits since the last working day. Days follow your browser's clock; an
 empty window says `nothing since yesterday` and costs no model call.
@@ -83,6 +85,28 @@ with their +/−, and `explain`, `changelog`, `describe`, `github ↗`
 actions; hovering a file offers `explain`, `history`, and `copy`), esc
 steps back out. A command launched from an open panel leaves it open so the
 answer still shows where it came from; `/clear` closes them all.
+
+## who, churn, activity, stale
+
+`who <path>` ranks the authors of a file or directory from its last 100
+commits, recent work weighing more (half-life six months): commit counts,
+shares as bars, and when each person last touched it. `churn` (or
+`hotspots`) lists the files changing most, commit counts per path with
+their +/−, over a window (`since <period or ref>`, `on <branch>`,
+`in <path>`; the newest 50 commits, merges skipped). `activity` draws a
+year of weekly commits as a sparkline, then top authors and languages
+(`since <period>` cuts the window); GitHub computes those stats lazily,
+so on a cold repo the answer is counted from the commit list instead
+(the latest 300, a footer says so) rather than making you wait. `stale`
+lists
+branches with no commits in 8 weeks (`stale 12w`, `stale since
+2026-06-01`), oldest first, with ahead/behind like `branches`.
+
+The first three render as stat blocks: bars in the accent color, section
+labels in amber, one screenful, no dashboards. They are lookups (no model
+call, no key needed) and flatten to text for `/copy` and `/export` like
+every block, but there is nothing to walk: after one, the arrows keep
+recalling history.
 
 ## rebase and cherry-pick plans
 
@@ -129,8 +153,8 @@ The provider whose key was pasted last is active.
 | provider | default model | effort | free tier |
 |---|---|---|---|
 | anthropic | claude-opus-5 | low, medium, high, xhigh, max | |
-| openai | gpt-5-mini | minimal, low, medium, high | |
-| groq | llama-3.3-70b-versatile | (ignored) | console.groq.com |
+| openai | gpt-5.6-terra | none, minimal, low, medium, high, xhigh, max | |
+| groq | openai/gpt-oss-120b | (ignored) | console.groq.com |
 
 `/model` switches models (any id accepted; the menu marks each one's
 provider, `free`, and `no key`), and picking another provider's model

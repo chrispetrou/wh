@@ -163,7 +163,19 @@ export function useStream({
 
   const run = async (command: string, raw = false) => {
     const kind = parseCommand(command)?.kind;
-    const lookup = ["branches", "log", "tags", "prs", "history", "plan", "pick"].includes(kind ?? "");
+    const lookup = [
+      "branches",
+      "log",
+      "tags",
+      "prs",
+      "stale",
+      "churn",
+      "activity",
+      "history",
+      "who",
+      "plan",
+      "pick",
+    ].includes(kind ?? "");
     // a message drafted for a plan row is a side quest: it neither starts
     // nor ends a conversation
     const draft = kind === "message";
@@ -198,7 +210,8 @@ export function useStream({
                 meta.spans !== false
               );
             }
-            if (meta.block.rows.length) {
+            // a stat block is not walkable: the arrows keep their history
+            if (meta.block.kind !== "stat" && meta.block.rows.length) {
               chatStore.setLive(storeKey, {
                 line: chatStore.lines(storeKey).length - 1,
                 selected: null,
