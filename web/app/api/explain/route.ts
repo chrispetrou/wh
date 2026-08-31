@@ -41,6 +41,7 @@ import {
 } from "@/lib/explain/providers";
 import { headroom } from "@/lib/explain/usage";
 import { getSession, touch } from "@/lib/session";
+import { validSlug } from "@/lib/github";
 
 export const runtime = "nodejs";
 
@@ -164,7 +165,9 @@ async function streamProvider(
 
 export async function POST(req: NextRequest) {
   // same-origin guard; the session cookie is sameSite=lax already
-  if (!sameOrigin(req.headers.get("origin"))) return err(403, "cross-origin request rejected");
+  if (!sameOrigin(req.headers.get("origin"), req.nextUrl.origin)) {
+    return err(403, "cross-origin request rejected");
+  }
 
   const session = await getSession();
   if (!session.token) return err(401, "sign in required");
@@ -198,7 +201,7 @@ export async function POST(req: NextRequest) {
     return err(400, "malformed request body");
   }
   const { owner, repo, input, raw, followup } = body;
-  if (!owner || !repo) return err(400, "bad request");
+  if (!owner || !repo || !validSlug(owner, repo)) return err(400, "bad request");
 
   // follow-up turn: relay the client-held conversation, no github fetch
   if (followup) {

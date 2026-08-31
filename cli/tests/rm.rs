@@ -82,6 +82,24 @@ fn prunes_rebase_merged() {
 }
 
 #[test]
+fn empty_net_diff_kept() {
+    // commit then revert: the branch's net diff over the base is empty,
+    // which is no evidence it landed anywhere. must be kept.
+    let t = TestRepo::new();
+    t.commit("init");
+    t.wd().args(["new", "feat/rv"]).assert().success();
+    let wt = t.root.join("repo.feat-rv");
+    commit_in(&t, &wt, "one.txt");
+    t.git_in(&wt, &["revert", "--no-edit", "HEAD"]);
+    t.wd()
+        .args(["rm", "--yes"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("nothing to prune"));
+    assert!(wt.exists());
+}
+
+#[test]
 fn named_squash_merged_without_force() {
     let t = TestRepo::new();
     t.commit("init");

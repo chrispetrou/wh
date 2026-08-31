@@ -9,9 +9,19 @@ import { filterDiff } from "./explain/filter";
 import { laneCount, layout } from "./graph";
 import { resolvePeriod } from "./time";
 
-// overridable for github enterprise (and tests)
-const API = process.env.GITHUB_API_URL ?? "https://api.github.com";
-const GRAPHQL = process.env.GITHUB_GRAPHQL_URL ?? "https://api.github.com/graphql";
+// overridable for github enterprise (and tests), read per call so a
+// first-run setup that writes .env.local is seen without a restart
+const api = () => process.env.GITHUB_API_URL ?? "https://api.github.com";
+const graphqlUrl = () => process.env.GITHUB_GRAPHQL_URL ?? "https://api.github.com/graphql";
+
+// owner and repo names as github allows them, checked before either is
+// placed in an api path
+const SLUG = /^[A-Za-z0-9_.-]{1,100}$/;
+export function validSlug(owner: string, repo: string): boolean {
+  // "." and ".." pass the character class but fetch would normalize them
+  // out of the path
+  return [owner, repo].every((s) => SLUG.test(s) && s !== "." && s !== "..");
+}
 
 export class GithubError extends Error {
   constructor(
@@ -35,7 +45,7 @@ async function gh(
   path: string,
   accept = "application/vnd.github+json"
 ): Promise<Response> {
-  const res = await fetch(`${API}${path}`, {
+  const res = await fetch(`${api()}${path}`, {
     headers: headers(token, accept),
     cache: "no-store",
   });
@@ -45,7 +55,7 @@ async function gh(
 
 // graphql, only where rest has no answer (blame). same errors, same token
 async function ghql<T>(token: string, query: string, variables: object): Promise<T> {
-  const res = await fetch(GRAPHQL, {
+  const res = await fetch(graphqlUrl(), {
     method: "POST",
     headers: { ...headers(token, "application/json"), "content-type": "application/json" },
     body: JSON.stringify({ query, variables }),

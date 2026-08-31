@@ -464,7 +464,7 @@ export function TerminalChat({
         {lines.map((l, i) => (
           // a prompt line opens a block: command and its output read as one
           <div
-            key={i}
+            key={l.id ?? i}
             className={`${l.prefix && i > 0 ? "mt-3" : ""} ${
               !l.block && freshRef.current.has(l) ? "line-in" : ""
             }`}

@@ -8,7 +8,7 @@ import { useRef } from "react";
 import type { Block, PlanRow } from "@/lib/block";
 import { chatStore, type LogRow, type PrPick } from "@/lib/chat-store";
 import { parseCommand } from "@/lib/commands";
-import type { ExplainMeta } from "@/lib/explain/meta";
+import { parseMeta, type ExplainMeta } from "@/lib/explain/meta";
 import { lowLine, usageParts } from "@/lib/explain/usage";
 import { keyStore } from "@/lib/key-store";
 import { insertRow, messageText, parseMessage, setText, type PlanBlock as Plan } from "@/lib/plan";
@@ -90,7 +90,14 @@ export function useStream({
         if (!metaDone) {
           const nl = buf.indexOf("\n");
           if (nl < 0) continue;
-          opts.onMeta?.(JSON.parse(buf.slice(0, nl)) as ExplainMeta);
+          const meta = parseMeta(buf.slice(0, nl));
+          if (!meta) {
+            // a proxy handed us a 200 that is not ours: stop reading
+            await reader.cancel().catch(() => undefined);
+            err("unexpected response from server");
+            return null;
+          }
+          opts.onMeta?.(meta);
           buf = buf.slice(nl + 1);
           metaDone = true;
         }

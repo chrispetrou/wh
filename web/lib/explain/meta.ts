@@ -17,6 +17,17 @@ export interface DiffMeta {
   mode: PromptMode;
 }
 
+// the meta line as received: a proxy can hand the client a 200 whose
+// first line is not our json, so parsing must not throw mid-stream
+export function parseMeta(line: string): ExplainMeta | null {
+  try {
+    const v: unknown = JSON.parse(line);
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as ExplainMeta) : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface ExplainMeta extends Partial<DiffMeta> {
   context?: string; // the payload, kept client-side for follow-ups
   followup?: boolean;

@@ -12,6 +12,7 @@ import {
   prsBlock,
   sinceInput,
   tagsText,
+  validSlug,
   whyInput,
 } from "./github";
 
@@ -845,5 +846,23 @@ describe("planRow", () => {
     ]);
     await expect(planRow("t", "o", "r", SHA("b"), "gone")).rejects.toThrow("unknown ref gone");
     await expect(planRow("t", "o", "r", SHA("m"), "rel")).rejects.toThrow("not found");
+  });
+});
+
+describe("validSlug", () => {
+  it("accepts github owner and repo names", () => {
+    expect(validSlug("octocat", "hello-world")).toBe(true);
+    expect(validSlug("a", "b.c_d-e")).toBe(true);
+  });
+
+  it("rejects anything that could bend an api path", () => {
+    expect(validSlug("x/y", "r")).toBe(false);
+    expect(validSlug("..", "r")).toBe(false); // fetch would normalize it away
+    expect(validSlug("o", ".")).toBe(false);
+    expect(validSlug("o", "r?per_page=1")).toBe(false);
+    expect(validSlug("o", "r#f")).toBe(false);
+    expect(validSlug("", "r")).toBe(false);
+    expect(validSlug("o", "")).toBe(false);
+    expect(validSlug("o", "a".repeat(101))).toBe(false);
   });
 });

@@ -608,11 +608,13 @@ fn note_usage(provider: &Provider, v: &Value, usage: &mut Usage) -> bool {
 }
 
 /// An error the provider sends on a 200 stream: anthropic's `type:error`
-/// event, or an `{"error":...}` envelope where a chunk should be.
+/// event, or an `{"error":...}` envelope where a chunk should be. Some
+/// openai-compatible gateways tack `"error": null` onto usage frames;
+/// null is not an error.
 fn is_error_frame(provider: &Provider, v: &Value) -> bool {
     match provider {
         Provider::Anthropic { .. } => str_at(v, "/type") == Some("error"),
-        _ => v.get("error").is_some() && v.get("choices").is_none(),
+        _ => v.get("error").is_some_and(|e| !e.is_null()) && v.get("choices").is_none(),
     }
 }
 
@@ -1319,6 +1321,11 @@ mod tests {
         assert!(is_error_frame(
             &g,
             &v(r#"{"id":"x","error":{"message":"boom"}}"#)
+        ));
+        // a usage-only frame from a gateway that tacks on a null error
+        assert!(!is_error_frame(
+            &g,
+            &v(r#"{"error":null,"usage":{"prompt_tokens":1}}"#)
         ));
     }
 

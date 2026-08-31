@@ -11,8 +11,10 @@ export function appOrigin(): string {
   }
 }
 
-export function sameOrigin(origin: string | null): boolean {
-  const app = appOrigin();
+// `fallback` is the request's own origin, used when APP_URL is unset
+// so the guard never silently disables
+export function sameOrigin(origin: string | null, fallback = ""): boolean {
+  const app = appOrigin() || fallback;
   return !origin || !app || origin === app;
 }
 

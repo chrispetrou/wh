@@ -15,6 +15,9 @@ export interface Head {
 }
 
 export interface ChatLine {
+  // stable identity for react keys: stamped by the store, monotonic per
+  // session, re-stamped on restore so the counter never collides
+  id?: number;
   text: string;
   cls: Cls;
   prefix?: string; // muted prompt rendered before the text
@@ -126,6 +129,12 @@ const MAX_CONTEXT_MESSAGES = 26;
 const MAX_CONTEXT_CHARS = 400_000;
 
 const LIMIT = 200;
+let nextId = 1;
+// the store owns pushed rows: ids are stamped in place so the emit
+// layer's fresh WeakSet (keyed by object identity) still matches
+function stamp(rows: ChatLine[]) {
+  for (const l of rows) l.id = l.id ?? nextId++;
+}
 const entries = new Map<string, Entry>();
 const listeners = new Map<string, Set<() => void>>();
 const EMPTY: ChatLine[] = [];
@@ -148,6 +157,8 @@ function load(key: string): Entry {
     if (s) {
       const p = JSON.parse(s) as ChatLine[];
       if (Array.isArray(p)) {
+        // restored ids came from another session's counter: re-stamp
+        for (const l of p) l.id = nextId++;
         e.lines = p;
         // the last log on the restored screen keeps its row numbers
         const last = [...p].reverse().find((l) => l.block?.kind === "log")?.block;
@@ -207,6 +218,7 @@ export const chatStore = {
   },
   push(key: string, rows: ChatLine[]) {
     const e = load(key);
+    stamp(rows);
     const all = [...e.lines, ...rows];
     const cut = Math.max(0, all.length - LIMIT);
     e.lines = cut ? all.slice(cut) : all;
@@ -225,6 +237,7 @@ export const chatStore = {
   },
   setAll(key: string, lines: ChatLine[]) {
     const e = load(key);
+    stamp(lines);
     e.lines = lines;
     persist(key);
     emit(key);

@@ -3,7 +3,7 @@
 // row (files and clashes against a target) for a row dropped into a
 // plan. read-only, fetched lazily
 import { NextRequest, NextResponse } from "next/server";
-import { commitDetail, GithubError, planRow, prDetail } from "@/lib/github";
+import { commitDetail, GithubError, planRow, prDetail, validSlug } from "@/lib/github";
 import { getSession, touch } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   const repo = q.get("repo");
   const kind = q.get("kind");
   const id = q.get("id") ?? "";
-  if (!owner || !repo || !id) {
+  if (!owner || !repo || !id || !validSlug(owner, repo)) {
     return NextResponse.json({ error: "bad request" }, { status: 400 });
   }
   try {
