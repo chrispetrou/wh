@@ -70,7 +70,7 @@ export function TerminalChat({
   const emit = createEmit({ storeKey, prompt, fresh: freshRef.current });
   const { push, muted, echo, ok } = emit;
 
-  const { menu, menuSel, setMenuSel, changeInput, branchList, logRows, prRows, menuKey } =
+  const { menu, menuSel, setMenuSel, changeInput, dismiss, branchList, logRows, prRows, menuKey } =
     useCompletion({ storeKey, owner, repo, input, setInput });
   const { run, runFollowup, addToPlan } = useStream({ storeKey, owner, repo, emit });
 
@@ -118,13 +118,18 @@ export function TerminalChat({
     chatStore.setLive(storeKey, undefined); // a new command takes the keys back
 
     if (raw.startsWith("/")) {
-      if (!raw.startsWith("/key ")) historyRef.current.unshift(raw);
+      if (!/^\/key\s/i.test(raw)) historyRef.current.unshift(raw);
       slash(raw);
       return;
     }
 
     if (!hasKey) {
-      // gated: whatever was typed is the key; never store or echo it
+      // gated: what was typed is the key; never store or echo it. a
+      // command typed here instead is told what the gate wants
+      if (/\s/.test(raw) || raw.length < 20) {
+        muted(["paste an api key to start: anthropic (sk-ant-), groq (gsk_), or openai"]);
+        return;
+      }
       saveKey(raw, "***");
       muted([commandHint]);
       return;
@@ -322,6 +327,13 @@ export function TerminalChat({
     return -1;
   };
 
+  // a recalled command goes through the menu state (so a stale selection
+  // cannot pick a row) but opens no menu of its own
+  const recall = (v: string) => {
+    changeInput(v);
+    dismiss();
+  };
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (search) {
       e.preventDefault();
@@ -329,7 +341,7 @@ export function TerminalChat({
         setSearch(null);
       } else if (e.key === "Enter") {
         const i = searchMatch(search.q, search.idx);
-        if (i >= 0) setInput(historyRef.current[i]);
+        if (i >= 0) recall(historyRef.current[i]);
         setSearch(null);
       } else if (e.key === "r" && e.ctrlKey) {
         const i = searchMatch(search.q, search.idx);
@@ -421,13 +433,13 @@ export function TerminalChat({
       e.preventDefault();
       const next = Math.min(histPos + 1, h.length - 1);
       setHistPos(next);
-      setInput(h[next]);
+      recall(h[next]);
     } else if (e.key === "ArrowDown") {
       if (histPos < 0) return;
       e.preventDefault();
       const next = histPos - 1;
       setHistPos(next);
-      setInput(next < 0 ? "" : historyRef.current[next]);
+      recall(next < 0 ? "" : historyRef.current[next]);
     } else if (e.key === "Escape") {
       chatStore.abort(storeKey);
     }

@@ -74,6 +74,8 @@ export type DetailState = Detail | "loading" | DetailFailure;
 export interface LogRow {
   sha: string;
   parent: string | null;
+  merge: boolean;
+  branch?: string;
   subject: string;
 }
 
@@ -145,7 +147,24 @@ function load(key: string): Entry {
     const s = sessionStorage.getItem(`wd_log:${key}`);
     if (s) {
       const p = JSON.parse(s) as ChatLine[];
-      if (Array.isArray(p)) e.lines = p;
+      if (Array.isArray(p)) {
+        e.lines = p;
+        // the last log on the restored screen keeps its row numbers
+        const last = [...p].reverse().find((l) => l.block?.kind === "log")?.block;
+        if (last?.kind === "log") {
+          e.log = last.rows.map((r) => {
+            const branch = r.refs.find((f) => f.kind !== "tag")?.name;
+            return {
+              sha: r.sha,
+              parent: r.parents[0] ?? null,
+              merge: r.parents.length > 1,
+              subject: r.subject,
+              ...(branch ? { branch } : {}),
+            };
+          });
+          e.logSpans = last.rows.some((r) => r.graph !== undefined);
+        }
+      }
     }
   } catch {
     // ignore
@@ -188,7 +207,19 @@ export const chatStore = {
   },
   push(key: string, rows: ChatLine[]) {
     const e = load(key);
-    e.lines = [...e.lines, ...rows].slice(-LIMIT);
+    const all = [...e.lines, ...rows];
+    const cut = Math.max(0, all.length - LIMIT);
+    e.lines = cut ? all.slice(cut) : all;
+    // everything keyed by line index moves up with the screen
+    if (cut) {
+      if (e.live) e.live = e.live.line >= cut ? { ...e.live, line: e.live.line - cut } : undefined;
+      if (e.draft) e.draft = e.draft.line >= cut ? { ...e.draft, line: e.draft.line - cut } : undefined;
+      if (e.expanded) {
+        e.expanded = new Map(
+          [...e.expanded].filter(([l]) => l >= cut).map(([l, ids]) => [l - cut, ids] as const)
+        );
+      }
+    }
     persist(key);
     emit(key);
   },

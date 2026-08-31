@@ -71,6 +71,9 @@ describe("prompt", () => {
     expect(system).toContain("watch out");
     expect(system).not.toContain("{{payload}}");
     expect(user).toBe("PAYLOAD");
+    // a diff with $& or $$ (make, bash, perl) reaches the model untouched
+    const shell = "echo $$ && x=$'y' $& q";
+    expect(prompt(shell).user).toBe(shell);
   });
 
   it("swaps the system prompt in changelog mode, same payload", () => {

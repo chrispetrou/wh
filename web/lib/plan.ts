@@ -52,12 +52,15 @@ function todo(b: PlanBlock): { lines: string[]; texts: string[]; warnings: strin
   const texts: string[] = [];
   const warnings: string[] = [];
   const dir = files(b);
-  const line = (verb: string, r: PlanRow) => `${verb} ${r.sha.slice(0, 7)} ${r.subject}`;
+  // full shas: a short one can be ambiguous in a large repo
+  const line = (verb: string, r: PlanRow) => `${verb} ${r.sha} ${r.subject}`;
   let group: { target: PlanRow; body: string[] } | null = null;
   const flush = () => {
     if (!group) return;
     const t = group.target;
-    const text = t.text?.trim();
+    // a text that only differs in whitespace is the original message
+    const trimmed = t.text?.trim();
+    const text = trimmed && trimmed !== t.message.trim() ? trimmed : undefined;
     const verb = t.action === "reword" && !text ? "reword" : t.action === "edit" ? "edit" : "pick";
     lines.push(line(verb, t), ...group.body);
     if (text) {
@@ -78,7 +81,9 @@ function todo(b: PlanBlock): { lines: string[]; texts: string[]; warnings: strin
         group = { target: { ...r, action: "pick" }, body: [] };
         continue;
       }
-      group.body.push(line(group.target.text?.trim() ? "fixup" : r.action, r));
+      const drafted = group.target.text?.trim();
+      const folded = drafted && drafted !== group.target.message.trim() ? "fixup" : r.action;
+      group.body.push(line(folded, r));
       continue;
     }
     flush();
@@ -130,24 +135,26 @@ export function move(rows: PlanRow[], from: number, to: number): PlanRow[] {
   return next;
 }
 
-// pick forgets an edited text; drop and the rest keep it
+// pick forgets an edited text, and so do squash and fixup (a fold's own
+// message is never used); drop and the rest keep it
 export function setAction(rows: PlanRow[], i: number, action: PlanAction): PlanRow[] {
   return rows.map((r, j) => {
     if (j !== i) return r;
     const next: PlanRow = { ...r, action };
-    if (action === "pick") delete next.text;
+    if (action === "pick" || isFold(action)) delete next.text;
     return next;
   });
 }
 
 // a changed message makes a pick a reword; the original message makes a
-// reword a pick again
+// reword a pick again. whitespace alone is not a change, but the text is
+// kept as typed so a trailing newline (the start of a body) survives
 export function setText(rows: PlanRow[], i: number, text: string): PlanRow[] {
   return rows.map((r, j) => {
     if (j !== i) return r;
     const same = text.trim() === r.message.trim();
     const next: PlanRow = { ...r };
-    if (same) delete next.text;
+    if (text === r.message) delete next.text;
     else next.text = text;
     if (!same && r.action === "pick") next.action = "reword";
     if (same && r.action === "reword") next.action = "pick";

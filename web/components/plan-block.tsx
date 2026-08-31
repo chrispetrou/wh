@@ -116,6 +116,12 @@ export function PlanBlock({
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const d = dragRef.current;
     if (!d) return;
+    // the button went up somewhere else: not a drag
+    if ((e.buttons & 1) === 0) {
+      dragRef.current = null;
+      if (d.active) setDrag(null);
+      return;
+    }
     const dy = e.clientY - d.y0;
     if (!d.active) {
       if (Math.abs(dy) < DRAG_THRESHOLD) return;
@@ -221,7 +227,7 @@ export function PlanBlock({
               className={`log-row plan-row ${isSel ? "row-sel" : ""} ${rowClass(i)}`}
               style={{ ...cols, ...rowStyle(i) }}
               onClick={() => onClick(i)}
-              onMouseEnter={() => (mine && !drag ? select(i) : undefined)}
+              onMouseEnter={() => (mine && !drag && selected !== null ? select(i) : undefined)}
               onPointerDown={(e) => onPointerDown(e, i)}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}

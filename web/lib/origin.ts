@@ -1,0 +1,33 @@
+// the hosts the auth routes talk to, read at call time so a first-run
+// setup that writes .env.local is seen without a restart
+
+// APP_URL as a bare origin: a trailing slash or a path in the config
+// must not break the same-origin check or the oauth redirect uri
+export function appOrigin(): string {
+  try {
+    return new URL(process.env.APP_URL ?? "").origin;
+  } catch {
+    return "";
+  }
+}
+
+export function sameOrigin(origin: string | null): boolean {
+  const app = appOrigin();
+  return !origin || !app || origin === app;
+}
+
+export function githubApi(): string {
+  return (process.env.GITHUB_API_URL ?? "https://api.github.com").replace(/\/+$/, "");
+}
+
+// github's web host for oauth: github.com, or the enterprise host the
+// api url points at
+export function githubWeb(): string {
+  const api = githubApi();
+  if (api === "https://api.github.com") return "https://github.com";
+  try {
+    return new URL(api).origin;
+  } catch {
+    return "https://github.com";
+  }
+}

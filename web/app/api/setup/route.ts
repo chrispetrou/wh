@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ensureBaseEnv, isLocalHost, oauthConfigured, saveEnv } from "@/lib/setup";
+import { ensureBaseEnv, oauthConfigured, saveEnv, setupAllowed } from "@/lib/setup";
 
 export const runtime = "nodejs";
 
@@ -9,9 +9,9 @@ export async function POST(req: NextRequest) {
   if (oauthConfigured()) {
     return NextResponse.json({ error: "already configured" }, { status: 403 });
   }
-  if (!isLocalHost(req.headers.get("host"))) {
+  if (!setupAllowed(req.headers)) {
     return NextResponse.json(
-      { error: "setup is only available on localhost" },
+      { error: "setup is only available on the dev server, on localhost" },
       { status: 403 }
     );
   }

@@ -68,6 +68,10 @@ describe("assembler", () => {
     expect(a.feed("tail")).toEqual([]);
     expect(a.flush()).toEqual({ text: "tail", cls: "" });
     expect(a.answer()).toBe("a\nbc\ntail");
+    // a stream cut mid-line leaves nothing for the next one
+    a.feed("cut sh");
+    a.reset("text");
+    expect(a.feed("summary\n")).toEqual([{ text: "summary", cls: "a" }]); // the label paints
   });
 
   it("takes the usage sentinel aside and leaves it out of the answer", () => {

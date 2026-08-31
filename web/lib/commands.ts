@@ -79,7 +79,7 @@ const MESSAGE = /^message\s+(.+)$/i;
 export const MESSAGE_CAP = 10;
 
 // lookups have no diff to frame; plans are edited, not explained
-function isDiff(c: Command): boolean {
+export function isDiff(c: Command): boolean {
   return !["branches", "log", "tags", "prs", "history", "why", "plan", "pick", "message"].includes(
     c.kind
   );

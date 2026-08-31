@@ -127,7 +127,7 @@ function providerMessage(body: string): string {
   const j = parseError(body);
   if (j) {
     const m = typeof j.error === "string" ? j.error : (j.error?.message ?? j.message);
-    if (typeof m === "string" && m.trim()) return m.trim();
+    if (typeof m === "string" && m.trim()) return m.trim().replace(/\s+/g, " ");
   }
   return body.trim().replace(/\s+/g, " ").slice(0, 300);
 }

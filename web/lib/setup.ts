@@ -1,6 +1,7 @@
 // first-run oauth setup: only meaningful before credentials exist, and
-// only offered on localhost so a deployed instance can never be claimed
-// by a visitor.
+// only offered to the dev server on localhost so a deployed instance can
+// never be claimed by a visitor (a proxy may forward its own localhost
+// host header, so the forwarding headers and NODE_ENV are checked too).
 import { randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -11,6 +12,12 @@ export function oauthConfigured(): boolean {
 
 export function isLocalHost(host: string | null): boolean {
   return /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host ?? "");
+}
+
+export function setupAllowed(headers: Headers): boolean {
+  if (process.env.NODE_ENV === "production") return false;
+  if (headers.get("x-forwarded-host") || headers.get("x-forwarded-for")) return false;
+  return isLocalHost(headers.get("host"));
 }
 
 function envPath(): string {

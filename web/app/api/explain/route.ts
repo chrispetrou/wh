@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LOG_DEFAULT, parseCommand } from "@/lib/commands";
+import { sameOrigin } from "@/lib/origin";
 import {
   branchesText,
   commitInput,
@@ -86,12 +87,16 @@ async function streamProvider(
   model: string,
   meta: string
 ): Promise<NextResponse> {
+  // esc (or a new command) cancels our stream; the provider must stop
+  // generating too, or the key keeps being billed
+  const ctrl = new AbortController();
   let upstream: Response;
   try {
     upstream = await fetch(request.url, {
       method: "POST",
       headers: request.headers,
       body: request.body,
+      signal: ctrl.signal,
     });
   } catch {
     const f = networkFailure(request.url);
@@ -107,7 +112,12 @@ async function streamProvider(
   const encoder = new TextEncoder();
   const { stream: textStream, decoder } = decodeStream(provider);
   const left = headroom(provider, upstream.headers);
+  let cancelled = false;
   const out = new ReadableStream<Uint8Array>({
+    cancel() {
+      cancelled = true;
+      ctrl.abort();
+    },
     async start(controller) {
       controller.enqueue(encoder.encode(meta));
       const reader = upstream.body!.pipeThrough(textStream).getReader();
@@ -127,9 +137,11 @@ async function streamProvider(
           controller.enqueue(value);
         }
       } catch {
+        if (cancelled) return;
         dropped = true;
         sentinel(`[wd:error] ${droppedFailure(request.url).error}`);
       }
+      if (cancelled) return;
       if (!dropped) {
         // an error the provider sent on the 200 stream, in our words
         if (decoder.error) {
@@ -152,10 +164,7 @@ async function streamProvider(
 
 export async function POST(req: NextRequest) {
   // same-origin guard; the session cookie is sameSite=lax already
-  const origin = req.headers.get("origin");
-  if (origin && process.env.APP_URL && origin !== process.env.APP_URL) {
-    return err(403, "cross-origin request rejected");
-  }
+  if (!sameOrigin(req.headers.get("origin"))) return err(403, "cross-origin request rejected");
 
   const session = await getSession();
   if (!session.token) return err(401, "sign in required");
@@ -176,13 +185,19 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const { owner, repo, input, raw, followup } = (await req.json()) as {
+  let body: {
     owner?: string;
     repo?: string;
     input?: string;
     raw?: boolean;
     followup?: { history?: unknown; question?: unknown };
   };
+  try {
+    body = await req.json();
+  } catch {
+    return err(400, "malformed request body");
+  }
+  const { owner, repo, input, raw, followup } = body;
   if (!owner || !repo) return err(400, "bad request");
 
   // follow-up turn: relay the client-held conversation, no github fetch

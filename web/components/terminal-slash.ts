@@ -3,6 +3,7 @@
 // /clear), the session. one switch over a context the terminal hands
 // in, so the component keeps only what react needs.
 
+import { isDiff, parseCommand } from "@/lib/commands";
 import { chatStore, type ChatLine } from "@/lib/chat-store";
 import { DEFAULT_MODELS, EFFORTS, MODEL_RE, modelFamily } from "@/lib/explain/providers";
 import { keyStore } from "@/lib/key-store";
@@ -262,8 +263,11 @@ export function runSlash(ctx: SlashContext, raw: string) {
     case "show": {
       echo(raw);
       const last = ctx.lastCmd();
+      const parsed = last ? parseCommand(last) : null;
       if (!last) {
         muted(["nothing to show yet, run a repo command first."]);
+      } else if (parsed && !isDiff(parsed)) {
+        muted(["a lookup has no payload; /show works after an explain, diff, or describe"]);
       } else {
         muted([`payload for: ${last}`]);
         void ctx.run(last, true);

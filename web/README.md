@@ -14,8 +14,9 @@ npm test                 # vitest: grammar, preprocessing, providers, usage
 npm run build
 ```
 
-The first visit on localhost shows a one-time setup screen that creates the
-GitHub OAuth app link and writes `.env.local`. The command grammar and the
+The first visit on localhost (dev server only, never behind a proxy) shows
+a one-time setup screen that creates the GitHub OAuth app link and writes
+`.env.local`. The command grammar and the
 tour are in the root README under `web`; this file is the reference. The
 explain prompts and diff preprocessing are specified once in
 `../shared/prompts/` and shared with the cli.
@@ -88,7 +89,10 @@ answer still shows where it came from; `/clear` closes them all.
 `rebase feat/auth` (a branch, a range `rebase main..feat/auth`, a pull
 request `rebase pr #42`, the last few commits `rebase last 5 on feat/auth`,
 or a span of log rows `rebase 2..5`) lists those commits as an editable
-plan, newest first. Reorder a row by dragging it or with shift+up/down, and
+plan, newest first. The paste rewrites a branch from its tip, so a span
+that stops short of a branch label takes the rows above it along as
+picks; when a merge sits in the way the plan is refused and a cherry-pick
+(`pick 2 5 onto <branch>`) is the way to reorder. Reorder a row by dragging it or with shift+up/down, and
 set what happens to it with `p` `r` `s` `f` `d` `e` (pick, reword, squash,
 fixup, drop, edit) or the buttons in its panel. Edit a message inline, or
 let the model draft one from the diff with `draft message`.

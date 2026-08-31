@@ -151,11 +151,12 @@ export function createAssembler() {
       usage = null;
       return u;
     },
-    // a new stream starts with an empty answer and no cost; a fragment
-    // left by a stream that was cut short stays, as it always has
+    // a new stream starts clean: a fragment left by a stream that was
+    // cut short must not open the next answer
     reset(m: StreamMode) {
       answer = "";
       usage = null;
+      partial = "";
       mode = m;
     },
   };
