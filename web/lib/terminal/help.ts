@@ -80,8 +80,10 @@ export function helpLines(rows: HelpRow[]): ChatLine[] {
       return { text: row, cls: row.endsWith(":") ? "a" : "o" };
     }
     const [cmd, desc] = row;
+    // a command outgrowing the column still gets a gap before its note
+    const head = `  ${cmd}`;
     return {
-      head: { text: `  ${cmd}`.padEnd(HELP_COL), cls: "" },
+      head: { text: head.length >= HELP_COL ? `${head}  ` : head.padEnd(HELP_COL), cls: "" },
       text: desc,
       cls: "o",
     };
