@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { appOrigin, githubApi, githubWeb } from "@/lib/origin";
 import { getSession } from "@/lib/session";
 
 function safeEqual(a: string, b: string): boolean {
@@ -10,7 +11,7 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 export async function GET(req: NextRequest) {
-  const url = new URL("/", process.env.APP_URL);
+  const url = new URL("/", appOrigin() || req.nextUrl.origin);
   const fail = () => NextResponse.redirect(new URL("/?error=auth", url));
 
   const jar = await cookies();
@@ -22,14 +23,14 @@ export async function GET(req: NextRequest) {
     return fail();
   }
 
-  const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
+  const tokenRes = await fetch(`${githubWeb()}/login/oauth/access_token`, {
     method: "POST",
     headers: { accept: "application/json", "content-type": "application/json" },
     body: JSON.stringify({
       client_id: process.env.GITHUB_CLIENT_ID,
       client_secret: process.env.GITHUB_CLIENT_SECRET,
       code,
-      redirect_uri: `${process.env.APP_URL}/api/auth/callback`,
+      redirect_uri: `${appOrigin()}/api/auth/callback`,
     }),
   });
   const token = (await tokenRes.json()) as {
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
   };
   if (!tokenRes.ok || token.error || !token.access_token) return fail();
 
-  const userRes = await fetch("https://api.github.com/user", {
+  const userRes = await fetch(`${githubApi()}/user`, {
     headers: {
       authorization: `Bearer ${token.access_token}`,
       "x-github-api-version": "2022-11-28",

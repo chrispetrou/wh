@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { SiteHeader } from "@/components/site-header";
 import { getSession } from "@/lib/session";
-import { isLocalHost, oauthConfigured } from "@/lib/setup";
+import { oauthConfigured, setupAllowed } from "@/lib/setup";
 
 const ERRORS: Record<string, string> = {
   auth: "sign-in failed, try again.",
@@ -85,14 +85,15 @@ export default async function Home({
   const session = await getSession().catch(() => null);
   if (session?.token) redirect("/repos");
   const { error } = await searchParams;
-  const host = (await headers()).get("host");
+  const hdrs = await headers();
+  const host = hdrs.get("host");
   const needsSetup = !oauthConfigured();
 
   return (
     <div className="mx-auto max-w-[880px] px-6 pb-10">
       <SiteHeader />
       <section className="page-in pt-[88px] max-[560px]:pt-14">
-        <p>Ask questions about any repo. Explained in plain english.</p>
+        <p>ask questions about any repo. explained in plain english.</p>
         <p className="mt-4 text-muted-foreground">
           pick a repo, then: explain the last 5 commits, what changed in pr
           #42, diff main..release. answers run on your own llm key.
@@ -101,7 +102,7 @@ export default async function Home({
           <p className="mt-4 text-muted-foreground">{ERRORS[error]}</p>
         ) : null}
         {needsSetup ? (
-          isLocalHost(host) ? (
+          setupAllowed(hdrs) ? (
             <SetupBlock origin={`http://${host}`} />
           ) : (
             <p className="mt-4 text-muted-foreground">

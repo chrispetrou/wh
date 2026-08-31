@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { appOrigin, sameOrigin } from "@/lib/origin";
 import { getSession } from "@/lib/session";
 
 export async function POST(req: NextRequest) {
-  const origin = req.headers.get("origin");
-  if (origin && process.env.APP_URL && origin !== process.env.APP_URL) {
+  if (!sameOrigin(req.headers.get("origin"), req.nextUrl.origin)) {
     return NextResponse.json({ error: "cross-origin request rejected" }, { status: 403 });
   }
   const session = await getSession();
   session.destroy();
-  return NextResponse.redirect(new URL("/", process.env.APP_URL), 303);
+  return NextResponse.redirect(new URL("/", appOrigin() || req.nextUrl.origin), 303);
 }

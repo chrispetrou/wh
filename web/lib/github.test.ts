@@ -12,6 +12,7 @@ import {
   prsBlock,
   sinceInput,
   tagsText,
+  validSlug,
   whyInput,
 } from "./github";
 
@@ -103,9 +104,11 @@ describe("logBlock", () => {
       ["f", "c", "add f"],
       ["c", null, "init"],
     ]);
-    // the default branch is walked first, per_page is the row budget
+    // the default branch is walked first, per_page is the row budget plus
+    // one, so a cut walk can be told from a short one
     const walks = calls.filter((c) => c.startsWith("/repos/o/r/commits?"));
-    expect(walks[0]).toContain("per_page=40&sha=main");
+    expect(walks[0]).toContain("sha=main");
+    expect(walks[0]).toContain("per_page=41");
     expect(walks[1]).toContain("sha=feat");
   });
 
@@ -198,7 +201,7 @@ describe("logBlock", () => {
     expect(q.get("author")).toBe("chris");
     expect(q.get("since")).toBe("2026-08-26T00:00:00.000Z");
     expect(q.get("until")).toBe("2026-08-27T00:00:00.000Z");
-    expect(q.get("per_page")).toBe("2");
+    expect(q.get("per_page")).toBe("3"); // the budget plus one
     expect(shas(log)).toEqual(["m", "a"]);
     expect(log.block.footer).toEqual(["the latest 2 commits on main by chris, yesterday"]);
   });
@@ -494,7 +497,7 @@ describe("historyBlock", () => {
       ["c", "init", "bo", undefined],
     ]);
     expect(h.block.footer).toEqual(["2 commits touching src/a.ts on dev"]);
-    expect(h.rows[1]).toEqual({ sha: SHA("c"), parent: null, subject: "init" });
+    expect(h.rows[1]).toEqual({ sha: SHA("c"), parent: null, merge: false, subject: "init" });
   });
 
   it("says when nothing touches the path", async () => {
@@ -680,6 +683,61 @@ describe("planBlock", () => {
     expect(calls.filter((c) => c.startsWith("/repos/o/r/compare/"))).toHaveLength(2);
   });
 
+  it("treats a sha end of a range as no branch: nothing to switch to or name", async () => {
+    stub({
+      [`/repos/o/r/compare/${SHA("a")}...${SHA("b")}`]: {
+        total_commits: 1,
+        base_commit: { sha: SHA("a") },
+        commits: [B],
+      },
+      [`/repos/o/r/commits/${SHA("b")}`]: withFiles(B, ["src/auth.rs"]),
+      [`/repos/o/r/compare/${SHA("b")}...${SHA("a")}`]: { files: [] },
+    });
+    const { block } = await planBlock("t", "o", "r", { kind: "range", base: SHA("a"), head: SHA("b") });
+    if (block.kind !== "plan") throw new Error("expected a plan");
+    expect(block.head).toBeUndefined();
+    expect(block.base).toEqual({ sha: SHA("a") });
+    expect(block.footer).toEqual([`1 commit, these commits onto ${"a".repeat(7)}`]);
+  });
+
+  it("backports a merged pr onto a branch, and refuses to rebase one", async () => {
+    stub({
+      "/repos/o/r/pulls/7": {
+        merged: true,
+        commits: 1,
+        base: { ref: "main", sha: SHA("m") },
+        head: { ref: "feat" },
+      },
+      "/repos/o/r/pulls/7/commits": [B],
+      "/repos/o/r/commits/rel": { sha: SHA("r") },
+      [`/repos/o/r/commits/${SHA("b")}`]: withFiles(B, ["src/auth.rs"]),
+      [`/repos/o/r/compare/${SHA("b")}...rel`]: { files: [] },
+    });
+    const { block } = await planBlock("t", "o", "r", { kind: "pr", num: 7 }, "rel");
+    if (block.kind !== "plan") throw new Error("expected a plan");
+    expect(block.mode).toBe("pick");
+    expect(block.rows.map((r) => r.sha[0])).toEqual(["b"]);
+    await expect(planBlock("t", "o", "r", { kind: "pr", num: 7 })).rejects.toThrow(
+      "pr #7 is merged; nothing to plan"
+    );
+  });
+
+  it("orders cherry-picked shas by parent when their dates tie", async () => {
+    // a rebase stamps every commit with the same second
+    const X = commit("1", ["a"], "one", "2026-08-27T03:00:00Z");
+    const Y = commit("2", ["1"], "two", "2026-08-27T03:00:00Z");
+    stub({
+      [`/repos/o/r/commits/${SHA("1")}`]: withFiles(X, ["x"]),
+      [`/repos/o/r/commits/${SHA("2")}`]: withFiles(Y, ["y"]),
+      "/repos/o/r/commits/rel": { sha: SHA("r") },
+      [`/repos/o/r/compare/${SHA("1")}...rel`]: { files: [] },
+      [`/repos/o/r/compare/${SHA("2")}...rel`]: { files: [] },
+    });
+    const { block } = await planBlock("t", "o", "r", { kind: "shas", shas: [SHA("2"), SHA("1")] }, "rel");
+    if (block.kind !== "plan") throw new Error("expected a plan");
+    expect(block.rows.map((r) => r.sha[0])).toEqual(["2", "1"]);
+  });
+
   it("refuses merges, too many commits, an empty range, and unknown refs", async () => {
     stub({
       "/repos/o/r/compare/main...feat": { total_commits: 2, base_commit: { sha: SHA("c") }, commits: [F, M] },
@@ -687,7 +745,7 @@ describe("planBlock", () => {
       "/repos/o/r/compare/main...same": { total_commits: 0, base_commit: { sha: SHA("c") }, commits: [] },
     });
     await expect(planBlock("t", "o", "r", { kind: "range", base: "main", head: "feat" })).rejects.toThrow(
-      "rebase plans need a linear history; row 1 is a merge"
+      `rebase plans need a linear history; ${SHA("m").slice(0, 7)} is a merge`
     );
     await expect(planBlock("t", "o", "r", { kind: "range", base: "main", head: "big" })).rejects.toThrow(
       "that is 31 commits; plans stop at 30"
@@ -788,5 +846,23 @@ describe("planRow", () => {
     ]);
     await expect(planRow("t", "o", "r", SHA("b"), "gone")).rejects.toThrow("unknown ref gone");
     await expect(planRow("t", "o", "r", SHA("m"), "rel")).rejects.toThrow("not found");
+  });
+});
+
+describe("validSlug", () => {
+  it("accepts github owner and repo names", () => {
+    expect(validSlug("octocat", "hello-world")).toBe(true);
+    expect(validSlug("a", "b.c_d-e")).toBe(true);
+  });
+
+  it("rejects anything that could bend an api path", () => {
+    expect(validSlug("x/y", "r")).toBe(false);
+    expect(validSlug("..", "r")).toBe(false); // fetch would normalize it away
+    expect(validSlug("o", ".")).toBe(false);
+    expect(validSlug("o", "r?per_page=1")).toBe(false);
+    expect(validSlug("o", "r#f")).toBe(false);
+    expect(validSlug("", "r")).toBe(false);
+    expect(validSlug("o", "")).toBe(false);
+    expect(validSlug("o", "a".repeat(101))).toBe(false);
   });
 });

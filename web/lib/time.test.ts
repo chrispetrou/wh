@@ -53,6 +53,7 @@ describe("resolvePeriod", () => {
     expect(resolvePeriod("3 days", NOW, 0)!.since).toBe("2026-08-23T00:00:00.000Z");
     expect(resolvePeriod("last 10 days", NOW, 0)!.label).toBe("in the last 10 days");
     expect(resolvePeriod("2026-08-20", NOW, ATHENS)!.since).toBe("2026-08-19T21:00:00.000Z");
+    expect(resolvePeriod("2026-13-45", NOW, ATHENS)).toBeNull();
   });
 
   it("returns null for refs", () => {

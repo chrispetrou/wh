@@ -64,8 +64,9 @@ export function resolvePeriod(phrase: string, now: number, tz: number): Period |
   }
   m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(p);
   if (m) {
-    const t = Date.UTC(+m[1], +m[2] - 1, +m[3]) + tz * 60_000;
-    if (Number.isNaN(t)) return null;
+    const utc = Date.UTC(+m[1], +m[2] - 1, +m[3]);
+    if (Number.isNaN(utc) || new Date(utc).toISOString().slice(0, 10) !== p) return null;
+    const t = utc + tz * 60_000;
     return { since: iso(t), label: `since ${p}` };
   }
   return null;

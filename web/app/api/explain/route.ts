@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LOG_DEFAULT, parseCommand } from "@/lib/commands";
+import { sameOrigin } from "@/lib/origin";
 import {
   branchesText,
   commitInput,
@@ -22,6 +23,7 @@ import { describeTurn } from "@/lib/explain/context";
 import { filterDiff } from "@/lib/explain/filter";
 import { defaultCaps, defaultRules, preprocess, stats } from "@/lib/explain/preprocess";
 import { prompt, type PromptMode } from "@/lib/explain/prompt";
+import type { DiffMeta, ExplainMeta } from "@/lib/explain/meta";
 import {
   buildFollowupRequest,
   buildRequest,
@@ -39,6 +41,7 @@ import {
 } from "@/lib/explain/providers";
 import { headroom } from "@/lib/explain/usage";
 import { getSession, touch } from "@/lib/session";
+import { validSlug } from "@/lib/github";
 
 export const runtime = "nodejs";
 
@@ -52,7 +55,7 @@ function err(status: number, message: string): NextResponse {
 }
 
 // a lookup answer: meta line, then text, no model
-function plain(meta: object, text: string): NextResponse {
+function plain(meta: ExplainMeta, text: string): NextResponse {
   return new NextResponse(JSON.stringify(meta) + "\n" + text, {
     headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
   });
@@ -85,12 +88,16 @@ async function streamProvider(
   model: string,
   meta: string
 ): Promise<NextResponse> {
+  // esc (or a new command) cancels our stream; the provider must stop
+  // generating too, or the key keeps being billed
+  const ctrl = new AbortController();
   let upstream: Response;
   try {
     upstream = await fetch(request.url, {
       method: "POST",
       headers: request.headers,
       body: request.body,
+      signal: ctrl.signal,
     });
   } catch {
     const f = networkFailure(request.url);
@@ -106,7 +113,12 @@ async function streamProvider(
   const encoder = new TextEncoder();
   const { stream: textStream, decoder } = decodeStream(provider);
   const left = headroom(provider, upstream.headers);
+  let cancelled = false;
   const out = new ReadableStream<Uint8Array>({
+    cancel() {
+      cancelled = true;
+      ctrl.abort();
+    },
     async start(controller) {
       controller.enqueue(encoder.encode(meta));
       const reader = upstream.body!.pipeThrough(textStream).getReader();
@@ -126,9 +138,11 @@ async function streamProvider(
           controller.enqueue(value);
         }
       } catch {
+        if (cancelled) return;
         dropped = true;
         sentinel(`[wd:error] ${droppedFailure(request.url).error}`);
       }
+      if (cancelled) return;
       if (!dropped) {
         // an error the provider sent on the 200 stream, in our words
         if (decoder.error) {
@@ -151,8 +165,7 @@ async function streamProvider(
 
 export async function POST(req: NextRequest) {
   // same-origin guard; the session cookie is sameSite=lax already
-  const origin = req.headers.get("origin");
-  if (origin && process.env.APP_URL && origin !== process.env.APP_URL) {
+  if (!sameOrigin(req.headers.get("origin"), req.nextUrl.origin)) {
     return err(403, "cross-origin request rejected");
   }
 
@@ -175,14 +188,20 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const { owner, repo, input, raw, followup } = (await req.json()) as {
+  let body: {
     owner?: string;
     repo?: string;
     input?: string;
     raw?: boolean;
     followup?: { history?: unknown; question?: unknown };
   };
-  if (!owner || !repo) return err(400, "bad request");
+  try {
+    body = await req.json();
+  } catch {
+    return err(400, "malformed request body");
+  }
+  const { owner, repo, input, raw, followup } = body;
+  if (!owner || !repo || !validSlug(owner, repo)) return err(400, "bad request");
 
   // follow-up turn: relay the client-held conversation, no github fetch
   if (followup) {
@@ -205,7 +224,7 @@ export async function POST(req: NextRequest) {
       request,
       provider,
       model || DEFAULT_MODELS[provider],
-      JSON.stringify({ followup: true }) + "\n"
+      JSON.stringify({ followup: true } satisfies ExplainMeta) + "\n"
     );
   }
 
@@ -366,7 +385,7 @@ export async function POST(req: NextRequest) {
   if (mode === "describe") question = describeTurn(data.describe);
 
   const { files, added, deleted } = stats(data.numstat);
-  const metaBase = {
+  const metaBase: DiffMeta = {
     commits: data.commitCount,
     files,
     additions: added,
@@ -397,6 +416,6 @@ export async function POST(req: NextRequest) {
   const user = userBase + question;
   const request = buildRequest(provider, key, system, user, model || undefined, effort || undefined);
   // context lets the client hold the conversation for follow-up turns
-  const meta = JSON.stringify({ ...metaBase, context: user }) + "\n";
+  const meta = JSON.stringify({ ...metaBase, context: user } satisfies ExplainMeta) + "\n";
   return streamProvider(request, provider, model || DEFAULT_MODELS[provider], meta);
 }

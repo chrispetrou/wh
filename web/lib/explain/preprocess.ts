@@ -102,7 +102,7 @@ export function preprocess(
 
   // split into file sections; content before the first header is dropped
   const sections: string[][] = [];
-  for (const line of diff.split("\n")) {
+  for (const line of diff.split(/\r?\n/)) {
     if (line.startsWith("diff --git ")) {
       sections.push([line]);
     } else if (sections.length > 0) {

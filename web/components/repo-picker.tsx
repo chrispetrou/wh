@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { RepoItem } from "@/lib/github";
 import { relTime } from "@/lib/utils";
+import { RECENT_STORE } from "@/lib/terminal/prefs";
 
 export function RepoPicker({ repos }: { repos: RepoItem[] }) {
   const router = useRouter();
@@ -16,7 +17,7 @@ export function RepoPicker({ repos }: { repos: RepoItem[] }) {
   // recently opened repos float to the top (stable for the rest)
   useEffect(() => {
     try {
-      const recent: string[] = JSON.parse(localStorage.getItem("wd_recent") ?? "[]");
+      const recent: string[] = JSON.parse(localStorage.getItem(RECENT_STORE) ?? "[]");
       if (!recent.length) return;
       const rank = new Map(recent.map((name, i) => [name, i]));
       setOrdered(

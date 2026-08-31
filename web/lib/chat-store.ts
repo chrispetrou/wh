@@ -3,15 +3,29 @@
 // sessionStorage (200-line cap) exactly like the old in-component state.
 import type { Block } from "./block";
 
-export interface ChatLine {
+// the color classes a line can carry: p prompt, c command, o muted, g
+// green, a amber, x accent, r removed, f faint, "" fg
+export type Cls = "p" | "c" | "o" | "g" | "a" | "x" | "r" | "f" | "";
+
+// a leading span in its own color: the green "→ verb" of a success line,
+// the amber "error:" label, or the fg command column of a help table
+export interface Head {
   text: string;
-  cls: string;
-  prefix?: string;
-  head?: { text: string; cls: string };
-  tail?: { text: string; cls: string };
+  cls: Cls;
+}
+
+export interface ChatLine {
+  // stable identity for react keys: stamped by the store, monotonic per
+  // session, re-stamped on restore so the counter never collides
+  id?: number;
+  text: string;
+  cls: Cls;
+  prefix?: string; // muted prompt rendered before the text
+  head?: Head;
+  tail?: Head; // trailing span, e.g. the muted status words of a branch row
   // a structured entry (commit graph, history, prs) rendered as a grid
   block?: Block;
-  // a line that is a button
+  // a line that is a button: sign in again, in a popup
   action?: "signin";
   // a drop target for a dragged row: "branch:<name>"
   drop?: string;
@@ -63,6 +77,8 @@ export type DetailState = Detail | "loading" | DetailFailure;
 export interface LogRow {
   sha: string;
   parent: string | null;
+  merge: boolean;
+  branch?: string;
   subject: string;
 }
 
@@ -113,6 +129,12 @@ const MAX_CONTEXT_MESSAGES = 26;
 const MAX_CONTEXT_CHARS = 400_000;
 
 const LIMIT = 200;
+let nextId = 1;
+// the store owns pushed rows: ids are stamped in place so the emit
+// layer's fresh WeakSet (keyed by object identity) still matches
+function stamp(rows: ChatLine[]) {
+  for (const l of rows) l.id = l.id ?? nextId++;
+}
 const entries = new Map<string, Entry>();
 const listeners = new Map<string, Set<() => void>>();
 const EMPTY: ChatLine[] = [];
@@ -134,7 +156,26 @@ function load(key: string): Entry {
     const s = sessionStorage.getItem(`wd_log:${key}`);
     if (s) {
       const p = JSON.parse(s) as ChatLine[];
-      if (Array.isArray(p)) e.lines = p;
+      if (Array.isArray(p)) {
+        // restored ids came from another session's counter: re-stamp
+        for (const l of p) l.id = nextId++;
+        e.lines = p;
+        // the last log on the restored screen keeps its row numbers
+        const last = [...p].reverse().find((l) => l.block?.kind === "log")?.block;
+        if (last?.kind === "log") {
+          e.log = last.rows.map((r) => {
+            const branch = r.refs.find((f) => f.kind !== "tag")?.name;
+            return {
+              sha: r.sha,
+              parent: r.parents[0] ?? null,
+              merge: r.parents.length > 1,
+              subject: r.subject,
+              ...(branch ? { branch } : {}),
+            };
+          });
+          e.logSpans = last.rows.some((r) => r.graph !== undefined);
+        }
+      }
     }
   } catch {
     // ignore
@@ -177,12 +218,26 @@ export const chatStore = {
   },
   push(key: string, rows: ChatLine[]) {
     const e = load(key);
-    e.lines = [...e.lines, ...rows].slice(-LIMIT);
+    stamp(rows);
+    const all = [...e.lines, ...rows];
+    const cut = Math.max(0, all.length - LIMIT);
+    e.lines = cut ? all.slice(cut) : all;
+    // everything keyed by line index moves up with the screen
+    if (cut) {
+      if (e.live) e.live = e.live.line >= cut ? { ...e.live, line: e.live.line - cut } : undefined;
+      if (e.draft) e.draft = e.draft.line >= cut ? { ...e.draft, line: e.draft.line - cut } : undefined;
+      if (e.expanded) {
+        e.expanded = new Map(
+          [...e.expanded].filter(([l]) => l >= cut).map(([l, ids]) => [l - cut, ids] as const)
+        );
+      }
+    }
     persist(key);
     emit(key);
   },
   setAll(key: string, lines: ChatLine[]) {
     const e = load(key);
+    stamp(lines);
     e.lines = lines;
     persist(key);
     emit(key);

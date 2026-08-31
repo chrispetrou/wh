@@ -14,10 +14,56 @@ pub fn run(name: Option<&str>, dry_run: bool, yes: bool, force: bool) -> Result<
     }
 }
 
-/// Squash merges are invisible to ancestor checks; the escape hatch is
-/// `wd rm <name> --force`.
+/// Merged means one of: an ancestor of the default ref, a branch whose
+/// every commit has an equivalent patch there (rebase merge), or a branch
+/// whose whole tree landed as one commit (squash merge). `--force` is left
+/// for the genuinely unmerged.
 fn merged(cwd: &Path, sha: &str, default: &str) -> bool {
-    git::run_ok(cwd, &["merge-base", "--is-ancestor", sha, default])
+    if git::run_ok(cwd, &["merge-base", "--is-ancestor", sha, default]) {
+        return true;
+    }
+    // rebase merge: `git cherry` marks a commit `-` when its patch id
+    // already exists upstream
+    if let Ok(out) = git::run(cwd, &["cherry", default, sha]) {
+        if !out.is_empty() && out.lines().all(|l| l.starts_with('-')) {
+            return true;
+        }
+    }
+    squash_merged(cwd, sha, default)
+}
+
+/// A squash merge leaves no commit in common, but the branch's tree as a
+/// single patch over the merge base matches the squash commit's patch id.
+/// The synthetic commit is a dangling object that git gc reaps; the ident
+/// is pinned because the check must not depend on the user's config.
+fn squash_merged(cwd: &Path, sha: &str, default: &str) -> bool {
+    let Ok(base) = git::run(cwd, &["merge-base", default, sha]) else {
+        return false;
+    };
+    let Ok(tree) = git::run(cwd, &["rev-parse", &format!("{sha}^{{tree}}")]) else {
+        return false;
+    };
+    let Ok(synth) = git::run(
+        cwd,
+        &[
+            "-c",
+            "user.name=wd",
+            "-c",
+            "user.email=wd@localhost",
+            "commit-tree",
+            &tree,
+            "-p",
+            &base,
+            "-m",
+            "wd squash check",
+        ],
+    ) else {
+        return false;
+    };
+    match git::run(cwd, &["cherry", default, &synth]) {
+        Ok(out) => out.starts_with('-'),
+        Err(_) => false,
+    }
 }
 
 fn is_current(w: &git::Worktree, current: Option<&Path>) -> bool {

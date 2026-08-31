@@ -9,9 +9,19 @@ import { filterDiff } from "./explain/filter";
 import { laneCount, layout } from "./graph";
 import { resolvePeriod } from "./time";
 
-// overridable for github enterprise (and tests)
-const API = process.env.GITHUB_API_URL ?? "https://api.github.com";
-const GRAPHQL = process.env.GITHUB_GRAPHQL_URL ?? "https://api.github.com/graphql";
+// overridable for github enterprise (and tests), read per call so a
+// first-run setup that writes .env.local is seen without a restart
+const api = () => process.env.GITHUB_API_URL ?? "https://api.github.com";
+const graphqlUrl = () => process.env.GITHUB_GRAPHQL_URL ?? "https://api.github.com/graphql";
+
+// owner and repo names as github allows them, checked before either is
+// placed in an api path
+const SLUG = /^[A-Za-z0-9_.-]{1,100}$/;
+export function validSlug(owner: string, repo: string): boolean {
+  // "." and ".." pass the character class but fetch would normalize them
+  // out of the path
+  return [owner, repo].every((s) => SLUG.test(s) && s !== "." && s !== "..");
+}
 
 export class GithubError extends Error {
   constructor(
@@ -35,7 +45,7 @@ async function gh(
   path: string,
   accept = "application/vnd.github+json"
 ): Promise<Response> {
-  const res = await fetch(`${API}${path}`, {
+  const res = await fetch(`${api()}${path}`, {
     headers: headers(token, accept),
     cache: "no-store",
   });
@@ -45,7 +55,7 @@ async function gh(
 
 // graphql, only where rest has no answer (blame). same errors, same token
 async function ghql<T>(token: string, query: string, variables: object): Promise<T> {
-  const res = await fetch(GRAPHQL, {
+  const res = await fetch(graphqlUrl(), {
     method: "POST",
     headers: { ...headers(token, "application/json"), "content-type": "application/json" },
     body: JSON.stringify({ query, variables }),
@@ -66,13 +76,37 @@ function failure(res: Response): GithubError {
     (res.status === 403 || res.status === 429) &&
     res.headers.get("x-ratelimit-remaining") === "0"
   ) {
+    // relative: the server's clock is not the user's timezone
     const reset = Number(res.headers.get("x-ratelimit-reset") ?? 0) * 1000;
-    const at = reset
-      ? new Date(reset).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
-      : "later";
-    return new GithubError(res.status, `github rate limit, try again after ${at}`);
+    const mins = reset ? Math.ceil((reset - Date.now()) / 60_000) : 0;
+    const when = mins > 1 ? `in ${mins} min` : mins === 1 ? "in a minute" : "in a moment";
+    return new GithubError(res.status, `github rate limit, try again ${when}`);
   }
   return new GithubError(res.status, `github error (${res.status})`);
+}
+
+// /commits/{ref} answers 422 (not 404) for a ref that does not resolve
+const unknownRef = (e: unknown): boolean =>
+  e instanceof GithubError && (e.status === 404 || e.status === 422);
+
+// one list of commits; github pages at 100, so n above that takes several
+async function commitList(
+  token: string,
+  path: string,
+  q: URLSearchParams,
+  n: number
+): Promise<CommitJson[]> {
+  const per = Math.min(n, 100);
+  const out: CommitJson[] = [];
+  for (let page = 1; out.length < n; page++) {
+    q.set("per_page", String(per));
+    q.set("page", String(page));
+    const res = await gh(token, `${path}?${q}`);
+    const list = (await res.json()) as CommitJson[];
+    out.push(...list);
+    if (list.length < per) break;
+  }
+  return out.slice(0, n);
 }
 
 function encodePath(path: string): string {
@@ -200,20 +234,20 @@ export async function lastNCommits(
   n: number,
   ref?: string
 ): Promise<ExplainInput> {
-  const sha = ref ? `&sha=${encodeURIComponent(ref)}` : "";
-  let res: Response;
+  const q = new URLSearchParams();
+  if (ref) q.set("sha", ref);
+  let commits: CommitJson[];
   try {
-    res = await gh(token, `/repos/${owner}/${repo}/commits?per_page=${n + 1}${sha}`);
+    commits = await commitList(token, `/repos/${owner}/${repo}/commits`, q, n + 1);
   } catch (e) {
-    if (ref && e instanceof GithubError && e.status === 404) {
+    if (ref && unknownRef(e)) {
       throw new GithubError(404, `branch ${ref} not found; run branches to see refs`);
     }
     throw e;
   }
-  const commits = (await res.json()) as Array<{ sha: string }>;
-  if (commits.length < 2) {
-    throw new GithubError(422, "not enough history to compare");
-  }
+  if (!commits.length) throw new GithubError(422, "not enough history to compare");
+  // a root alone: its own diff, no range to compare
+  if (commits.length === 1) return commitInput(token, owner, repo, commits[0].sha);
   const head = commits[0].sha;
   const base = commits[Math.min(n, commits.length - 1)].sha;
   const input = await compareRange(token, owner, repo, base, head);
@@ -441,9 +475,7 @@ export async function commitDetail(
   try {
     res = await gh(token, `/repos/${owner}/${repo}/commits/${encodeURIComponent(sha)}`);
   } catch (e) {
-    if (e instanceof GithubError && e.status === 404) {
-      throw new GithubError(404, `commit ${sha} not found in this repo`);
-    }
+    if (unknownRef(e)) throw new GithubError(404, `commit ${sha} not found in this repo`);
     throw e;
   }
   const c = (await res.json()) as CommitJson;
@@ -479,12 +511,7 @@ export async function commitInput(
       gh(token, path),
     ]);
   } catch (e) {
-    if (e instanceof GithubError && e.status === 404) {
-      throw new GithubError(404, `commit ${sha} not found in this repo`);
-    }
-    if (e instanceof GithubError && e.status === 422) {
-      throw new GithubError(422, `${sha} is not a commit sha`);
-    }
+    if (unknownRef(e)) throw new GithubError(404, `commit ${sha} not found in this repo`);
     throw e;
   }
   const diff = await diffRes.text();
@@ -530,9 +557,7 @@ async function refWindow(token: string, base: string, ref: string): Promise<Wind
   try {
     res = await gh(token, `${base}/commits/${encodeURIComponent(ref)}`);
   } catch (e) {
-    if (e instanceof GithubError && e.status === 404) {
-      throw new GithubError(404, `unknown ref ${ref}; run branches to see refs`);
-    }
+    if (unknownRef(e)) throw new GithubError(404, `unknown ref ${ref}; run branches to see refs`);
     throw e;
   }
   const c = (await res.json()) as CommitJson;
@@ -614,7 +639,13 @@ export async function sinceInput(
     };
   }
 
-  const parent = oldest.parents[0]?.sha;
+  // walk first parents from the newest commit through the window: the
+  // oldest by date may sit on a merged side branch whose parent is far
+  // older, which would widen the range past the window
+  const inWindow = new Map(list.map((c) => [c.sha, c]));
+  let last = newest;
+  while (last.parents[0] && inWindow.has(last.parents[0].sha)) last = inWindow.get(last.parents[0].sha)!;
+  const parent = last.parents[0]?.sha;
   const input = await compareRange(token, owner, repo, parent ?? oldest.sha, newest.sha);
   const notes: string[] = [];
   if (author) notes.push(`showing all authors: too many commits${who} to fetch one by one`);
@@ -707,7 +738,16 @@ function commitRow(c: CommitJson, refs?: Ref[]): CommitRow {
 }
 
 const logRefs = (rows: CommitRow[]): LogRef[] =>
-  rows.map((r) => ({ sha: r.sha, parent: r.parents[0] ?? null, subject: r.subject }));
+  rows.map((r) => {
+    const branch = r.refs.find((f) => f.kind !== "tag")?.name;
+    return {
+      sha: r.sha,
+      parent: r.parents[0] ?? null,
+      merge: r.parents.length > 1,
+      subject: r.subject,
+      ...(branch ? { branch } : {}),
+    };
+  });
 
 export async function historyBlock(
   token: string,
@@ -838,6 +878,8 @@ const LOG_WALKS = 12;
 export interface LogRef {
   sha: string;
   parent: string | null;
+  merge: boolean; // a rebase over rows refuses these client side, by row number
+  branch?: string; // a branch tip: a rebase over rows must start at one
   subject: string;
 }
 
@@ -885,17 +927,17 @@ export async function logBlock(
     : [def, ...branches.map((b) => b.name).filter((b) => b !== def)].slice(0, LOG_WALKS);
   const walks = await Promise.all(
     heads.map(async (h) => {
-      const q = new URLSearchParams({ per_page: String(n), sha: h });
+      const q = new URLSearchParams({ sha: h });
       if (window) {
         q.set("since", window.since);
         if (window.until) q.set("until", window.until);
       }
       if (author) q.set("author", author);
       try {
-        const res = await gh(token, `${base}/commits?${q}`);
-        return (await res.json()) as CommitJson[];
+        // one past the budget tells a cut walk from a short one
+        return await commitList(token, `${base}/commits`, q, n + 1);
       } catch (e) {
-        if (ref && e instanceof GithubError && e.status === 404) {
+        if (ref && unknownRef(e)) {
           throw new GithubError(404, `branch ${ref} not found; run branches to see refs`);
         }
         if (e instanceof GithubError && e.status === 404) return []; // a branch moved under us
@@ -1098,7 +1140,14 @@ function tooMany(n: number): GithubError {
   return new GithubError(422, `that is ${n} commits; plans stop at ${PLAN_CAP}`);
 }
 
-async function planSet(token: string, root: string, source: PlanSource): Promise<PlanSet> {
+const isSha = (s: string) => /^[0-9a-f]{7,40}$/i.test(s);
+
+async function planSet(
+  token: string,
+  root: string,
+  source: PlanSource,
+  pick: boolean
+): Promise<PlanSet> {
   if (source.kind === "range") {
     let { base, head } = source;
     if (!head || !base) {
@@ -1125,7 +1174,12 @@ async function planSet(token: string, root: string, source: PlanSource): Promise
     if (!json.commits.length) {
       throw new GithubError(422, `nothing to rebase: ${head} is up to date with ${base}`);
     }
-    return { commits: json.commits, base: { sha: json.base_commit.sha, ref: base }, head };
+    // a sha end is not a branch: nothing to switch to, nothing to name
+    return {
+      commits: json.commits,
+      base: { sha: json.base_commit.sha, ...(isSha(base) ? {} : { ref: base }) },
+      ...(isSha(head) ? {} : { head }),
+    };
   }
   if (source.kind === "pr") {
     const path = `${root}/pulls/${source.num}`;
@@ -1148,7 +1202,9 @@ async function planSet(token: string, root: string, source: PlanSource): Promise
       base: { ref: string; sha: string };
       head: { ref: string };
     };
-    if (pr.merged) throw new GithubError(422, `pr #${source.num} is merged; nothing to plan`);
+    // a rebase of a merged pr has nothing left to rewrite; a backport
+    // is exactly that
+    if (pr.merged && !pick) throw new GithubError(422, `pr #${source.num} is merged; nothing to plan`);
     if (pr.commits > PLAN_CAP) throw tooMany(pr.commits);
     const commits = (await listRes.json()) as CommitJson[];
     return { commits, base: { sha: pr.base.sha, ref: pr.base.ref }, head: pr.head.ref };
@@ -1175,6 +1231,16 @@ async function planSet(token: string, root: string, source: PlanSource): Promise
   if (source.shas.length > PLAN_CAP) throw tooMany(source.shas.length);
   const commits = await Promise.all(source.shas.map((sha) => commitJson(token, root, sha)));
   commits.sort((a, b) => Date.parse(a.commit.committer.date) - Date.parse(b.commit.committer.date));
+  // dates tie to the second after a rebase; a parent always goes first
+  for (let i = 0; i < commits.length; i++) {
+    const parents = new Set(commits[i].parents.map((p) => p.sha));
+    const j = commits.findIndex((c, k) => k > i && parents.has(c.sha));
+    if (j > i) {
+      const [parent] = commits.splice(j, 1);
+      commits.splice(i, 0, parent);
+      i = -1; // start over: the move can unsettle an earlier pair
+    }
+  }
   return { commits, base: { sha: commits[0].sha } };
 }
 
@@ -1183,12 +1249,7 @@ async function commitJson(token: string, root: string, sha: string): Promise<Com
   try {
     res = await gh(token, `${root}/commits/${encodeURIComponent(sha)}`);
   } catch (e) {
-    if (e instanceof GithubError && e.status === 404) {
-      throw new GithubError(404, `commit ${sha} not found in this repo`);
-    }
-    if (e instanceof GithubError && e.status === 422) {
-      throw new GithubError(422, `${sha} is not a commit sha`);
-    }
+    if (unknownRef(e)) throw new GithubError(404, `commit ${sha} not found in this repo`);
     throw e;
   }
   return (await res.json()) as CommitJson;
@@ -1209,24 +1270,23 @@ export async function planBlock(
   onto?: string
 ): Promise<{ block: Block }> {
   const root = `/repos/${owner}/${repo}`;
-  const set = await planSet(token, root, source);
+  const set = await planSet(token, root, source, Boolean(onto));
   // a cherry-pick lands on the target's tip; the lookup also proves it exists
   if (onto) {
     let res: Response;
     try {
       res = await gh(token, `${root}/commits/${encodeURIComponent(onto)}`);
     } catch (e) {
-      if (e instanceof GithubError && e.status === 404) {
-        throw new GithubError(404, `unknown ref ${onto}; run branches to see refs`);
-      }
+      if (unknownRef(e)) throw new GithubError(404, `unknown ref ${onto}; run branches to see refs`);
       throw e;
     }
     set.base = { sha: ((await res.json()) as CommitJson).sha, ref: onto };
   }
   const n = set.commits.length;
-  const merge = set.commits.findIndex((c) => c.parents.length > 1);
-  if (merge >= 0) {
-    throw new GithubError(422, `rebase plans need a linear history; row ${n - merge} is a merge`);
+  // the server never sees row numbers, so the merge is named by sha
+  const merge = set.commits.find((c) => c.parents.length > 1);
+  if (merge) {
+    throw new GithubError(422, `rebase plans need a linear history; ${merge.sha.slice(0, 7)} is a merge`);
   }
   // files per commit: the compare and list endpoints carry none
   const detailed = await Promise.all(

@@ -69,9 +69,9 @@ describe("paste", () => {
       "add auth with session cookies\n\nwhy: the old flow leaked",
       "EOF",
       "cat > /tmp/wd-0000000-todo <<'EOF'",
-      `drop ${"a".repeat(7)} wip`,
-      `pick ${"b".repeat(7)} add auth`,
-      `fixup ${"c".repeat(7)} fix typo`,
+      `drop ${SHA("a")} wip`,
+      `pick ${SHA("b")} add auth`,
+      `fixup ${SHA("c")} fix typo`,
       "exec git commit --amend -F /tmp/wd-0000000-msg-1",
       "EOF",
       `GIT_SEQUENCE_EDITOR='cp /tmp/wd-0000000-todo' git rebase -i ${SHA("0")}`,
@@ -88,9 +88,9 @@ describe("paste", () => {
     expect(lines[0]).toBe("# check out the branch that holds these commits first");
     expect(lines.slice(1, 6)).toEqual([
       "cat > /tmp/wd-0000000-todo <<'EOF'",
-      `edit ${"a".repeat(7)} wip`,
-      `reword ${"b".repeat(7)} add auth`,
-      `squash ${"c".repeat(7)} fix typo`,
+      `edit ${SHA("a")} wip`,
+      `reword ${SHA("b")} add auth`,
+      `squash ${SHA("c")} fix typo`,
       "EOF",
     ]);
   });
@@ -99,7 +99,7 @@ describe("paste", () => {
     const r = setText(rows(), 2, "first steps");
     expect(r[2].action).toBe("reword");
     const lines = paste(block(r));
-    expect(lines).toContain(`pick ${"a".repeat(7)} wip`);
+    expect(lines).toContain(`pick ${SHA("a")} wip`);
     expect(lines).toContain("exec git commit --amend -F /tmp/wd-0000000-msg-1");
     expect(lines.filter((l) => l.startsWith("cat >"))).toHaveLength(2);
   });
@@ -117,7 +117,7 @@ describe("paste", () => {
     let r = rows();
     r = setAction(r, 2, "squash");
     expect(warnings(block(r))).toEqual(["row 3 has nothing to squash into; kept as pick"]);
-    expect(paste(block(r))).toContain(`pick ${"a".repeat(7)} wip`);
+    expect(paste(block(r))).toContain(`pick ${SHA("a")} wip`);
     // a drop before it does not count as a target either
     r = setAction(rows(), 2, "drop");
     r = setAction(r, 1, "fixup");
@@ -132,14 +132,14 @@ describe("paste", () => {
     const lines = paste(block(r));
     expect(lines).toEqual(
       expect.arrayContaining([
-        `pick ${"a".repeat(7)} wip`,
-        `drop ${"b".repeat(7)} add auth`,
-        `fixup ${"c".repeat(7)} fix typo`,
+        `pick ${SHA("a")} wip`,
+        `drop ${SHA("b")} add auth`,
+        `fixup ${SHA("c")} fix typo`,
         "exec git commit --amend -F /tmp/wd-0000000-msg-1",
       ])
     );
-    expect(lines.indexOf(`drop ${"b".repeat(7)} add auth`)).toBeLessThan(
-      lines.indexOf(`fixup ${"c".repeat(7)} fix typo`)
+    expect(lines.indexOf(`drop ${SHA("b")} add auth`)).toBeLessThan(
+      lines.indexOf(`fixup ${SHA("c")} fix typo`)
     );
   });
 
@@ -208,10 +208,17 @@ describe("editing", () => {
     r = setText(r, 0, "fix typo\n\nbody of c");
     expect(r[0].action).toBe("pick");
     expect(r[0].text).toBeUndefined();
-    // pick forgets the text, drop keeps it
+    // pick forgets the text, drop keeps it; a fold never uses its own
     r = setText(rows(), 0, "x");
     expect(setAction(r, 0, "drop")[0].text).toBe("x");
     expect(setAction(r, 0, "pick")[0].text).toBeUndefined();
+    expect(setAction(r, 0, "squash")[0].text).toBeUndefined();
+    // a trailing newline (the start of a body) is kept as typed but is
+    // not a change: the row stays a pick and the todo has no amend
+    r = setText(rows(), 0, "fix typo\n\nbody of c\n");
+    expect(r[0].action).toBe("pick");
+    expect(r[0].text).toBe("fix typo\n\nbody of c\n");
+    expect(paste(block(r))).not.toContain(`exec git commit --amend -F /tmp/wd-${"0".repeat(7)}-msg-1`);
   });
 
   it("finds the rows a draft should read and where a fold lands", () => {

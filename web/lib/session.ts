@@ -11,7 +11,9 @@ export interface WdSession {
 // sign-in itself, so a stolen cookie cannot be kept alive indefinitely
 export const MAX_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 
-export const sessionOptions: SessionOptions = {
+// read per call: a first-run setup writes the secret while the process
+// runs
+export const sessionOptions = (): SessionOptions => ({
   cookieName: "wd_session",
   password: process.env.SESSION_SECRET ?? "",
   ttl: 60 * 60 * 24 * 7,
@@ -21,10 +23,10 @@ export const sessionOptions: SessionOptions = {
     sameSite: "lax",
     path: "/",
   },
-};
+});
 
 export async function getSession(): Promise<IronSession<WdSession>> {
-  return getIronSession<WdSession>(await cookies(), sessionOptions);
+  return getIronSession<WdSession>(await cookies(), sessionOptions());
 }
 
 // sliding expiry: every api call re-issues the cookie, so a session ends

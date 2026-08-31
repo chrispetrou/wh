@@ -34,7 +34,8 @@ export function prompt(
   const s = sections();
   return {
     system: (s[mode === "explain" ? "system" : mode] ?? "").trim(),
-    user: (s.user ?? "").trim().replace("{{payload}}", payload),
+    // a function keeps $& and friends in the diff literal
+    user: (s.user ?? "").trim().replace("{{payload}}", () => payload),
     followup: (s.followup ?? "").trim(),
   };
 }
