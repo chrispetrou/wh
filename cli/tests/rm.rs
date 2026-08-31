@@ -42,6 +42,65 @@ fn unmerged_kept() {
 }
 
 #[test]
+fn prunes_squash_merged() {
+    let t = TestRepo::new();
+    t.commit("init");
+    t.wd().args(["new", "feat/sq"]).assert().success();
+    let wt = t.root.join("repo.feat-sq");
+    commit_in(&t, &wt, "one.txt");
+    commit_in(&t, &wt, "two.txt");
+    t.git(&["merge", "--squash", "feat/sq"]);
+    t.git(&["commit", "-m", "squash"]);
+    t.wd()
+        .args(["rm", "--yes"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "removed ../repo.feat-sq (feat/sq)",
+        ))
+        .stdout(predicate::str::contains("→ pruned 1 worktree"));
+    assert!(!wt.exists());
+    assert_eq!(t.git(&["branch", "--list", "feat/sq"]), "");
+}
+
+#[test]
+fn prunes_rebase_merged() {
+    let t = TestRepo::new();
+    t.commit("init");
+    t.wd().args(["new", "feat/rb"]).assert().success();
+    let wt = t.root.join("repo.feat-rb");
+    commit_in(&t, &wt, "one.txt");
+    let sha = t.git_in(&wt, &["rev-parse", "HEAD"]);
+    t.commit("unrelated");
+    t.git(&["cherry-pick", &sha]);
+    t.wd()
+        .args(["rm", "--yes"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("→ pruned 1 worktree"));
+    assert!(!wt.exists());
+}
+
+#[test]
+fn named_squash_merged_without_force() {
+    let t = TestRepo::new();
+    t.commit("init");
+    t.wd().args(["new", "feat/sq"]).assert().success();
+    let wt = t.root.join("repo.feat-sq");
+    commit_in(&t, &wt, "one.txt");
+    t.git(&["merge", "--squash", "feat/sq"]);
+    t.git(&["commit", "-m", "squash"]);
+    t.wd()
+        .args(["rm", "feat/sq"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "removed ../repo.feat-sq (feat/sq)",
+        ));
+    assert!(!wt.exists());
+}
+
+#[test]
 fn dirty_merged_skipped() {
     let t = TestRepo::new();
     t.commit("init");
