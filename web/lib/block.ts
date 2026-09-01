@@ -64,6 +64,10 @@ export type Block =
       rows: StatRow[];
       footer: string[];
     }
+  // a file read in place. the content is never here: lines are persisted
+  // whole to sessionStorage on every push, so the block is an address
+  // and the text loads lazily (see FileDetail in chat-store)
+  | { kind: "file"; path: string; ref: string; mark?: number }
   // a rebase or cherry-pick plan: rows newest first like the log, edited
   // in place, flattened to the commands to paste
   | {
@@ -86,6 +90,9 @@ const BAR_W = 20; // the text bar budget, in cells
 
 export function blockText(b: Block, now = Date.now()): string[] {
   if (b.kind === "plan") return [...warnings(b), ...paste(b)];
+  // the content lives in the unpersisted details map, so a transcript
+  // export carries the address only; file text is copied by selecting it
+  if (b.kind === "file") return [`view ${b.path}${b.mark ? `:${b.mark}` : ""} on ${b.ref}`];
   const out: string[] = [];
   if (b.kind === "stat") {
     if (b.spark) {

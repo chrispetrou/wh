@@ -33,6 +33,7 @@ export interface ExplainMeta extends Partial<DiffMeta> {
   followup?: boolean;
   branches?: boolean;
   tags?: boolean;
+  ls?: boolean;
   block?: Block; // log, history, prs: rendered as a grid, no text follows
   rows?: LogRow[] | PrPick[]; // the block's rows for `explain 3` and `pr ` completion
   spans?: boolean; // false when the rows are not contiguous (a filtered log, a history)

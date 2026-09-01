@@ -315,6 +315,81 @@
 .log-row.row-sel:hover {
   background: var(--wd-sel);
 }
+/* the file view: numbered lines in a box capped at ~24 rows that
+   scrolls inside. code color is the lanes' kind of exception (see the
+   lane note below): three quiet roles, everything else stays fg */
+.file-scroll {
+  max-height: calc(24 * 1.7em);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin: 2px 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--wd-faint) transparent;
+}
+.file-line {
+  display: grid;
+  grid-template-columns: var(--file-numw) minmax(0, 1fr);
+  line-height: 1.7;
+}
+.file-num {
+  color: var(--muted-foreground);
+  text-align: right;
+  padding-right: 12px;
+  background: none;
+  border: 0;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+  user-select: none;
+}
+.file-num:hover {
+  color: var(--wd-accent); /* it is a command: why <path>:<n> */
+}
+.file-code {
+  white-space: pre;
+}
+.file-mark {
+  background: var(--wd-sel);
+}
+.file-mark .file-num {
+  color: var(--wd-amber); /* the asked-for line, labeled */
+}
+/* hljs onto the palette: the lane colors, already the one sanctioned
+   exception zone, double as the token colors, so both themes come free
+   via the vars. unmapped tokens inherit fg */
+.file-code .hljs-comment,
+.file-code .hljs-quote,
+.file-code .hljs-meta,
+.file-code .hljs-doctag {
+  color: var(--muted-foreground);
+}
+.file-code .hljs-string,
+.file-code .hljs-regexp,
+.file-code .hljs-addition {
+  color: var(--wd-green);
+}
+.file-code .hljs-keyword,
+.file-code .hljs-literal,
+.file-code .hljs-built_in {
+  color: var(--wd-lane-4); /* violet */
+}
+.file-code .hljs-number,
+.file-code .hljs-symbol {
+  color: var(--wd-lane-3); /* orange */
+}
+.file-code .hljs-title,
+.file-code .hljs-title.function_,
+.file-code .hljs-title.class_ {
+  color: var(--wd-accent);
+}
+.file-code .hljs-type,
+.file-code .hljs-name,
+.file-code .hljs-selector-tag {
+  color: var(--wd-lane-2); /* teal, for types and markup tags */
+}
+
 /* stat rows are read-only: no grab cursor, no hover highlight */
 .stat-row,
 .stat-row:hover {

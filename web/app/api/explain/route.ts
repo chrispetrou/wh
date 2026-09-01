@@ -7,10 +7,12 @@ import {
   churnBlock,
   commitInput,
   compareRange,
+  defaultBranch,
   GithubError,
   historyBlock,
   lastNCommits,
   logBlock,
+  lsText,
   mergeInputs,
   planBlock,
   prInput,
@@ -18,11 +20,14 @@ import {
   sinceInput,
   staleText,
   tagsText,
+  validPath,
+  validRef,
   whoBlock,
   whyInput,
   type ExplainInput,
   type PlanSource,
 } from "@/lib/github";
+import type { Block } from "@/lib/block";
 import { describeTurn } from "@/lib/explain/context";
 import { filterDiff } from "@/lib/explain/filter";
 import { defaultCaps, defaultRules, preprocess, stats } from "@/lib/explain/preprocess";
@@ -320,6 +325,34 @@ export async function POST(req: NextRequest) {
       return githubFailure(e, destroy);
     }
   }
+  // the view block is an address only: the content is fetched lazily by
+  // the client through /api/detail, so the command answers instantly
+  if (command.kind === "view") {
+    if (!validPath(command.path)) return err(400, "bad path");
+    if (command.ref && !validRef(command.ref)) return err(400, "bad ref");
+    try {
+      const ref = command.ref ?? (await defaultBranch(session.token, owner, repo));
+      const block: Block = {
+        kind: "file",
+        path: command.path,
+        ref,
+        ...(command.line ? { mark: command.line } : {}),
+      };
+      return plain({ block }, "");
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
+  if (command.kind === "ls") {
+    if (command.dir && !validPath(command.dir)) return err(400, "bad path");
+    if (command.ref && !validRef(command.ref)) return err(400, "bad ref");
+    try {
+      const text = await lsText(session.token, owner, repo, command.dir, command.ref);
+      return plain({ ls: true }, text);
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
   if (command.kind === "activity") {
     try {
       const a = await activityBlock(session.token, owner, repo, {
@@ -384,7 +417,8 @@ export async function POST(req: NextRequest) {
         repo,
         command.path,
         command.line,
-        command.ref
+        command.ref,
+        command.to
       );
       question = w.question;
       mode = "why";

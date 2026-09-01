@@ -46,6 +46,15 @@ describe("blockText", () => {
     expect(blockText(b, NOW)).toEqual(["#12 alice  fix  f → main  3h · draft", "1 open pr"]);
   });
 
+  it("flattens a file block to its address only", () => {
+    expect(blockText({ kind: "file", path: "src/a.rs", ref: "main" }, NOW)).toEqual([
+      "view src/a.rs on main",
+    ]);
+    expect(blockText({ kind: "file", path: "src/a.rs", ref: "dev", mark: 42 }, NOW)).toEqual([
+      "view src/a.rs:42 on dev",
+    ]);
+  });
+
   it("flattens a stat block: spark glyphs, group labels, bars", () => {
     const b: Block = {
       kind: "stat",

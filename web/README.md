@@ -108,6 +108,24 @@ call, no key needed) and flatten to text for `/copy` and `/export` like
 every block, but there is nothing to walk: after one, the arrows keep
 recalling history.
 
+## view and ls
+
+`view <path>` (or `cat <path>`) reads a file in place: numbered lines in
+a block capped at 24 rows that scrolls inside (wheel, or the arrows
+while it is live; esc steps out). Syntax highlighting maps hljs tokens onto
+the palette (comments muted, strings green, keywords violet, numbers
+orange, names accent, types teal: the lane colors doubling as token
+colors); highlight.js loads lazily and only for known extensions. `view <path>:<line>` opens
+scrolled to that line, marked; clicking any line number prefills
+`why <path>:<line>` in the prompt (shift+click a second number to span,
+`why <path>:<from>-<to>`), so reading a file flows straight into asking
+about it. A span blames every line and merges the commits behind it
+(up to 40 lines, the 5 newest commits). Files are fetched lazily (the transcript stores only
+the address), capped at 500k or 5000 lines with a note; binaries and
+directories are refused with a pointer to the right command. `ls
+[<dir>]` lists a directory, dirs first with sizes, for finding paths at
+all. `on <branch>` works on both.
+
 ## rebase and cherry-pick plans
 
 `rebase feat/auth` (a branch, a range `rebase main..feat/auth`, a pull
@@ -177,6 +195,7 @@ gets an amber warning after the answer.
 | esc | stop a running explain; close a menu or panel |
 | tab, enter, esc (menu open) | complete; use; dismiss |
 | arrows, enter, esc (after a log, prs, or history) | walk rows; open one; step out |
+| arrows, esc (on a file view) | scroll; step out |
 | p r s f d e, shift+up/down (in a plan) | set a row's action; move it (drag works too) |
 | drag a log / prs row | onto a branch: cherry-pick; into a plan: add it |
 | cmd+k / ctrl+k | repo picker |

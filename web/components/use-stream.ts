@@ -173,6 +173,8 @@ export function useStream({
       "activity",
       "history",
       "who",
+      "view",
+      "ls",
       "plan",
       "pick",
     ].includes(kind ?? "");
@@ -197,6 +199,10 @@ export function useStream({
             asm.mode = "tags";
             return;
           }
+          if (meta.ls) {
+            asm.mode = "ls";
+            return;
+          }
           if (meta.block) {
             // the grid goes in as one line; the arrow keys drive it until
             // the next command
@@ -210,8 +216,12 @@ export function useStream({
                 meta.spans !== false
               );
             }
-            // a stat block is not walkable: the arrows keep their history
-            if (meta.block.kind !== "stat" && meta.block.rows.length) {
+            // a stat block is not walkable: the arrows keep their history.
+            // a file block is live without rows: the arrows scroll it
+            if (
+              meta.block.kind === "file" ||
+              (meta.block.kind !== "stat" && meta.block.rows.length)
+            ) {
               chatStore.setLive(storeKey, {
                 line: chatStore.lines(storeKey).length - 1,
                 selected: null,

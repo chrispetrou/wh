@@ -36,10 +36,15 @@ type Shape =
   | { kind: "activity"; since?: string }
   // the commits touching a path, numbered like the log
   | { kind: "history"; path: string; ref?: string }
+  // a file read in place: scrolling block, optionally opened at a line
+  | { kind: "view"; path: string; line?: number; ref?: string }
+  // a directory listing, for finding paths at all
+  | { kind: "ls"; dir?: string; ref?: string }
   // who knows a file or dir: its authors ranked, recent work weighing more
   | { kind: "who"; path: string; ref?: string }
-  // why a line exists: blame, then the blaming commit cut to the file
-  | { kind: "why"; path: string; line: number; ref?: string }
+  // why a line (or a span of lines) exists: blame, then the blaming
+  // commits cut to the file
+  | { kind: "why"; path: string; line: number; to?: number; ref?: string }
   // a rebase plan over a linear set of commits: rows to reorder and mark,
   // the git commands to paste. never executed here
   | { kind: "plan"; source: PlanSource }
@@ -57,9 +62,15 @@ export type PlanSource = Extract<Shape, { kind: "range" | "pr" | "last" | "row" 
 const HISTORY = /^(?:file\s+)?history\s+(?:of\s+|for\s+)?(\S+)(?:\s+on\s+(\S+))?$/i;
 // "who src/git.rs", "who knows src on dev"; bare who is not a command
 const WHO = /^who\s+(?:knows\s+|touched\s+|owns\s+)?(\S+)(?:\s+on\s+(\S+))?$/i;
+// "view src/git.rs", "cat src/git.rs:42 on dev"; the lazy path plus an
+// optional line mirrors why's reading
+const VIEW = /^(?:view|cat)\s+(\S+?)(?::(\d{1,6}))?(?:\s+on\s+(\S+))?$/i;
+// "ls", "ls src on dev"; bare root when no dir
+const LS = /^ls(?:\s+(\S+))?(?:\s+on\s+(\S+))?$/i;
 // "why src/git.rs:42", "why line 42 of src/git.rs", optional "on <ref>"
-const WHY_COLON = /^why\s+(\S+?):(\d{1,6})(?:\s+on\s+(\S+))?$/i;
-const WHY_WORDS = /^why\s+line\s+(\d{1,6})\s+(?:of|in)\s+(\S+)(?:\s+on\s+(\S+))?$/i;
+const WHY_COLON = /^why\s+(\S+?):(\d{1,6})(?:\s*(?:-|\.\.)\s*(\d{1,6}))?(?:\s+on\s+(\S+))?$/i;
+const WHY_WORDS =
+  /^why\s+lines?\s+(\d{1,6})(?:\s*(?:-|\.\.)\s*(\d{1,6}))?\s+(?:of|in)\s+(\S+)(?:\s+on\s+(\S+))?$/i;
 // "<diff command> in <path>"
 const IN_PATH = /^(.+?)\s+in\s+(\S+)$/i;
 // "what changed in <path> since v1.2", "explain <path> main..dev"
@@ -146,6 +157,8 @@ export function isDiff(c: Command): boolean {
     "activity",
     "history",
     "who",
+    "view",
+    "ls",
     "why",
     "plan",
     "pick",
@@ -254,6 +267,9 @@ function clampN(s: string): number {
 export function parseCommand(raw: string): Command | null {
   let input = raw.trim().replace(/\s+/g, " ");
   if (!input) return null;
+  // the worktree commands belong to the cli; parsing "wd ls" here would
+  // shadow the hint that says so
+  if (/^wd\s+(?:new|switch|rm|ls)\b/i.test(input)) return null;
   // cli muscle memory ("wd explain HEAD~3..") and trailing question marks
   input = input.replace(/^wd\s+/i, "").replace(/\s*\?+$/, "");
   if (/^explain$/i.test(input)) return { kind: "last", n: 1 }; // cli default
@@ -278,6 +294,22 @@ export function parseCommand(raw: string): Command | null {
 
   const churn = churnCommand(input);
   if (churn) return churn;
+
+  const view = VIEW.exec(input);
+  if (view) {
+    const out: Command = { kind: "view", path: view[1] };
+    if (view[2]) out.line = parseInt(view[2], 10);
+    if (view[3]) out.ref = view[3];
+    return out;
+  }
+
+  const ls = LS.exec(input);
+  if (ls) {
+    const out: Command = { kind: "ls" };
+    if (ls[1]) out.dir = ls[1];
+    if (ls[2]) out.ref = ls[2];
+    return out;
+  }
 
   const activity = ACTIVITY.exec(input);
   if (activity) {
@@ -353,18 +385,21 @@ export function parseCommand(raw: string): Command | null {
     return { kind: "message", shas: tokens.map((t) => t.toLowerCase()) };
   }
 
+  // a span reads low to high whichever way it was typed
+  const whySpan = (path: string, a: string, b?: string, ref?: string): Command => {
+    const from = parseInt(a, 10);
+    const to = b ? parseInt(b, 10) : undefined;
+    const out: Command =
+      to !== undefined && to !== from
+        ? { kind: "why", path, line: Math.min(from, to), to: Math.max(from, to) }
+        : { kind: "why", path, line: from };
+    if (ref) out.ref = ref;
+    return out;
+  };
   const why = WHY_COLON.exec(input);
-  if (why) {
-    const out: Command = { kind: "why", path: why[1], line: parseInt(why[2], 10) };
-    if (why[3]) out.ref = why[3];
-    return out;
-  }
+  if (why) return whySpan(why[1], why[2], why[3], why[4]);
   const whyWords = WHY_WORDS.exec(input);
-  if (whyWords) {
-    const out: Command = { kind: "why", path: whyWords[2], line: parseInt(whyWords[1], 10) };
-    if (whyWords[3]) out.ref = whyWords[3];
-    return out;
-  }
+  if (whyWords) return whySpan(whyWords[3], whyWords[1], whyWords[2], whyWords[4]);
 
   // a path cut: only diff commands take one, and "in pr" or "in <branch>"
   // keep their meaning because their remainder is not a command
@@ -459,7 +494,8 @@ export const commandHint = [
   "  since yesterday | this week | v1.2 [by <login>], standup",
   "  changelog [v1.1..v1.2 | since v1.2 | pr #N] (release notes)",
   "  describe pr #N | <branch> | main..dev (a pr title and description to paste)",
-  "  history <path>, why <path>:<line>, who <path>, any command + in <path>",
+  "  history <path>, why <path>:<line>[-<line>], who <path>, any command + in <path>",
+  "  view <path>[:<line>] [on <branch>] (read a file; cat works), ls [<dir>]",
   "  rebase <branch> | main..feat | pr #N | 2..5 (a rebase plan to paste)",
   "  pick 3 5 onto <branch>, backport pr #N to <branch> (a cherry-pick plan)",
   "  branches, tags, prs [open | closed | mine], stale [8w]",

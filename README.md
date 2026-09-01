@@ -332,8 +332,10 @@ log row belongs, a completion menu drops down, filtered as you type.
 | a rebase plan | `rebase feat/auth`, `rebase main..feat/auth`, `rebase pr #42`, `rebase 2..5` (log rows) |
 | a cherry-pick plan | `pick 3 5 onto release/1.x`, `backport pr #42 to release/1.x` |
 | a file's story | `history src/git.rs`, `history src/ on feat/auth` |
-| one line | `why src/git.rs:42`, `why line 42 of src/git.rs on v1.2` |
+| a line or a span | `why src/git.rs:42`, `why src/git.rs:13-17`, `why line 42 of src/git.rs on v1.2` |
 | who knows a file | `who src/git.rs`, `who knows src/ on dev` |
+| read a file | `view src/git.rs:42`, `cat` works too; click a line number to ask why |
+| a listing | `ls`, `ls src on dev` |
 | hotspots | `churn`, `churn since v1.2 in src/`, `hotspots on dev` |
 | the repo's pulse | `activity`, `activity since this week` |
 | cut to a path | any explain plus `in <path>`: `explain the last 5 commits in src/`, `changelog of pr 42 in docs/` |

@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { CommitRow, ListBlock, PrRow } from "@/lib/block";
-import { absolute, Action, Chip, CopyAction } from "./block-bits";
+import { absolute, Action, Chip, CopyAction, Skel } from "./block-bits";
 import { dragging, startDrag, type DragPayload } from "./drag-layer";
 import {
   chatStore,
@@ -90,10 +90,6 @@ function Through({ g, lanes }: { g: Omit<LaneRow, "sha">; lanes: number }) {
   );
 }
 
-// a value still in flight
-function Skel({ w }: { w: number }) {
-  return <span className="skel" style={{ width: `${w}ch` }} />;
-}
 
 // the panel before its fetch lands: what the row already knows is real,
 // the rest breathes as placeholders, so opening never feels blocked
@@ -400,9 +396,9 @@ export function LogBlock({
                               submit={submit}
                               jump={(sha) => jumpTo(block, sha, line, storeKey, submit)}
                             />
-                          ) : (
+                          ) : detail.kind === "pr" ? (
                             <PrPanel d={detail} submit={submit} />
-                          )}
+                          ) : null}
                         </div>
                       )}
                     </div>
@@ -502,10 +498,12 @@ function SignInAgain({ storeKey, line, id }: { storeKey: string; line: number; i
 // on touch): explain the change to this file, its history, copy the path
 function Files({
   files,
+  onView,
   onExplain,
   onHistory,
 }: {
-  files: Detail["files"];
+  files: CommitDetail["files"];
+  onView: (path: string) => void;
   onExplain: (path: string) => void;
   onHistory: (path: string) => void;
 }) {
@@ -521,6 +519,13 @@ function Files({
           {f.status !== "modified" ? <span className="text-muted-foreground"> {f.status}</span> : null}
           <span className="log-file-actions">
             <span className="text-muted-foreground">   </span>
+            {/* a removed file has nothing to view at this point in time */}
+            {f.status !== "removed" ? (
+              <>
+                <Action onClick={() => onView(f.path)}>view</Action>
+                <span className="text-muted-foreground"> · </span>
+              </>
+            ) : null}
             <Action onClick={() => onExplain(f.path)}>explain</Action>
             <span className="text-muted-foreground"> · </span>
             <Action onClick={() => onHistory(f.path)}>history</Action>
@@ -576,6 +581,7 @@ function CommitPanel({
       <div className="mt-2">
         <Files
           files={d.files}
+          onView={(p) => submit(`view ${p} on ${d.sha.slice(0, 7)}`)}
           onExplain={(p) => submit(`explain ${d.sha.slice(0, 7)} in ${p}`)}
           onHistory={(p) => submit(`history ${p}`)}
         />
@@ -620,6 +626,7 @@ function PrPanel({ d, submit }: { d: PrDetail; submit: (c: string) => void }) {
       <div className="mt-2">
         <Files
           files={d.files}
+          onView={(p) => submit(`view ${p} on ${d.head}`)}
           onExplain={(p) => submit(`pr ${d.num} in ${p}`)}
           onHistory={(p) => submit(`history ${p}`)}
         />

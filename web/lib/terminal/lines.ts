@@ -45,6 +45,20 @@ export function tagLine(text: string): ChatLine {
   };
 }
 
+// an ls row: "2\tsrc/   \t" for a dir, "5\tmain.rs  \t1.2k" for a file;
+// the name is fg, index and size muted, the count line carries no tabs
+export function lsLine(text: string): ChatLine {
+  const f = text.split("\t");
+  if (f.length < 3) return { text, cls: "o" };
+  const [num, name, size] = f;
+  return {
+    head: { text: `${num}  `, cls: "o" },
+    text: name,
+    cls: "",
+    tail: { text: size, cls: "o" },
+  };
+}
+
 // the section labels of every output contract, painted amber
 export const LABELS = new Set([
   "summary",
@@ -66,12 +80,13 @@ export const URL_RE = /\bhttps?:\/\/[^\s]+|\bgithub\.com\/[^\s]+/g;
 
 // what the stream is showing right now: model text, a raw payload
 // (/show), or one of the two listings with their own row shapes
-export type StreamMode = "text" | "diff" | "branches" | "tags";
+export type StreamMode = "text" | "diff" | "branches" | "tags" | "ls";
 
 export function classify(mode: StreamMode, text: string): ChatLine {
   const t = text.trimEnd();
   if (mode === "branches") return branchLine(t);
   if (mode === "tags") return tagLine(t);
+  if (mode === "ls") return lsLine(t);
   if (mode === "diff") {
     if (t.startsWith("diff --git")) return { text, cls: "c" };
     if (t.startsWith("- ")) return { text, cls: "o" }; // payload commit list

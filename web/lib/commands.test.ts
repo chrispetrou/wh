@@ -343,6 +343,34 @@ describe("parseCommand", () => {
     expect(parseCommand("changelog churn")).toBeNull();
   });
 
+  it("parses view, cat, and ls", () => {
+    expect(parseCommand("view src/git.rs")).toEqual({ kind: "view", path: "src/git.rs" });
+    expect(parseCommand("cat src/git.rs")).toEqual({ kind: "view", path: "src/git.rs" });
+    expect(parseCommand("view src/git.rs:42")).toEqual({
+      kind: "view",
+      path: "src/git.rs",
+      line: 42,
+    });
+    expect(parseCommand("view src/git.rs:42 on dev")).toEqual({
+      kind: "view",
+      path: "src/git.rs",
+      line: 42,
+      ref: "dev",
+    });
+    expect(parseCommand("view")).toBeNull();
+    expect(parseCommand("view a b")).toBeNull();
+    expect(parseCommand("changelog view src")).toBeNull();
+    expect(parseCommand("ls")).toEqual({ kind: "ls" });
+    expect(parseCommand("ls src")).toEqual({ kind: "ls", dir: "src" });
+    expect(parseCommand("ls src on dev")).toEqual({ kind: "ls", dir: "src", ref: "dev" });
+    // the worktree commands belong to the cli, so their hint survives
+    expect(parseCommand("wd ls")).toBeNull();
+    expect(parseCommand("wd new feat/x")).toBeNull();
+    expect(parseCommand("wd switch")).toBeNull();
+    expect(parseCommand("wd rm old")).toBeNull();
+    expect(parseCommand("wd explain")).toEqual({ kind: "last", n: 1 });
+  });
+
   it("parses who", () => {
     expect(parseCommand("who src/git.rs")).toEqual({ kind: "who", path: "src/git.rs" });
     expect(parseCommand("who knows src/git.rs")).toEqual({ kind: "who", path: "src/git.rs" });
@@ -412,6 +440,37 @@ describe("parseCommand", () => {
       path: "README.md",
       line: 7,
       ref: "dev",
+    });
+    expect(parseCommand("why src/git.rs:13-17")).toEqual({
+      kind: "why",
+      path: "src/git.rs",
+      line: 13,
+      to: 17,
+    });
+    // a span reads low to high whichever way it was typed; dots work too
+    expect(parseCommand("why src/git.rs:17-13 on dev")).toEqual({
+      kind: "why",
+      path: "src/git.rs",
+      line: 13,
+      to: 17,
+      ref: "dev",
+    });
+    expect(parseCommand("why src/git.rs:13..17")).toEqual({
+      kind: "why",
+      path: "src/git.rs",
+      line: 13,
+      to: 17,
+    });
+    expect(parseCommand("why lines 13-17 of src/git.rs")).toEqual({
+      kind: "why",
+      path: "src/git.rs",
+      line: 13,
+      to: 17,
+    });
+    expect(parseCommand("why src/git.rs:13-13")).toEqual({
+      kind: "why",
+      path: "src/git.rs",
+      line: 13,
     });
     expect(parseCommand("why")).toBeNull();
   });

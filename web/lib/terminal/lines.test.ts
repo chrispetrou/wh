@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { branchLine, classify, createAssembler, flat, tagLine } from "./lines";
+import { branchLine, classify, createAssembler, flat, lsLine, tagLine } from "./lines";
 
 describe("classify", () => {
   it("colors diff lines in raw mode", () => {
@@ -44,6 +44,20 @@ describe("branch and tag rows", () => {
     expect(s.text).toBe("feat/old");
     expect(s.drop).toBe("branch:feat/old");
     expect(s.tail).toEqual({ text: "  last commit 20w ago · behind 3", cls: "o" });
+  });
+
+  it("colors an ls row and keeps the count line muted", () => {
+    const d = lsLine("1\tsrc/   \t");
+    expect(d.text).toBe("src/   ");
+    expect(d.head).toEqual({ text: "1  ", cls: "o" });
+    expect(d.tail).toEqual({ text: "", cls: "o" });
+    const f = lsLine("2\tmain.rs\t1.2k");
+    expect(f.text).toBe("main.rs");
+    expect(f.tail).toEqual({ text: "1.2k", cls: "o" });
+    expect(lsLine("3 entries in src on main")).toEqual({
+      text: "3 entries in src on main",
+      cls: "o",
+    });
   });
 
   it("keeps a short tags line muted", () => {

@@ -4,9 +4,11 @@ import {
   churnBlock,
   commitDetail,
   commitInput,
+  fileDetail,
   historyBlock,
   latestTag,
   logBlock,
+  lsText,
   planBlock,
   planRow,
   prFlags,
@@ -15,6 +17,8 @@ import {
   sinceInput,
   staleText,
   tagsText,
+  validPath,
+  validRef,
   validSlug,
   whoBlock,
   whyInput,
@@ -585,6 +589,15 @@ describe("whyInput", () => {
             : new Response(file);
         }
         if (url.endsWith("/graphql")) return Response.json(blame);
+        if (url.includes(`/commits/${SHA("c")}`)) {
+          if (init?.headers?.accept === "application/vnd.github.diff") {
+            return new Response("diff --git a/src/a.ts b/src/a.ts\n+++ b/src/a.ts\n+one\n");
+          }
+          return Response.json({
+            ...C,
+            files: [{ filename: "src/a.ts", additions: 1, deletions: 0 }],
+          });
+        }
         if (url.includes(`/commits/${SHA("a")}`)) {
           if (init?.headers?.accept === "application/vnd.github.diff") {
             return new Response(
@@ -623,9 +636,28 @@ describe("whyInput", () => {
     expect(w.question).toBe("\n\nthe line in question, src/a.ts:2 on main:\ntwo");
   });
 
-  it("rejects lines past the end and missing files", async () => {
+  it("blames a span across several commits and merges them", async () => {
+    whyStub();
+    const w = await whyInput("t", "o", "r", "src/a.ts", 1, undefined, 3);
+    expect(w.note).toBe(
+      `src/a.ts:1-3 last changed in 2 commits: ${"c".repeat(7)} ${"a".repeat(7)}`
+    );
+    expect(w.commitCount).toBe(2);
+    expect(w.question).toContain("the lines in question, src/a.ts:1-3 on main:");
+    expect(w.diff).toContain("+one");
+    expect(w.diff).toContain("+two");
+    expect(w.diff).not.toContain("other.ts");
+  });
+
+  it("rejects lines past the end, missing files, and huge spans", async () => {
     whyStub();
     await expect(whyInput("t", "o", "r", "src/a.ts", 9)).rejects.toThrow("src/a.ts has 3 lines");
+    await expect(whyInput("t", "o", "r", "src/a.ts", 1, undefined, 9)).rejects.toThrow(
+      "src/a.ts has 3 lines"
+    );
+    await expect(whyInput("t", "o", "r", "src/a.ts", 1, undefined, 60)).rejects.toThrow(
+      "why takes up to 40 lines at a time"
+    );
     await expect(whyInput("t", "o", "r", "missing.ts", 1)).rejects.toThrow(
       "missing.ts not found on main"
     );
@@ -1143,6 +1175,109 @@ describe("whoBlock", () => {
     await expect(whoBlock("t", "o", "r", "a.ts", "nope", NOW)).rejects.toThrow(
       "branch nope not found"
     );
+  });
+});
+
+describe("fileDetail and lsText", () => {
+  function contentsStub(bodies: Record<string, { body: string; type?: string }>) {
+    stub({});
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+      const path = url.replace("https://api.github.com", "");
+      if (path === "/repos/o/r") return Response.json({ default_branch: "main" });
+      const hit = Object.keys(bodies).find((k) => path.startsWith(k));
+      if (!hit) return new Response("{}", { status: 404 });
+      const { body, type } = bodies[hit];
+      return new Response(body, {
+        status: 200,
+        headers: { "content-type": type ?? "text/plain; charset=utf-8" },
+      });
+    });
+  }
+
+  it("splits a file into lines, popping the trailing newline", async () => {
+    contentsStub({ "/repos/o/r/contents/src/a.rs": { body: "one\ntwo\n" } });
+    const f = await fileDetail("t", "o", "r", "src/a.rs", "main");
+    expect(f).toEqual({
+      kind: "file",
+      path: "src/a.rs",
+      ref: "main",
+      lines: ["one", "two"],
+      size: 8,
+      truncated: false,
+    });
+  });
+
+  it("maps a 404 and refuses binaries and directories", async () => {
+    contentsStub({
+      "/repos/o/r/contents/bin": { body: "a\0b" },
+      "/repos/o/r/contents/src?": { body: "[]", type: "application/json" },
+    });
+    await expect(fileDetail("t", "o", "r", "gone.rs", "main")).rejects.toThrow(
+      "gone.rs not found on main"
+    );
+    await expect(fileDetail("t", "o", "r", "bin", "main")).rejects.toThrow("bin looks binary");
+    await expect(fileDetail("t", "o", "r", "src", "main")).rejects.toThrow(
+      "src is a directory; try ls src"
+    );
+  });
+
+  it("caps long files and says so", async () => {
+    contentsStub({
+      "/repos/o/r/contents/big.txt": { body: "line\n".repeat(6000) },
+    });
+    const f = await fileDetail("t", "o", "r", "big.txt", "main");
+    expect(f.lines.length).toBe(5000);
+    expect(f.truncated).toBe(true);
+  });
+
+  it("lists a directory, dirs first, with sizes and a footer", async () => {
+    contentsStub({
+      "/repos/o/r/contents/src?": {
+        body: JSON.stringify([
+          { name: "main.rs", type: "file", size: 1234 },
+          { name: "tests", type: "dir", size: 0 },
+          { name: "a.rs", type: "file", size: 90 },
+        ]),
+        type: "application/json; charset=utf-8",
+      },
+    });
+    const text = await lsText("t", "o", "r", "src", "main");
+    expect(text.split("\n")).toEqual([
+      "1\ttests/    \t",
+      "2\ta.rs      \t90",
+      "3\tmain.rs   \t1.2k",
+      "3 entries in src on main",
+      "",
+    ]);
+  });
+
+  it("points a file at view and resolves the default branch", async () => {
+    contentsStub({
+      "/repos/o/r/contents/src/a.rs?": {
+        body: JSON.stringify({ name: "a.rs", type: "file", size: 5 }),
+        type: "application/json",
+      },
+    });
+    await expect(lsText("t", "o", "r", "src/a.rs")).rejects.toThrow(
+      "src/a.rs is a file; try view src/a.rs"
+    );
+  });
+
+  it("validates paths and refs", () => {
+    expect(validPath("src/a.rs")).toBe(true);
+    expect(validPath("a")).toBe(true);
+    expect(validPath("")).toBe(false);
+    expect(validPath("/etc/passwd")).toBe(false);
+    expect(validPath("a/../b")).toBe(false);
+    expect(validPath("a//b")).toBe(false);
+    expect(validPath("a\u0000b")).toBe(false);
+    expect(validPath("a b.txt")).toBe(true); // spaces are legal in git paths
+    expect(validPath("a".repeat(501))).toBe(false);
+    expect(validRef("main")).toBe(true);
+    expect(validRef("feat/x-1.2")).toBe(true);
+    expect(validRef("")).toBe(false);
+    expect(validRef("a..b")).toBe(false);
+    expect(validRef("a b")).toBe(false);
   });
 });
 

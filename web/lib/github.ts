@@ -3,7 +3,7 @@
 // spec applies unchanged.
 
 import type { Block, CommitRow, PlanRow, Ref, StatRow } from "./block";
-import type { CommitDetail, PrDetail } from "./chat-store";
+import type { CommitDetail, FileDetail, PrDetail } from "./chat-store";
 import { LATEST_TAG } from "./commands";
 import { filterDiff } from "./explain/filter";
 import { laneCount, layout } from "./graph";
@@ -22,6 +22,21 @@ export function validSlug(owner: string, repo: string): boolean {
   // "." and ".." pass the character class but fetch would normalize them
   // out of the path
   return [owner, repo].every((s) => SLUG.test(s) && s !== "." && s !== "..");
+}
+
+// a repo-relative path as the contents api takes it, checked before it
+// lands in an api url (and when it arrives from the client)
+export function validPath(p: string): boolean {
+  if (!p || p.length > 500 || p.startsWith("/")) return false;
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1f]/.test(p)) return false;
+  return p.split("/").every((s) => s !== "" && s !== "." && s !== "..");
+}
+
+// a ref name, loosely: enough to reject traversal and header tricks
+export function validRef(r: string): boolean {
+  // eslint-disable-next-line no-control-regex
+  return r.length > 0 && r.length <= 300 && !r.includes("..") && !/[\x00-\x1f ]/.test(r);
 }
 
 export class GithubError extends Error {
@@ -112,6 +127,12 @@ async function commitList(
 
 function encodePath(path: string): string {
   return path.split("/").map(encodeURIComponent).join("/");
+}
+
+// the repo's default branch, for commands whose ref is optional
+export async function defaultBranch(token: string, owner: string, repo: string): Promise<string> {
+  const res = await gh(token, `/repos/${owner}/${repo}`);
+  return ((await res.json()) as { default_branch: string }).default_branch;
 }
 
 export interface RepoItem {
@@ -1092,6 +1113,111 @@ export async function churnBlock(
   return { block: { kind: "stat", rows, footer } };
 }
 
+// a file read in place: raw contents, line-split, capped. the view block
+// carries only the address; this is fetched lazily per block and never
+// persisted
+const FILE_MAX_BYTES = 500_000;
+const FILE_MAX_LINES = 5_000;
+
+export async function fileDetail(
+  token: string,
+  owner: string,
+  repo: string,
+  path: string,
+  ref: string
+): Promise<FileDetail> {
+  const base = `/repos/${owner}/${repo}`;
+  let res: Response;
+  try {
+    res = await gh(
+      token,
+      `${base}/contents/${encodePath(path)}?ref=${encodeURIComponent(ref)}`,
+      "application/vnd.github.raw"
+    );
+  } catch (e) {
+    if (e instanceof GithubError && e.status === 404) {
+      throw new GithubError(404, `${path} not found on ${ref}`);
+    }
+    throw e;
+  }
+  // a directory (or a submodule) answers json even under the raw type
+  if (res.headers.get("content-type")?.includes("json")) {
+    throw new GithubError(422, `${path} is a directory; try ls ${path}`);
+  }
+  const declared = Number(res.headers.get("content-length") ?? 0);
+  if (declared > 4 * FILE_MAX_BYTES) throw new GithubError(422, `${path} is too large to view`);
+  let text = await res.text();
+  const size = Buffer.byteLength(text);
+  if (text.slice(0, 8000).includes("\0")) throw new GithubError(422, `${path} looks binary`);
+  let truncated = false;
+  if (size > FILE_MAX_BYTES) {
+    const cut = text.lastIndexOf("\n", FILE_MAX_BYTES);
+    text = text.slice(0, cut > 0 ? cut : FILE_MAX_BYTES);
+    truncated = true;
+  }
+  const lines = text.split("\n");
+  if (lines.length && lines[lines.length - 1] === "") lines.pop();
+  if (lines.length > FILE_MAX_LINES) {
+    lines.length = FILE_MAX_LINES;
+    truncated = true;
+  }
+  return { kind: "file", path, ref, lines, size, truncated };
+}
+
+// a directory listing: dirs first, then files with a human size; rows
+// travel tab-delimited like the tags so the client colors the columns
+interface ContentsEntry {
+  name: string;
+  type: string; // file, dir, symlink, submodule
+  size: number;
+}
+
+function human(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return `${n}`;
+}
+
+export async function lsText(
+  token: string,
+  owner: string,
+  repo: string,
+  dir: string | undefined,
+  ref?: string
+): Promise<string> {
+  const base = `/repos/${owner}/${repo}`;
+  const r = ref ?? (await defaultBranch(token, owner, repo));
+  const where = dir ? `/${encodePath(dir)}` : "";
+  let res: Response;
+  try {
+    res = await gh(token, `${base}/contents${where}?ref=${encodeURIComponent(r)}`);
+  } catch (e) {
+    if (e instanceof GithubError && e.status === 404) {
+      throw new GithubError(404, `${dir ?? "/"} not found on ${r}`);
+    }
+    throw e;
+  }
+  const json = (await res.json()) as ContentsEntry[] | ContentsEntry;
+  if (!Array.isArray(json)) {
+    throw new GithubError(422, `${dir} is a file; try view ${dir}`);
+  }
+  const entries = [...json].sort((a, b) =>
+    a.type === b.type ? a.name.localeCompare(b.name) : a.type === "dir" ? -1 : 1
+  );
+  if (!entries.length) return `nothing in ${dir ?? "/"} on ${r}\n`;
+  const width = Math.max(...entries.map((e) => e.name.length)) + 3;
+  const numWidth = String(entries.length).length;
+  const lines = entries.map((e, i) => {
+    const name = e.type === "dir" ? `${e.name}/` : e.name;
+    const size = e.type === "file" ? human(e.size) : "";
+    return `${String(i + 1).padStart(numWidth)}\t${name.padEnd(width)}\t${size}`;
+  });
+  lines.push(
+    `${entries.length} ${entries.length === 1 ? "entry" : "entries"} in ${dir ?? "/"} on ${r}`
+  );
+  return lines.join("\n") + "\n";
+}
+
 // why a line exists: blame the line on the ref, then the blaming commit
 // cut down to that file, with the line itself for the prompt
 interface BlameData {
@@ -1133,19 +1259,26 @@ export interface WhyInput extends ExplainInput {
   question: string; // appended to the user turn after the payload
 }
 
+// a span may blame to several commits: their inputs merge, capped
+const WHY_LINES_CAP = 40;
+const WHY_COMMITS_CAP = 5;
+
 export async function whyInput(
   token: string,
   owner: string,
   repo: string,
   path: string,
   line: number,
-  ref?: string
+  ref?: string,
+  to?: number
 ): Promise<WhyInput> {
   const base = `/repos/${owner}/${repo}`;
-  if (!ref) {
-    const info = await gh(token, base);
-    ref = ((await info.json()) as { default_branch: string }).default_branch;
+  const last = to ?? line;
+  const label = to && to !== line ? `${line}-${to}` : `${line}`;
+  if (last - line + 1 > WHY_LINES_CAP) {
+    throw new GithubError(422, `why takes up to ${WHY_LINES_CAP} lines at a time`);
   }
+  if (!ref) ref = await defaultBranch(token, owner, repo);
   let fileRes: Response;
   try {
     fileRes = await gh(
@@ -1162,25 +1295,39 @@ export async function whyInput(
   const text = await fileRes.text();
   const lines = text.split("\n");
   if (lines.length && lines[lines.length - 1] === "") lines.pop();
-  if (line < 1 || line > lines.length) {
+  if (line < 1 || last > lines.length) {
     throw new GithubError(422, `${path} has ${lines.length} lines`);
   }
 
   const data = await ghql<BlameData>(token, BLAME_QUERY, { owner, name: repo, expr: ref, path });
   const ranges = data.repository?.object?.blame?.ranges ?? [];
-  const range = ranges.find((r) => r.startingLine <= line && line <= r.endingLine);
-  if (!range) throw new GithubError(404, `no blame for ${path}:${line} on ${ref}`);
-  const c = range.commit;
+  const covering = ranges.filter((r) => r.startingLine <= last && line <= r.endingLine);
+  if (!covering.length) throw new GithubError(404, `no blame for ${path}:${label} on ${ref}`);
+  const byOid = new Map(covering.map((r) => [r.commit.oid, r.commit]));
+  let commits = [...byOid.values()];
+  let capped = false;
+  if (commits.length > WHY_COMMITS_CAP) {
+    commits = [...commits]
+      .sort((a, b) => b.committedDate.localeCompare(a.committedDate))
+      .slice(0, WHY_COMMITS_CAP);
+    capped = true;
+  }
 
-  const input = await commitInput(token, owner, repo, c.oid);
-  const cut = filterDiff(input.diff, input.numstat, path);
+  const inputs = await Promise.all(commits.map((c) => commitInput(token, owner, repo, c.oid)));
+  const merged = inputs.length === 1 ? inputs[0] : mergeInputs(inputs);
+  const cut = filterDiff(merged.diff, merged.numstat, path);
+  const c = commits[0];
   const who = c.author.user?.login ?? c.author.name;
+  const note =
+    commits.length === 1
+      ? `${path}:${label} last changed in ${c.oid.slice(0, 7)} by ${who}, ${c.committedDate.slice(0, 10)}: ${c.messageHeadline}`
+      : `${path}:${label} last changed in ${commits.length} commits: ${commits.map((x) => x.oid.slice(0, 7)).join(" ")}${capped ? ` (the newest ${WHY_COMMITS_CAP})` : ""}`;
   return {
-    ...input,
+    ...merged,
     diff: cut.diff,
     numstat: cut.numstat,
-    note: `${path}:${line} last changed in ${c.oid.slice(0, 7)} by ${who}, ${c.committedDate.slice(0, 10)}: ${c.messageHeadline}`,
-    question: `\n\nthe line in question, ${path}:${line} on ${ref}:\n${lines[line - 1]}`,
+    note,
+    question: `\n\nthe ${to && to !== line ? "lines" : "line"} in question, ${path}:${label} on ${ref}:\n${lines.slice(line - 1, last).join("\n")}`,
   };
 }
 
