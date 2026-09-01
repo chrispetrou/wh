@@ -1259,8 +1259,7 @@ export interface WhyInput extends ExplainInput {
   question: string; // appended to the user turn after the payload
 }
 
-// a span may blame to several commits: their inputs merge, capped
-const WHY_LINES_CAP = 40;
+// a span may blame to several commits: their inputs merge, the newest few win
 const WHY_COMMITS_CAP = 5;
 
 export async function whyInput(
@@ -1275,9 +1274,6 @@ export async function whyInput(
   const base = `/repos/${owner}/${repo}`;
   const last = to ?? line;
   const label = to && to !== line ? `${line}-${to}` : `${line}`;
-  if (last - line + 1 > WHY_LINES_CAP) {
-    throw new GithubError(422, `why takes up to ${WHY_LINES_CAP} lines at a time`);
-  }
   if (!ref) ref = await defaultBranch(token, owner, repo);
   let fileRes: Response;
   try {

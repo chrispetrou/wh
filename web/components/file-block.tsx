@@ -83,12 +83,13 @@ export function FileBlock({
   }, [storeKey, key, owner, repo, block.path, block.ref]);
 
   // highlight once per loaded text, importing hljs only when the
-  // extension is known; plain text otherwise, and on any hljs failure
+  // extension is known; plain text otherwise, and on any hljs failure.
+  // no ref guard here: a guard that survives the cleanup skips the
+  // re-run react does in dev, and the block came back plain after a
+  // tab switch (the text is already in the store when this remounts)
   const [html, setHtml] = useState<string[] | null>(null);
-  const litRef = useRef<FileDetail | null>(null);
   useEffect(() => {
-    if (!file || litRef.current === file) return;
-    litRef.current = file;
+    if (!file) return;
     const lang = langFor(block.path);
     if (!lang) return;
     let dead = false;

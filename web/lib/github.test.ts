@@ -649,14 +649,11 @@ describe("whyInput", () => {
     expect(w.diff).not.toContain("other.ts");
   });
 
-  it("rejects lines past the end, missing files, and huge spans", async () => {
+  it("rejects lines past the end and missing files", async () => {
     whyStub();
     await expect(whyInput("t", "o", "r", "src/a.ts", 9)).rejects.toThrow("src/a.ts has 3 lines");
     await expect(whyInput("t", "o", "r", "src/a.ts", 1, undefined, 9)).rejects.toThrow(
       "src/a.ts has 3 lines"
-    );
-    await expect(whyInput("t", "o", "r", "src/a.ts", 1, undefined, 60)).rejects.toThrow(
-      "why takes up to 40 lines at a time"
     );
     await expect(whyInput("t", "o", "r", "missing.ts", 1)).rejects.toThrow(
       "missing.ts not found on main"

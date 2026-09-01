@@ -120,7 +120,7 @@ scrolled to that line, marked; clicking any line number prefills
 `why <path>:<line>` in the prompt (shift+click a second number to span,
 `why <path>:<from>-<to>`), so reading a file flows straight into asking
 about it. A span blames every line and merges the commits behind it
-(up to 40 lines, the 5 newest commits). Files are fetched lazily (the transcript stores only
+(the 5 newest commits when there are more). Files are fetched lazily (the transcript stores only
 the address), capped at 500k or 5000 lines with a note; binaries and
 directories are refused with a pointer to the right command. `ls
 [<dir>]` lists a directory, dirs first with sizes, for finding paths at
