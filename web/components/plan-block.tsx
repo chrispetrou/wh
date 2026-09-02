@@ -29,6 +29,7 @@ import {
   type PlanBlock as Plan,
 } from "@/lib/plan";
 import { relTime } from "@/lib/utils";
+import { useNow } from "@/lib/now";
 import { absolute, Action, Chip, CopyAction } from "./block-bits";
 
 const NONE: string[] = [];
@@ -63,6 +64,7 @@ export function PlanBlock({
   submit: (command: string) => void;
   fresh?: boolean;
 }) {
+  const now = useNow();
   const live = useSyncExternalStore(
     (cb) => chatStore.subscribe(storeKey, cb),
     () => chatStore.live(storeKey),
@@ -179,7 +181,6 @@ export function PlanBlock({
   const actions = block.mode === "pick" ? PICK_ACTIONS : REBASE_ACTIONS;
 
   const numW = String(rows.length).length;
-  const now = Date.now();
   const widest = (xs: string[]) => Math.max(1, ...xs.map((s) => s.length));
   const col = (chars: number) => `calc(${chars}ch + 12px)`;
   const authorW = col(widest(rows.map((r) => r.author)));

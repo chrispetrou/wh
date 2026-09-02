@@ -13,6 +13,7 @@ import { commandHint, parseCommand } from "@/lib/commands";
 import { move, setAction } from "@/lib/plan";
 import { signInAgain, takeResume } from "@/lib/signin";
 import { keyStore } from "@/lib/key-store";
+import { useHydrated } from "@/lib/hydrated";
 import { createEmit } from "@/lib/terminal/emit";
 import { activeEffort, effortIgnored, providerInfo, seconds, usageInfo } from "@/lib/terminal/info";
 import { COMMANDS, type Menu } from "@/lib/terminal/menu";
@@ -54,12 +55,14 @@ export function TerminalChat({
   );
   const [input, setInput] = useState("");
   const [hasKey, setHasKey] = useState(true); // corrected on mount
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useHydrated();
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const initRef = useRef(false);
-  const historyRef = useRef<string[]>([]);
+  // follow new output only while the view is pinned to the bottom, so
+  // scrolling up to read earlier lines is never yanked back mid-stream.
+  // a submit re-pins
+  const pinnedRef = useRef(true);
+  const [history, setHistory] = useState<string[]>([]);
   const [histPos, setHistPos] = useState(-1);
   const [search, setSearch] = useState<{ q: string; idx: number } | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -67,9 +70,10 @@ export function TerminalChat({
   const prompt = `${owner}/${repo} $`;
 
   // lines that mark a state change (not streamed text, not the echo)
-  // enter with a short fade; restored lines never animate
-  const freshRef = useRef(new WeakSet<ChatLine>());
-  const emit = createEmit({ storeKey, prompt, fresh: freshRef.current });
+  // enter with a short fade; restored lines never animate. a lazy state
+  // slot keeps the set stable and readable during render
+  const [fresh] = useState(() => new WeakSet<ChatLine>());
+  const emit = createEmit({ storeKey, prompt, fresh });
   const { push, muted, echo, ok } = emit;
 
   const { menu, menuSel, setMenuSel, changeInput, dismiss, branchList, logRows, prRows, menuKey } =
@@ -116,11 +120,12 @@ export function TerminalChat({
     if (!raw) return;
     setInput("");
     setHistPos(-1);
+    setElapsed(0); // the cursor never opens on the last stream's time
     pinnedRef.current = true;
     chatStore.setLive(storeKey, undefined); // a new command takes the keys back
 
     if (raw.startsWith("/")) {
-      if (!/^\/key\s/i.test(raw)) historyRef.current.unshift(raw);
+      if (!/^\/key\s/i.test(raw)) setHistory((h) => [raw, ...h]);
       slash(raw);
       return;
     }
@@ -137,7 +142,7 @@ export function TerminalChat({
       return;
     }
 
-    historyRef.current.unshift(raw);
+    setHistory((h) => [raw, ...h]);
     echo(raw);
     const cmd = parseCommand(raw);
     if (!cmd) {
@@ -241,9 +246,7 @@ export function TerminalChat({
     }
   };
 
-  useEffect(() => {
-    if (initRef.current) return; // strict mode re-runs mount effects
-    initRef.current = true;
+  const init = () => {
     const present = keyStore.providers().length > 0;
     setHasKey(present);
     // remember this repo for the picker's recent-first ordering
@@ -278,26 +281,29 @@ export function TerminalChat({
     } else {
       muted([commandHint]);
     }
+  };
+
+  // boot runs once, a tick after mount: the timeout keeps setState out
+  // of the effect body, and its cleanup absorbs the strict mode re-run
+  useEffect(() => {
+    const boot = setTimeout(init, 0);
+    return () => clearTimeout(boot);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // elapsed ticker for the streaming cursor
+  // elapsed ticker for the streaming cursor. the zero-delay tick settles
+  // the first value; nothing sets state in the effect body itself
   useEffect(() => {
-    if (!busy) {
-      setElapsed(0);
-      return;
-    }
-    const iv = setInterval(
-      () => setElapsed(Date.now() - chatStore.startedAt(storeKey)),
-      100
-    );
-    return () => clearInterval(iv);
+    if (!busy) return;
+    const update = () => setElapsed(Date.now() - chatStore.startedAt(storeKey));
+    const first = setTimeout(update, 0);
+    const iv = setInterval(update, 100);
+    return () => {
+      clearTimeout(first);
+      clearInterval(iv);
+    };
   }, [busy, storeKey]);
 
-  // follow new output only while the view is pinned to the bottom, so
-  // scrolling up to read earlier lines is never yanked back mid-stream.
-  // a submit re-pins
-  const pinnedRef = useRef(true);
   const onLogScroll = () => {
     const el = logRef.current;
     if (el) pinnedRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
@@ -335,9 +341,8 @@ export function TerminalChat({
 
   // ctrl+r reverse history search
   const searchMatch = (q: string, from: number): number => {
-    const h = historyRef.current;
-    for (let i = from; i < h.length; i++) {
-      if (h[i].includes(q)) return i;
+    for (let i = from; i < history.length; i++) {
+      if (history[i].includes(q)) return i;
     }
     return -1;
   };
@@ -356,7 +361,7 @@ export function TerminalChat({
         setSearch(null);
       } else if (e.key === "Enter") {
         const i = searchMatch(search.q, search.idx);
-        if (i >= 0) recall(historyRef.current[i]);
+        if (i >= 0) recall(history[i]);
         setSearch(null);
       } else if (e.key === "r" && e.ctrlKey) {
         const i = searchMatch(search.q, search.idx);
@@ -473,18 +478,17 @@ export function TerminalChat({
       e.preventDefault();
       submit();
     } else if (e.key === "ArrowUp") {
-      const h = historyRef.current;
-      if (h.length === 0) return;
+      if (history.length === 0) return;
       e.preventDefault();
-      const next = Math.min(histPos + 1, h.length - 1);
+      const next = Math.min(histPos + 1, history.length - 1);
       setHistPos(next);
-      recall(h[next]);
+      recall(history[next]);
     } else if (e.key === "ArrowDown") {
       if (histPos < 0) return;
       e.preventDefault();
       const next = histPos - 1;
       setHistPos(next);
-      recall(next < 0 ? "" : historyRef.current[next]);
+      recall(next < 0 ? "" : history[next]);
     } else if (e.key === "Escape") {
       chatStore.abort(storeKey);
     }
@@ -512,7 +516,7 @@ export function TerminalChat({
             <div
               key={l.id ?? i}
               className={`${l.prefix && i > 0 ? "mt-3" : ""} ${
-                !l.block && freshRef.current.has(l) ? "line-in" : ""
+                !l.block && fresh.has(l) ? "line-in" : ""
               }`}
               data-drop={l.drop}
             >
@@ -526,10 +530,10 @@ export function TerminalChat({
                     line={i}
                     storeKey={storeKey}
                     submit={(c) => submit(c)}
-                    fresh={freshRef.current.has(l)}
+                    fresh={fresh.has(l)}
                   />
                 ) : l.block.kind === "stat" ? (
-                  <StatBlock block={l.block} fresh={freshRef.current.has(l)} />
+                  <StatBlock block={l.block} fresh={fresh.has(l)} />
                 ) : l.block.kind === "file" ? (
                   <FileBlock
                     block={l.block}
@@ -541,7 +545,7 @@ export function TerminalChat({
                       recall(v);
                       inputRef.current?.focus();
                     }}
-                    fresh={freshRef.current.has(l)}
+                    fresh={fresh.has(l)}
                   />
                 ) : (
                   <LogBlock
@@ -551,7 +555,7 @@ export function TerminalChat({
                     owner={owner}
                     repo={repo}
                     submit={(c) => submit(c)}
-                    fresh={freshRef.current.has(l)}
+                    fresh={fresh.has(l)}
                   />
                 )
               ) : l.action === "signin" ? (
@@ -594,7 +598,7 @@ export function TerminalChat({
           (reverse-i-search) &apos;{search.q}&apos;:{" "}
           {(() => {
             const i = searchMatch(search.q, search.idx);
-            return i >= 0 ? historyRef.current[i] : "";
+            return i >= 0 ? history[i] : "";
           })()}
         </div>
       ) : menu ? (

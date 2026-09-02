@@ -18,6 +18,7 @@ import {
 } from "@/lib/chat-store";
 import type { LaneRow } from "@/lib/graph";
 import { signInAgain } from "@/lib/signin";
+import { useNow } from "@/lib/now";
 import { relTime } from "@/lib/utils";
 
 const LANE_W = 14;
@@ -184,6 +185,7 @@ export function LogBlock({
   submit: (command: string) => void;
   fresh?: boolean; // just arrived in this session: enters with a fade
 }) {
+  const now = useNow();
   const live = useSyncExternalStore(
     (cb) => chatStore.subscribe(storeKey, cb),
     () => chatStore.live(storeKey),
@@ -302,7 +304,6 @@ export function LogBlock({
   // every row is its own grid, so the right-hand columns are sized once
   // here from the longest value, or they would shift row by row. cells
   // carry 6px of padding each side (.log-cell); numbers 8px (.log-num)
-  const now = Date.now();
   const widest = (xs: string[]) => Math.max(1, ...xs.map((s) => s.length));
   const col = (chars: number) => `calc(${chars}ch + 12px)`;
   const authorW = col(widest(block.rows.map((r) => r.author)));

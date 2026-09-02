@@ -28,14 +28,12 @@ export function validSlug(owner: string, repo: string): boolean {
 // lands in an api url (and when it arrives from the client)
 export function validPath(p: string): boolean {
   if (!p || p.length > 500 || p.startsWith("/")) return false;
-  // eslint-disable-next-line no-control-regex
   if (/[\x00-\x1f]/.test(p)) return false;
   return p.split("/").every((s) => s !== "" && s !== "." && s !== "..");
 }
 
 // a ref name, loosely: enough to reject traversal and header tricks
 export function validRef(r: string): boolean {
-  // eslint-disable-next-line no-control-regex
   return r.length > 0 && r.length <= 300 && !r.includes("..") && !/[\x00-\x1f ]/.test(r);
 }
 
