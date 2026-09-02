@@ -7,7 +7,7 @@ use predicates::prelude::*;
 fn single_main_clean() {
     let t = TestRepo::new();
     t.commit("init");
-    t.wd()
+    t.wh()
         .arg("ls")
         .assert()
         .success()
@@ -21,7 +21,7 @@ fn counts_dirty_files() {
     t.commit("init");
     t.write("a.txt", "changed");
     t.write("b.txt", "untracked");
-    t.wd()
+    t.wh()
         .arg("ls")
         .assert()
         .success()
@@ -32,7 +32,7 @@ fn counts_dirty_files() {
 fn no_upstream_no_segment() {
     let t = TestRepo::new();
     t.commit("init");
-    t.wd()
+    t.wh()
         .arg("ls")
         .assert()
         .success()
@@ -54,7 +54,7 @@ fn shows_ahead_and_behind() {
     std::fs::write(clone.join("b.txt"), "x").unwrap();
     t.git_in(&clone, &["add", "-A"]);
     t.git_in(&clone, &["commit", "-m", "local"]);
-    t.wd_in(&clone)
+    t.wh_in(&clone)
         .arg("ls")
         .assert()
         .success()
@@ -64,7 +64,7 @@ fn shows_ahead_and_behind() {
     t.write("c.txt", "y");
     t.commit("remote");
     t.git_in(&clone, &["fetch", "origin"]);
-    t.wd_in(&clone)
+    t.wh_in(&clone)
         .arg("ls")
         .assert()
         .success()
@@ -76,7 +76,7 @@ fn detached_worktree_listed() {
     let t = TestRepo::new();
     t.commit("init");
     t.git(&["worktree", "add", "--detach", "../repo.det"]);
-    t.wd()
+    t.wh()
         .arg("ls")
         .assert()
         .success()
@@ -87,8 +87,8 @@ fn detached_worktree_listed() {
 fn main_listed_first() {
     let t = TestRepo::new();
     t.commit("init");
-    t.wd().args(["new", "aaa"]).assert().success();
-    let out = t.wd().arg("ls").assert().success();
+    t.wh().args(["new", "aaa"]).assert().success();
+    let out = t.wh().arg("ls").assert().success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let first = stdout.lines().next().unwrap();
     assert!(

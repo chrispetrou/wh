@@ -377,7 +377,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "wd"
+name = "wh"
 version = "0.1.0"
 dependencies = [
  "assert_cmd",

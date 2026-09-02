@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="720" height="360" viewBox="0 0 720 360" font-family="ui-monospace,SFMono-Regular,'SF Mono','Cascadia Mono','JetBrains Mono',Menlo,Consolas,monospace" font-size="13" role="img" aria-label="wd init zsh">
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="360" viewBox="0 0 720 360" font-family="ui-monospace,SFMono-Regular,'SF Mono','Cascadia Mono','JetBrains Mono',Menlo,Consolas,monospace" font-size="13" role="img" aria-label="wh init zsh">
 <style>
 text{fill:#1a1a1a;white-space:pre}
 .o{fill:#8a8a8a}.g{fill:#2f9e44}.a{fill:#b08900}.x{fill:#4263eb}.f{fill:#c8c8c8}
@@ -123,7 +123,7 @@ text{fill:#1a1a1a;white-space:pre}
 
 <text class="rv o r0x2_033" x="16" y="30">~/repo $</text>
 <text class="rv c r0x2_033" x="86.2" y="30">w</text>
-<text class="rv c r0_889x2_922" x="94" y="30">d</text>
+<text class="rv c r0_889x2_922" x="94" y="30">h</text>
 <text class="rv c r2_668x4_701" x="109.6" y="30">i</text>
 <text class="rv c r3_558x5_591" x="117.4" y="30">n</text>
 <text class="rv c r4_447x6_48" x="125.2" y="30">i</text>
@@ -132,14 +132,14 @@ text{fill:#1a1a1a;white-space:pre}
 <text class="rv c r8_005x10_038" x="156.4" y="30">s</text>
 <text class="rv c r8_895x10_928" x="164.2" y="30">h</text>
 <g class="cv k10v"><rect fill="#1a1a1a" class="k10" x="86.2" y="18" width="7" height="15"/></g>
-<text class="rv o r16_773x18_806" x="16" y="52"># wd shell integration: add to your rc file</text>
-<text xml:space="preserve" class="rv o r18_424x20_457" x="16" y="74">#   eval "$(wd init zsh)"</text>
-<text class="rv  r20_076x22_109" x="16" y="96">wd() {</text>
+<text class="rv o r16_773x18_806" x="16" y="52"># wh shell integration: add to your rc file</text>
+<text xml:space="preserve" class="rv o r18_424x20_457" x="16" y="74">#   eval "$(wh init zsh)"</text>
+<text class="rv  r20_076x22_109" x="16" y="96">wh() {</text>
 <text xml:space="preserve" class="rv  r21_728x23_761" x="16" y="118">  if [ "$1" = "switch" ]; then</text>
-<text xml:space="preserve" class="rv  r23_38x25_413" x="16" y="140">    local _wd_dir</text>
-<text xml:space="preserve" class="rv  r25_032x27_065" x="16" y="162">    _wd_dir="$(command wd "$@")" &amp;&amp; cd "$_wd_dir"</text>
+<text xml:space="preserve" class="rv  r23_38x25_413" x="16" y="140">    local _wh_dir</text>
+<text xml:space="preserve" class="rv  r25_032x27_065" x="16" y="162">    _wh_dir="$(command wh "$@")" &amp;&amp; cd "$_wh_dir"</text>
 <text xml:space="preserve" class="rv  r26_684x28_717" x="16" y="184">  else</text>
-<text xml:space="preserve" class="rv  r28_335x30_368" x="16" y="206">    command wd "$@"</text>
+<text xml:space="preserve" class="rv  r28_335x30_368" x="16" y="206">    command wh "$@"</text>
 <text xml:space="preserve" class="rv  r29_987x32_02" x="16" y="228">  fi</text>
 <text class="rv  r31_639x33_672" x="16" y="250">}</text>
 <text class="rv o r39_644x41_677" x="16" y="294">~/repo $</text>
@@ -151,7 +151,7 @@ text{fill:#1a1a1a;white-space:pre}
 <text class="rv c r43_075x45_108" x="133" y="294">$</text>
 <text class="rv c r43_647x45_68" x="140.8" y="294">(</text>
 <text class="rv c r44_219x46_252" x="148.6" y="294">w</text>
-<text class="rv c r44_79x46_823" x="156.4" y="294">d</text>
+<text class="rv c r44_79x46_823" x="156.4" y="294">h</text>
 <text class="rv c r45_934x47_967" x="172" y="294">i</text>
 <text class="rv c r46_506x48_539" x="179.8" y="294">n</text>
 <text class="rv c r47_078x49_111" x="187.6" y="294">i</text>
@@ -164,7 +164,7 @@ text{fill:#1a1a1a;white-space:pre}
 <g class="cv k40v"><rect fill="#1a1a1a" class="k40" x="86.2" y="282" width="7" height="15"/></g>
 <text class="rv o r58_64x60_673" x="16" y="316">~/repo $</text>
 <text class="rv c r58_64x60_673" x="86.2" y="316">w</text>
-<text class="rv c r59_339x61_372" x="94" y="316">d</text>
+<text class="rv c r59_339x61_372" x="94" y="316">h</text>
 <text class="rv c r60_737x62_77" x="109.6" y="316">s</text>
 <text class="rv c r61_436x63_469" x="117.4" y="316">w</text>
 <text class="rv c r62_135x64_168" x="125.2" y="316">i</text>

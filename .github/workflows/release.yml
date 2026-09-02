@@ -36,18 +36,18 @@ jobs:
       - run: cargo build --release --target ${{ matrix.target }}
       - name: size gate (binary must stay under 3.2MiB)
         run: |
-          f=target/${{ matrix.target }}/release/wd
+          f=target/${{ matrix.target }}/release/wh
           size=$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f")
           echo "binary: $size bytes"
           test "$size" -lt 3355443
       - name: package
         run: |
           cd target/${{ matrix.target }}/release
-          tar czf wd-${{ github.ref_name }}-${{ matrix.target }}.tar.gz wd
+          tar czf wh-${{ github.ref_name }}-${{ matrix.target }}.tar.gz wh
       - uses: actions/upload-artifact@v4
         with:
-          name: wd-${{ matrix.target }}
-          path: cli/target/${{ matrix.target }}/release/wd-*.tar.gz
+          name: wh-${{ matrix.target }}
+          path: cli/target/${{ matrix.target }}/release/wh-*.tar.gz
 
   publish:
     needs: build

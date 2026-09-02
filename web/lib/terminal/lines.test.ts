@@ -16,12 +16,12 @@ describe("classify", () => {
     expect(classify("text", "summary").cls).toBe("a");
     expect(classify("text", "watch out ").cls).toBe("a");
     expect(classify("text", "plain words")).toEqual({ text: "plain words", cls: "" });
-    expect(classify("text", "[wd:error] boom")).toEqual({
+    expect(classify("text", "[wh:error] boom")).toEqual({
       head: { text: "error:", cls: "a" },
       text: " boom",
       cls: "",
     });
-    expect(classify("text", "[wd:hint] try /key")).toEqual({ text: "try /key", cls: "o" });
+    expect(classify("text", "[wh:hint] try /key")).toEqual({ text: "try /key", cls: "o" });
   });
 
   it("hands listings to their row shapes", () => {
@@ -96,14 +96,14 @@ describe("assembler", () => {
   it("takes the usage sentinel aside and leaves it out of the answer", () => {
     const a = createAssembler();
     a.reset("text");
-    expect(a.feed('line\n[wd:usage] {"in":10,"out":2}\n[wd:hint] x\n')).toEqual([
+    expect(a.feed('line\n[wh:usage] {"in":10,"out":2}\n[wh:hint] x\n')).toEqual([
       { text: "line", cls: "" },
       { text: "x", cls: "o" },
     ]);
     expect(a.takeUsage()).toEqual({ in: 10, out: 2 });
     expect(a.takeUsage()).toBeNull();
     expect(a.answer()).toBe("line\n");
-    expect(a.feed("[wd:usage] not json\n")).toEqual([]);
+    expect(a.feed("[wh:usage] not json\n")).toEqual([]);
   });
 
   it("follows its mode", () => {

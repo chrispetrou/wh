@@ -6,7 +6,7 @@ import { cookies } from "next/headers";
 import { loginAllowed } from "./allowlist";
 import { secureCookies } from "./origin";
 
-export interface WdSession {
+export interface WhSession {
   token?: string;
   login?: string;
   since?: number; // sign-in time, epoch ms: the ceiling counts from here
@@ -19,7 +19,7 @@ export const MAX_SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 // read per call: a first-run setup writes the secret while the process
 // runs
 export const sessionOptions = (): SessionOptions => ({
-  cookieName: "wd_session",
+  cookieName: "wh_session",
   password: process.env.SESSION_SECRET ?? "",
   ttl: 60 * 60 * 24 * 7,
   cookieOptions: {
@@ -30,9 +30,9 @@ export const sessionOptions = (): SessionOptions => ({
   },
 });
 
-export async function getSession(): Promise<IronSession<WdSession>> {
-  const session = await getIronSession<WdSession>(await cookies(), sessionOptions());
-  // a login dropped from WD_ALLOWED_LOGINS loses access on its next
+export async function getSession(): Promise<IronSession<WhSession>> {
+  const session = await getIronSession<WhSession>(await cookies(), sessionOptions());
+  // a login dropped from WH_ALLOWED_LOGINS loses access on its next
   // request: strip the in-memory session, never destroy() (cookie
   // writes are illegal during server-component render). touch() then
   // never re-seals it, so the stale cookie lapses within its ttl
@@ -52,7 +52,7 @@ export async function getSession(): Promise<IronSession<WdSession>> {
 // sliding expiry: every api call re-issues the cookie, so a session ends
 // after a week of silence, never in the middle of a working day. past the
 // ceiling it is not renewed; it then runs out on its own within the week
-export async function touch(session: IronSession<WdSession>): Promise<void> {
+export async function touch(session: IronSession<WhSession>): Promise<void> {
   if (!session.token) return;
   if (session.since && Date.now() - session.since > MAX_SESSION_MS) return;
   await session.save();

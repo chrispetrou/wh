@@ -76,8 +76,8 @@ function effortBody(provider: ProviderName, effort?: string) {
 function chatCompletionsUrl(provider: "openai" | "groq"): string {
   const base =
     provider === "groq"
-      ? (process.env.WD_GROQ_URL ?? "https://api.groq.com/openai")
-      : (process.env.WD_OPENAI_URL ?? "https://api.openai.com");
+      ? (process.env.WH_GROQ_URL ?? "https://api.groq.com/openai")
+      : (process.env.WH_OPENAI_URL ?? "https://api.openai.com");
   return `${base}/v1/chat/completions`;
 }
 
@@ -275,7 +275,7 @@ export function buildRequest(
   const chosen = model || DEFAULT_MODELS[provider];
   if (provider === "anthropic") {
     return {
-      url: `${process.env.WD_ANTHROPIC_URL ?? "https://api.anthropic.com"}/v1/messages`,
+      url: `${process.env.WH_ANTHROPIC_URL ?? "https://api.anthropic.com"}/v1/messages`,
       headers: {
         "content-type": "application/json",
         "x-api-key": key,
@@ -345,7 +345,7 @@ export function buildFollowupRequest(
         : { role: m.role, content: m.content }
     );
     return {
-      url: `${process.env.WD_ANTHROPIC_URL ?? "https://api.anthropic.com"}/v1/messages`,
+      url: `${process.env.WH_ANTHROPIC_URL ?? "https://api.anthropic.com"}/v1/messages`,
       headers: {
         "content-type": "application/json",
         "x-api-key": key,

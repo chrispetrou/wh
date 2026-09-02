@@ -12,7 +12,7 @@ fn dry_run_prints_payload() {
     t.commit("first");
     t.write("a.txt", "one\ntwo\n");
     t.commit("second");
-    t.wd()
+    t.wh()
         .args(["explain", "--dry-run"])
         .assert()
         .success()
@@ -32,7 +32,7 @@ fn dry_run_excludes_lockfiles() {
     t.write("Cargo.lock", "v2\n");
     t.write("src/main.rs", "fn main() { run() }\n");
     t.commit("second");
-    t.wd()
+    t.wh()
         .args(["explain", "--dry-run"])
         .assert()
         .success()
@@ -51,7 +51,7 @@ fn bare_ref_means_ref_to_head() {
     t.commit("second");
     t.write("a.txt", "three\n");
     t.commit("third");
-    t.wd()
+    t.wh()
         .args(["explain", "--dry-run", "main~2"])
         .assert()
         .success()
@@ -63,7 +63,7 @@ fn empty_range_errors() {
     let t = TestRepo::new();
     t.commit("first");
     t.commit("second");
-    t.wd()
+    t.wh()
         .args(["explain", "--dry-run", "HEAD..HEAD"])
         .assert()
         .failure()
@@ -171,10 +171,10 @@ fn streams_from_fake_ollama() {
         "{\"message\":{\"role\":\"assistant\",\"content\":\"\\nwatch out\\nnothing notable.\\n\"},\"done\":false}\n",
         "{\"done\":true,\"prompt_eval_count\":11,\"eval_count\":6}\n",
     ]);
-    t.wd()
-        .env("WD_PROVIDER", "ollama")
-        .env("WD_OLLAMA_URL", &url)
-        .env("WD_MODEL", "test-model")
+    t.wh()
+        .env("WH_PROVIDER", "ollama")
+        .env("WH_OLLAMA_URL", &url)
+        .env("WH_MODEL", "test-model")
         .arg("explain")
         .assert()
         .success()
@@ -196,7 +196,7 @@ fn streams_from_fake_ollama() {
     assert!(request.contains("\"model\":\"test-model\""));
     assert!(request.contains("\"stream\":true"));
     assert!(
-        request.contains("wd explain"),
+        request.contains("wh explain"),
         "system prompt should be sent"
     );
 }
@@ -208,10 +208,10 @@ fn changelog_flag_sends_the_release_notes_prompt() {
         "{\"message\":{\"role\":\"assistant\",\"content\":\"changed\\ntwo replaces one.\\n\"},\"done\":false}\n",
         "{\"done\":true}\n",
     ]);
-    t.wd()
-        .env("WD_PROVIDER", "ollama")
-        .env("WD_OLLAMA_URL", &url)
-        .env("WD_MODEL", "test-model")
+    t.wh()
+        .env("WH_PROVIDER", "ollama")
+        .env("WH_OLLAMA_URL", &url)
+        .env("WH_MODEL", "test-model")
         .args(["explain", "--changelog"])
         .assert()
         .success()
@@ -248,7 +248,7 @@ fn forked() -> TestRepo {
 #[test]
 fn describe_defaults_to_the_default_branch_with_merge_base() {
     let t = forked();
-    t.wd()
+    t.wh()
         .args(["explain", "--describe", "--dry-run"])
         .assert()
         .success()
@@ -262,7 +262,7 @@ fn describe_defaults_to_the_default_branch_with_merge_base() {
 #[test]
 fn three_dot_range_logs_only_the_head_side() {
     let t = forked();
-    t.wd()
+    t.wh()
         .args(["explain", "--dry-run", "main...feat"])
         .assert()
         .success()
@@ -279,10 +279,10 @@ fn describe_flag_sends_the_pr_prompt_and_branch_context() {
         "{\"message\":{\"role\":\"assistant\",\"content\":\"\\ndescription\\nthe feature.\\n\"},\"done\":false}\n",
         "{\"done\":true}\n",
     ]);
-    t.wd()
-        .env("WD_PROVIDER", "ollama")
-        .env("WD_OLLAMA_URL", &url)
-        .env("WD_MODEL", "test-model")
+    t.wh()
+        .env("WH_PROVIDER", "ollama")
+        .env("WH_OLLAMA_URL", &url)
+        .env("WH_MODEL", "test-model")
         .args(["explain", "--describe"])
         .assert()
         .success()
@@ -308,7 +308,7 @@ fn describe_flag_sends_the_pr_prompt_and_branch_context() {
 #[test]
 fn describe_and_changelog_conflict() {
     let t = two_commits();
-    t.wd()
+    t.wh()
         .args(["explain", "--describe", "--changelog"])
         .assert()
         .code(2)
@@ -319,7 +319,7 @@ fn describe_and_changelog_conflict() {
 fn describe_without_a_default_branch_says_so() {
     let t = two_commits();
     t.git(&["branch", "-m", "main", "trunk"]);
-    t.wd()
+    t.wh()
         .args(["explain", "--describe", "--dry-run"])
         .assert()
         .failure()
@@ -333,9 +333,9 @@ fn provider_error_body_is_surfaced() {
         ok("application/x-ndjson"),
         &["{\"error\":\"model not found\"}\n"],
     );
-    t.wd()
-        .env("WD_PROVIDER", "ollama")
-        .env("WD_OLLAMA_URL", &url)
+    t.wh()
+        .env("WH_PROVIDER", "ollama")
+        .env("WH_OLLAMA_URL", &url)
         .arg("explain")
         .assert()
         .failure()
@@ -348,13 +348,13 @@ fn provider_error_body_is_surfaced() {
 fn streams_from_fake_groq_sse() {
     let t = two_commits();
     let (url, server) = fake_server(ok("text/event-stream"), GROQ_ANSWER);
-    // no WD_PROVIDER: exercises auto-detect, so the developer's own paid
+    // no WH_PROVIDER: exercises auto-detect, so the developer's own paid
     // keys must not be allowed to outrank the groq key
-    t.wd()
+    t.wh()
         .env_remove("ANTHROPIC_API_KEY")
         .env_remove("OPENAI_API_KEY")
         .env("GROQ_API_KEY", "gsk_test")
-        .env("WD_GROQ_URL", &url)
+        .env("WH_GROQ_URL", &url)
         .arg("explain")
         .assert()
         .success()
@@ -384,10 +384,10 @@ fn a_rejected_key_names_its_variable() {
         failing("401 Unauthorized", &[]),
         &["{\"error\":{\"message\":\"Invalid API Key\",\"type\":\"invalid_request_error\",\"code\":\"invalid_api_key\"}}"],
     );
-    t.wd()
-        .env("WD_PROVIDER", "groq")
+    t.wh()
+        .env("WH_PROVIDER", "groq")
         .env("GROQ_API_KEY", "gsk_bad")
-        .env("WD_GROQ_URL", &url)
+        .env("WH_GROQ_URL", &url)
         .arg("explain")
         .assert()
         .failure()
@@ -404,10 +404,10 @@ fn a_rate_limit_says_how_long_from_retry_after() {
         failing("429 Too Many Requests", &[("retry-after", "12")]),
         &["{\"error\":{\"message\":\"Rate limit reached\",\"type\":\"tokens\"}}"],
     );
-    t.wd()
-        .env("WD_PROVIDER", "groq")
+    t.wh()
+        .env("WH_PROVIDER", "groq")
         .env("GROQ_API_KEY", "gsk_test")
-        .env("WD_GROQ_URL", &url)
+        .env("WH_GROQ_URL", &url)
         .arg("explain")
         .assert()
         .failure()
@@ -423,10 +423,10 @@ fn an_empty_balance_says_where_to_top_up() {
         failing("402 Payment Required", &[]),
         &["{\"type\":\"error\",\"error\":{\"type\":\"billing_error\",\"message\":\"Your credit balance is too low to access the Anthropic API.\"}}"],
     );
-    t.wd()
-        .env("WD_PROVIDER", "anthropic")
+    t.wh()
+        .env("WH_PROVIDER", "anthropic")
         .env("ANTHROPIC_API_KEY", "sk-ant-test")
-        .env("WD_ANTHROPIC_URL", &url)
+        .env("WH_ANTHROPIC_URL", &url)
         .arg("explain")
         .assert()
         .failure()
@@ -442,10 +442,10 @@ fn an_overloaded_provider_is_named_as_such() {
         failing("529 Overloaded", &[]),
         &["{\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"Overloaded\"}}"],
     );
-    t.wd()
-        .env("WD_PROVIDER", "anthropic")
+    t.wh()
+        .env("WH_PROVIDER", "anthropic")
         .env("ANTHROPIC_API_KEY", "sk-ant-test")
-        .env("WD_ANTHROPIC_URL", &url)
+        .env("WH_ANTHROPIC_URL", &url)
         .arg("explain")
         .assert()
         .failure()
@@ -464,10 +464,10 @@ fn an_interim_100_is_skipped_for_the_reply() {
         },
         GROQ_ANSWER,
     );
-    t.wd()
-        .env("WD_PROVIDER", "groq")
+    t.wh()
+        .env("WH_PROVIDER", "groq")
         .env("GROQ_API_KEY", "gsk_test")
-        .env("WD_GROQ_URL", &url)
+        .env("WH_GROQ_URL", &url)
         .arg("explain")
         .assert()
         .success()
@@ -484,10 +484,10 @@ fn anthropic_usage_and_a_late_error_frame() {
         "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":15}}\n\n",
         "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
     ]);
-    t.wd()
-        .env("WD_PROVIDER", "anthropic")
+    t.wh()
+        .env("WH_PROVIDER", "anthropic")
         .env("ANTHROPIC_API_KEY", "sk-ant-test")
-        .env("WD_ANTHROPIC_URL", &url)
+        .env("WH_ANTHROPIC_URL", &url)
         .arg("explain")
         .assert()
         .success()
@@ -507,10 +507,10 @@ fn anthropic_usage_and_a_late_error_frame() {
         "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"summary\\nhalf an answer\"}}\n\n",
         "event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"Overloaded\"}}\n\n",
     ]);
-    t.wd()
-        .env("WD_PROVIDER", "anthropic")
+    t.wh()
+        .env("WH_PROVIDER", "anthropic")
         .env("ANTHROPIC_API_KEY", "sk-ant-test")
-        .env("WD_ANTHROPIC_URL", &url)
+        .env("WH_ANTHROPIC_URL", &url)
         .arg("explain")
         .assert()
         .failure()
@@ -534,10 +534,10 @@ fn low_headroom_is_a_warning() {
         },
         GROQ_ANSWER,
     );
-    t.wd()
-        .env("WD_PROVIDER", "groq")
+    t.wh()
+        .env("WH_PROVIDER", "groq")
         .env("GROQ_API_KEY", "gsk_test")
-        .env("WD_GROQ_URL", &url)
+        .env("WH_GROQ_URL", &url)
         .arg("explain")
         .assert()
         .success()
@@ -550,10 +550,10 @@ fn low_headroom_is_a_warning() {
 fn an_unreachable_host_is_named() {
     let t = two_commits();
     // nothing listens here
-    t.wd()
-        .env("WD_PROVIDER", "groq")
+    t.wh()
+        .env("WH_PROVIDER", "groq")
         .env("GROQ_API_KEY", "gsk_test")
-        .env("WD_GROQ_URL", "http://127.0.0.1:9")
+        .env("WH_GROQ_URL", "http://127.0.0.1:9")
         .arg("explain")
         .assert()
         .failure()
@@ -569,10 +569,10 @@ fn rejects_unknown_provider() {
     t.commit("first");
     t.write("a.txt", "two\n");
     t.commit("second");
-    t.wd()
-        .env("WD_PROVIDER", "nope")
+    t.wh()
+        .env("WH_PROVIDER", "nope")
         .arg("explain")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("unknown WD_PROVIDER 'nope'"));
+        .stderr(predicate::str::contains("unknown WH_PROVIDER 'nope'"));
 }

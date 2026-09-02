@@ -1469,7 +1469,7 @@ export async function logBlock(
   };
 }
 
-// branches with ahead/behind against the default branch, wd ls style.
+// branches with ahead/behind against the default branch, wh ls style.
 // counts come from per-branch compare calls, so they are capped.
 const BRANCH_COUNTS_CAP = 15;
 

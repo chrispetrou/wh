@@ -10,12 +10,12 @@ export function applyTheme(theme: Theme) {
   root.classList.remove("light", "dark");
   if (theme !== "auto") root.classList.add(theme);
   try {
-    if (theme === "auto") localStorage.removeItem("wd_theme");
-    else localStorage.setItem("wd_theme", theme);
+    if (theme === "auto") localStorage.removeItem("wh_theme");
+    else localStorage.setItem("wh_theme", theme);
   } catch {
     // storage may be blocked; the toggle still works for this page view
   }
-  window.dispatchEvent(new CustomEvent("wd-theme", { detail: theme }));
+  window.dispatchEvent(new CustomEvent("wh-theme", { detail: theme }));
 }
 
 // cross-fade the whole page where the browser can (see globals.css);
@@ -32,7 +32,7 @@ export function switchTheme(next: Theme) {
 
 export function currentTheme(): Theme {
   try {
-    const stored = localStorage.getItem("wd_theme");
+    const stored = localStorage.getItem("wh_theme");
     if (stored === "light" || stored === "dark") return stored;
   } catch {
     // ignore
@@ -43,8 +43,8 @@ export function currentTheme(): Theme {
 // applyTheme writes storage before dispatching, so currentTheme is the
 // snapshot and the event is only the change signal
 const subscribeTheme = (cb: () => void) => {
-  window.addEventListener("wd-theme", cb);
-  return () => window.removeEventListener("wd-theme", cb);
+  window.addEventListener("wh-theme", cb);
+  return () => window.removeEventListener("wh-theme", cb);
 };
 
 export function ThemeToggle() {

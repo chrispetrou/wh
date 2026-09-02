@@ -8,7 +8,7 @@ import { chatStore, type ChatLine } from "@/lib/chat-store";
 import { DEFAULT_MODELS, EFFORTS, MODEL_RE, modelFamily } from "@/lib/explain/providers";
 import { keyStore } from "@/lib/key-store";
 import type { Emit } from "@/lib/terminal/emit";
-import { HELP, helpLines, WD_HELP } from "@/lib/terminal/help";
+import { HELP, helpLines, WH_HELP } from "@/lib/terminal/help";
 import {
   effortIgnored,
   keyLines,
@@ -148,8 +148,8 @@ export function runSlash(ctx: SlashContext, raw: string) {
           ok("model", `${m}${target !== active ? ` (switched to ${target})` : ""}`);
           const notes: string[] = [];
           // said once; after that the green line is the whole story
-          if (!prefs.get("wd_model_hint")) {
-            prefs.set("wd_model_hint", "seen");
+          if (!prefs.get("wh_model_hint")) {
+            prefs.set("wh_model_hint", "seen");
             notes.push("it is sent per request, like the key.");
           }
           // providers with effort levels get the /effort menu right away,
@@ -220,7 +220,7 @@ export function runSlash(ctx: SlashContext, raw: string) {
         `keys      ${keyStore.providers().join(", ") || "none"}`,
         `usage     ${usageInfoRow()}`,
         `theme     ${currentTheme()}`,
-        `font      ${prefs.get("wd_font") || "default"} · ${prefs.get("wd_fontsize") || "13"}px · ligatures ${prefs.get("wd_lig") === "off" ? "off" : "on"}`,
+        `font      ${prefs.get("wh_font") || "default"} · ${prefs.get("wh_fontsize") || "13"}px · ligatures ${prefs.get("wh_lig") === "off" ? "off" : "on"}`,
         `context   ${c ? `active (${c.length} messages), follow-ups on` : "none, run a command first"}`,
       ]);
       break;
@@ -232,7 +232,7 @@ export function runSlash(ctx: SlashContext, raw: string) {
         ok("font", arg.toLowerCase());
       } else {
         muted([
-          `font is ${prefs.get("wd_font") || "default"}. usage: /font ${FONTS.join("|")}`,
+          `font is ${prefs.get("wh_font") || "default"}. usage: /font ${FONTS.join("|")}`,
         ]);
       }
       break;
@@ -301,15 +301,15 @@ export function runSlash(ctx: SlashContext, raw: string) {
       const blob = new Blob([text + "\n"], { type: "text/plain" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `wd-${owner}-${repo}.txt`;
+      a.download = `wh-${owner}-${repo}.txt`;
       a.click();
       URL.revokeObjectURL(a.href);
       ok("saved", a.download);
       break;
     }
-    case "wd":
+    case "wh":
       echo(raw);
-      push(helpLines(WD_HELP));
+      push(helpLines(WH_HELP));
       break;
     case "stop":
       echo(raw);

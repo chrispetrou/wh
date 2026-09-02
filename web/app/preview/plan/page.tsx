@@ -1,5 +1,5 @@
 // a fixture render of a rebase plan, for eyeballing the block without a
-// github session. only served when WD_PREVIEW=1 is set.
+// github session. only served when WH_PREVIEW=1 is set.
 import { notFound } from "next/navigation";
 import { PreviewPlan } from "./preview";
 
@@ -11,7 +11,7 @@ export default async function Page({
 }: {
   searchParams: Promise<{ theme?: string; open?: string }>;
 }) {
-  if (process.env.WD_PREVIEW !== "1") notFound();
+  if (process.env.WH_PREVIEW !== "1") notFound();
   const { theme, open } = await searchParams;
   return <PreviewPlan dark={theme === "dark"} open={open === "1"} />;
 }

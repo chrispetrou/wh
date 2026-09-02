@@ -1,5 +1,5 @@
 use crate::commands::ls::{self, Row};
-use crate::{output, WdError};
+use crate::{output, WhError};
 use std::collections::VecDeque;
 use std::env;
 use std::fs::{File, OpenOptions};
@@ -7,23 +7,23 @@ use std::io::{self, IsTerminal, Read, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-pub fn run(query: Option<&str>) -> Result<(), WdError> {
+pub fn run(query: Option<&str>) -> Result<(), WhError> {
     let cwd = env::current_dir()?;
     let rows = ls::collect_rows(&cwd)?;
     if rows.is_empty() {
-        return Err(WdError::Msg("no worktrees".into()));
+        return Err(WhError::Msg("no worktrees".into()));
     }
 
     if let Some(q) = query {
         let hits = matches(&rows, q);
         return match hits[..] {
-            [] => Err(WdError::Msg(format!("no worktree matches '{q}'"))),
+            [] => Err(WhError::Msg(format!("no worktree matches '{q}'"))),
             [i] => finish(&rows[i], &cwd),
             _ => {
                 for &i in &hits {
                     eprintln!("{}", rows[i].name);
                 }
-                Err(WdError::Msg(format!(
+                Err(WhError::Msg(format!(
                     "'{q}' matches {} worktrees",
                     hits.len()
                 )))
@@ -32,12 +32,12 @@ pub fn run(query: Option<&str>) -> Result<(), WdError> {
     }
 
     if !io::stdin().is_terminal() {
-        return Err(WdError::Msg(
-            "not a terminal; pass a query: wd switch <query>".into(),
+        return Err(WhError::Msg(
+            "not a terminal; pass a query: wh switch <query>".into(),
         ));
     }
     let mut tty = open_tty()
-        .map_err(|_| WdError::Msg("not a terminal; pass a query: wd switch <query>".into()))?;
+        .map_err(|_| WhError::Msg("not a terminal; pass a query: wh switch <query>".into()))?;
     match pick(&rows, &mut tty)? {
         Some(i) => finish(&rows[i], &cwd),
         None => std::process::exit(1), // cancelled; raw mode already restored
@@ -45,7 +45,7 @@ pub fn run(query: Option<&str>) -> Result<(), WdError> {
 }
 
 /// Path to stdout for the shell wrapper; the human-facing line to stderr.
-fn finish(row: &Row, cwd: &Path) -> Result<(), WdError> {
+fn finish(row: &Row, cwd: &Path) -> Result<(), WhError> {
     let abs = row.path.canonicalize().unwrap_or_else(|_| row.path.clone());
     println!("{}", abs.display());
     output::success_to_stderr(&format!(
@@ -165,7 +165,7 @@ impl Drop for RawGuard {
     }
 }
 
-fn pick(rows: &[Row], tty: &mut File) -> Result<Option<usize>, WdError> {
+fn pick(rows: &[Row], tty: &mut File) -> Result<Option<usize>, WhError> {
     let names: Vec<String> = rows.iter().map(|r| r.name.clone()).collect();
     let lines = ls::render(rows, false); // fixed widths, styling added per frame
 

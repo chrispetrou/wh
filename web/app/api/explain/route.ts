@@ -149,19 +149,19 @@ async function streamProvider(
       } catch {
         if (cancelled) return;
         dropped = true;
-        sentinel(`[wd:error] ${droppedFailure(request.url).error}`);
+        sentinel(`[wh:error] ${droppedFailure(request.url).error}`);
       }
       if (cancelled) return;
       if (!dropped) {
         // an error the provider sent on the 200 stream, in our words
         if (decoder.error) {
           const f = providerFailure(0, decoder.error, model, { provider });
-          sentinel(`[wd:error] ${f.error}`);
-          if (f.hint) sentinel(`[wd:hint] ${f.hint}`);
+          sentinel(`[wh:error] ${f.error}`);
+          if (f.hint) sentinel(`[wh:hint] ${f.hint}`);
         }
         // what the answer cost and what is left, for the client's count
         if (decoder.usage || left) {
-          sentinel(`[wd:usage] ${JSON.stringify({ ...(decoder.usage ?? {}), left })}`);
+          sentinel(`[wh:usage] ${JSON.stringify({ ...(decoder.usage ?? {}), left })}`);
         }
       }
       controller.close();
@@ -182,11 +182,11 @@ export async function POST(req: NextRequest) {
   if (!session.token) return err(401, "sign in required");
   await touch(session);
 
-  const key = req.headers.get("x-wd-provider-key") ?? "";
-  const model = req.headers.get("x-wd-model") ?? "";
+  const key = req.headers.get("x-wh-provider-key") ?? "";
+  const model = req.headers.get("x-wh-model") ?? "";
   if (model && !MODEL_RE.test(model)) return err(400, "invalid model name");
   const provider = key ? detectProvider(key) : null;
-  let effort = req.headers.get("x-wd-effort") ?? "";
+  let effort = req.headers.get("x-wh-effort") ?? "";
   if (effort && provider) {
     const levels = EFFORTS[provider];
     // a level left over from another provider's key is dropped, not
@@ -252,7 +252,7 @@ export async function POST(req: NextRequest) {
     }
   }
   // the browser's utc offset, so "today" is the user's day
-  const tz = Math.max(-840, Math.min(840, Number(req.headers.get("x-wd-tz") ?? 0) || 0));
+  const tz = Math.max(-840, Math.min(840, Number(req.headers.get("x-wh-tz") ?? 0) || 0));
 
   if (command.kind === "stale") {
     try {

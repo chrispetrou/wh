@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HELP, HELP_COL, helpLines, WD_HELP } from "./help";
+import { HELP, HELP_COL, helpLines, WH_HELP } from "./help";
 import { COMMANDS } from "./menu";
 
 describe("help tables", () => {
@@ -12,7 +12,7 @@ describe("help tables", () => {
   });
 
   it("keeps a gap between a long command and its note", () => {
-    for (const l of [...helpLines(HELP), ...helpLines(WD_HELP)]) {
+    for (const l of [...helpLines(HELP), ...helpLines(WH_HELP)]) {
       if (l.head && l.text) expect(l.head.text.endsWith(" "), l.head.text).toBe(true);
     }
   });
@@ -22,7 +22,7 @@ describe("help tables", () => {
     expect(rows[0]).toEqual({ text: "repo commands:", cls: "a" });
     const note = rows.find((l) => l.text.startsWith("  after an explain"));
     expect(note?.cls).toBe("o");
-    expect(helpLines(WD_HELP).at(-1)).toEqual({ text: "source: github.com/chrispetrou/wd", cls: "o" });
+    expect(helpLines(WH_HELP).at(-1)).toEqual({ text: "source: github.com/chrispetrou/wh", cls: "o" });
   });
 
   it("lists every slash command the menu offers", () => {

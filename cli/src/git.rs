@@ -1,4 +1,4 @@
-use crate::WdError;
+use crate::WhError;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -9,16 +9,16 @@ fn base(dir: &Path) -> Command {
 }
 
 /// Run git in `dir`; trimmed stdout on success, error carrying stderr otherwise.
-pub fn run(dir: &Path, args: &[&str]) -> Result<String, WdError> {
-    let out = base(dir).args(args).output().map_err(WdError::Io)?;
+pub fn run(dir: &Path, args: &[&str]) -> Result<String, WhError> {
+    let out = base(dir).args(args).output().map_err(WhError::Io)?;
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).trim_end().to_string())
     } else {
         let stderr = String::from_utf8_lossy(&out.stderr).trim_end().to_string();
         if stderr.contains("not a git repository") {
-            Err(WdError::NotARepo)
+            Err(WhError::NotARepo)
         } else {
-            Err(WdError::Git { stderr })
+            Err(WhError::Git { stderr })
         }
     }
 }
@@ -34,7 +34,7 @@ pub fn run_ok(dir: &Path, args: &[&str]) -> bool {
 
 /// The ref merges and pr drafts are judged against: origin's HEAD when
 /// known, else local main/master.
-pub fn default_ref(dir: &Path) -> Result<String, WdError> {
+pub fn default_ref(dir: &Path) -> Result<String, WhError> {
     if let Ok(r) = run(
         dir,
         &[
@@ -61,7 +61,7 @@ pub fn default_ref(dir: &Path) -> Result<String, WdError> {
             return Ok(b.to_string());
         }
     }
-    Err(WdError::Msg("cannot determine default branch".into()))
+    Err(WhError::Msg("cannot determine default branch".into()))
 }
 
 /// The checked-out branch, or None when detached.
@@ -71,20 +71,20 @@ pub fn current_branch(dir: &Path) -> Option<String> {
         .filter(|b| !b.is_empty() && b != "HEAD")
 }
 
-pub fn toplevel(dir: &Path) -> Result<PathBuf, WdError> {
+pub fn toplevel(dir: &Path) -> Result<PathBuf, WhError> {
     Ok(PathBuf::from(run(dir, &["rev-parse", "--show-toplevel"])?))
 }
 
 /// The main worktree (or the bare repo dir), regardless of which worktree we
 /// run from. Anchor for sibling naming.
-pub fn main_worktree(dir: &Path) -> Result<PathBuf, WdError> {
+pub fn main_worktree(dir: &Path) -> Result<PathBuf, WhError> {
     let common = match run(
         dir,
         &["rev-parse", "--path-format=absolute", "--git-common-dir"],
     ) {
         Ok(p) => PathBuf::from(p),
         // --path-format needs git >= 2.31; fall back to absolutizing by hand
-        Err(WdError::NotARepo) => return Err(WdError::NotARepo),
+        Err(WhError::NotARepo) => return Err(WhError::NotARepo),
         Err(_) => {
             let p = PathBuf::from(run(dir, &["rev-parse", "--git-common-dir"])?);
             if p.is_absolute() {
@@ -94,7 +94,7 @@ pub fn main_worktree(dir: &Path) -> Result<PathBuf, WdError> {
             }
         }
     };
-    let common = common.canonicalize().map_err(WdError::Io)?;
+    let common = common.canonicalize().map_err(WhError::Io)?;
     if common.file_name().is_some_and(|n| n == ".git") {
         Ok(common
             .parent()
@@ -115,7 +115,7 @@ pub struct Worktree {
     pub prunable: bool,
 }
 
-pub fn worktrees(dir: &Path) -> Result<Vec<Worktree>, WdError> {
+pub fn worktrees(dir: &Path) -> Result<Vec<Worktree>, WhError> {
     Ok(parse_worktree_list(&run(
         dir,
         &["worktree", "list", "--porcelain"],
@@ -168,7 +168,7 @@ pub struct WtStatus {
     pub ahead_behind: Option<(usize, usize)>,
 }
 
-pub fn status_of(wt: &Path) -> Result<WtStatus, WdError> {
+pub fn status_of(wt: &Path) -> Result<WtStatus, WhError> {
     let st = run(wt, &["status", "--porcelain"])?;
     let dirty = st.lines().filter(|l| !l.trim().is_empty()).count();
     let ahead_behind = run(

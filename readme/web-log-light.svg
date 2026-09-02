@@ -106,21 +106,21 @@ text{fill:#1a1a1a;white-space:pre}
 <rect x="0.5" y="30" width="719" height="1" fill="#e6e6e6"/>
 <circle cx="20" cy="15" r="4" fill="none" stroke="#c8c8c8"/><circle cx="34" cy="15" r="4" fill="none" stroke="#c8c8c8"/><circle cx="48" cy="15" r="4" fill="none" stroke="#c8c8c8"/>
 <rect x="70" y="7" width="580" height="16" fill="#fcfcfc" stroke="#e6e6e6" rx="3"/>
-<text class="o sm" x="80" y="19">localhost:3000/repos/demo/wd</text>
+<text class="o sm" x="80" y="19">localhost:3000/repos/demo/wh</text>
 <path d="M 24 45 h 14 v 14 h -9.1 v -9.1 h -4.9 z" fill="#1a1a1a"/>
-<text class="b" x="46" y="57">wd</text><text class="f" x="70" y="57">/</text><text class="o" x="82" y="57">demo/wd</text>
+<text class="b" x="46" y="57">wh</text><text class="f" x="70" y="57">/</text><text class="o" x="82" y="57">demo/wh</text>
 <text class="o sm" x="620" y="57">demo</text><text class="o sm" x="668" y="57">logout</text>
 <rect x="0.5" y="74" width="719" height="1" fill="#e6e6e6"/>
 <rect x="16" y="78" width="34" height="19" fill="#eef2ff" rx="3"/>
-<text class="b sm" x="23" y="92">wd</text><text class="f sm" x="60" y="92">+</text>
+<text class="b sm" x="23" y="92">wh</text><text class="f sm" x="60" y="92">+</text>
 <rect x="0.5" y="101" width="719" height="1" fill="#e6e6e6"/>
 <path d="M 77.8 182 L 77.8 204 M 91.8 182 L 91.8 204" fill="none" stroke="#4263eb" stroke-width="1.5"/><circle cx="77.8" cy="193" r="3.4" fill="#4263eb"/>
 <path d="M 77.8 204 L 77.8 226 M 91.8 204 C 91.8 215 77.8 215 77.8 215" fill="none" stroke="#4263eb" stroke-width="1.5"/><circle cx="77.8" cy="215" r="3" fill="#fcfcfc" stroke="#4263eb" stroke-width="1.5"/>
 <path d="M 77.8 226 L 77.8 248" fill="none" stroke="#4263eb" stroke-width="1.5"/><circle cx="77.8" cy="237" r="3.4" fill="#4263eb"/>
 <path d="M 77.8 248 L 77.8 270" fill="none" stroke="#4263eb" stroke-width="1.5"/><circle cx="77.8" cy="259" r="3.4" fill="#4263eb"/>
 <path d="M 77.8 270 L 77.8 281" fill="none" stroke="#4263eb" stroke-width="1.5"/><circle cx="77.8" cy="281" r="3.4" fill="#4263eb"/>
-<text class="rv o r0x1_912" x="24" y="131">▜ wd · demo/wd</text>
-<text class="rv o r4_779x6_691" x="24" y="153">demo/wd $</text>
+<text class="rv o r0x1_912" x="24" y="131">▜ wh · demo/wh</text>
+<text class="rv o r4_779x6_691" x="24" y="153">demo/wh $</text>
 <text class="rv c r4_779x6_691" x="102" y="153">l</text>
 <text class="rv c r5_615x7_527" x="109.8" y="153">o</text>
 <text class="rv c r6_452x8_363" x="117.6" y="153">g</text>
@@ -161,7 +161,7 @@ text{fill:#1a1a1a;white-space:pre}
 <text class="rv o r22_222x24_134" x="570" y="285">2d</text>
 <text class="rv o r22_222x24_134" x="624.6" y="285">c04b81f</text>
 <text class="rv f r23_895x25_806" x="24" y="307">↑↓ select · enter open · esc back</text>
-<text class="rv o r29_869x31_78" x="24" y="329">demo/wd $</text>
+<text class="rv o r29_869x31_78" x="24" y="329">demo/wh $</text>
 <text class="rv c r29_869x31_78" x="102" y="329">e</text>
 <text class="rv c r30_705x32_616" x="109.8" y="329">x</text>
 <text class="rv c r31_541x33_453" x="117.6" y="329">p</text>

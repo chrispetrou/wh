@@ -1,12 +1,12 @@
-# wd · tiny git companion
+# wh · tiny git companion
 
 Single-binary git companion: worktree management without ceremony, plus
 plain-English diff explanations. Local-first, telemetry-free, BYO LLM key.
 
 ## repo map
 
-- `cli/`: Rust CLI, the `wd` binary. Worktree commands (`new`, `ls`, `rm`,
-  later `switch`) and `wd explain` (LLM diff summaries; later milestone).
+- `cli/`: Rust CLI, the `wh` binary. Worktree commands (`new`, `ls`, `rm`,
+  later `switch`) and `wh explain` (LLM diff summaries; later milestone).
 - `web/`: Next.js + shadcn/ui app: GitHub OAuth, repo picker, a
   terminal-flavored chat that answers questions about a repo by fetching
   diffs/commits via the GitHub API and running them through the same explain

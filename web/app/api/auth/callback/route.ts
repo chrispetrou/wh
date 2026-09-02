@@ -16,8 +16,8 @@ export async function GET(req: NextRequest) {
   const fail = () => NextResponse.redirect(new URL("/?error=auth", url));
 
   const jar = await cookies();
-  const expected = jar.get("wd_oauth_state")?.value;
-  jar.delete("wd_oauth_state");
+  const expected = jar.get("wh_oauth_state")?.value;
+  jar.delete("wh_oauth_state");
   const state = req.nextUrl.searchParams.get("state");
   const code = req.nextUrl.searchParams.get("code");
   if (!expected || !state || !code || !safeEqual(expected, state)) {
@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
   await session.save();
 
   // back to the transcript the session ended in, else the picker
-  const back = jar.get("wd_oauth_return")?.value;
-  jar.delete("wd_oauth_return");
+  const back = jar.get("wh_oauth_return")?.value;
+  jar.delete("wh_oauth_return");
   return NextResponse.redirect(new URL(back && back.startsWith("/repos/") ? back : "/repos", url));
 }

@@ -4,15 +4,15 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* wd theme: values from site/index.html, the design source of truth.
+/* wh theme: values from site/index.html, the design source of truth.
    monospace everything, hairline borders, flat, no shadows. */
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-wd);
-  --font-mono: var(--font-wd);
-  --font-heading: var(--font-wd);
+  --font-sans: var(--font-wh);
+  --font-mono: var(--font-wh);
+  --font-heading: var(--font-wh);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -42,11 +42,11 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --color-wd-green: var(--wd-green);
-  --color-wd-amber: var(--wd-amber);
-  --color-wd-faint: var(--wd-faint);
-  --color-wd-sel: var(--wd-sel);
-  --color-wd-accent: var(--wd-accent);
+  --color-wh-green: var(--wh-green);
+  --color-wh-amber: var(--wh-amber);
+  --color-wh-faint: var(--wh-faint);
+  --color-wh-sel: var(--wh-sel);
+  --color-wh-accent: var(--wh-accent);
   --radius-sm: 3px;
   --radius-md: var(--radius);
   --radius-lg: var(--radius);
@@ -57,7 +57,7 @@
 }
 
 :root {
-  --font-wd: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo,
+  --font-wh: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo,
     Consolas, monospace;
   --radius: 4px;
 
@@ -93,21 +93,21 @@
   --sidebar-border: #e6e6e6;
   --sidebar-ring: #c8c8c8;
 
-  --wd-green: #2f9e44;
-  --wd-amber: #b08900;
-  --wd-faint: #c8c8c8;
-  --wd-sel: #eef2ff;
-  --wd-accent: #4263eb;
+  --wh-green: #2f9e44;
+  --wh-amber: #b08900;
+  --wh-faint: #c8c8c8;
+  --wh-sel: #eef2ff;
+  --wh-accent: #4263eb;
 
   /* the one place color goes beyond the five roles: lanes of the commit
      graph, one per branch thread, quiet enough to sit next to the accent.
      keep the six in sync across the three palette blocks */
-  --wd-lane-0: #4263eb;
-  --wd-lane-1: #c2255c;
-  --wd-lane-2: #099268;
-  --wd-lane-3: #e8590c;
-  --wd-lane-4: #6741d9;
-  --wd-lane-5: #0b7285;
+  --wh-lane-0: #4263eb;
+  --wh-lane-1: #c2255c;
+  --wh-lane-2: #099268;
+  --wh-lane-3: #e8590c;
+  --wh-lane-4: #6741d9;
+  --wh-lane-5: #0b7285;
 }
 
 .dark {
@@ -143,21 +143,21 @@
   --sidebar-border: #222222;
   --sidebar-ring: #3a3a3a;
 
-  --wd-green: #69db7c;
-  --wd-amber: #e0b420;
-  --wd-faint: #3a3a3a;
-  --wd-sel: #1c2333;
+  --wh-green: #69db7c;
+  --wh-amber: #e0b420;
+  --wh-faint: #3a3a3a;
+  --wh-sel: #1c2333;
   /* indigo, the same family as light: commands and links must never share
      amber with section labels and warnings. keep in sync with the media
      block below */
-  --wd-accent: #91a7ff;
+  --wh-accent: #91a7ff;
 
-  --wd-lane-0: #91a7ff;
-  --wd-lane-1: #f06595;
-  --wd-lane-2: #38d9a9;
-  --wd-lane-3: #ffa94d;
-  --wd-lane-4: #b197fc;
-  --wd-lane-5: #66d9e8;
+  --wh-lane-0: #91a7ff;
+  --wh-lane-1: #f06595;
+  --wh-lane-2: #38d9a9;
+  --wh-lane-3: #ffa94d;
+  --wh-lane-4: #b197fc;
+  --wh-lane-5: #66d9e8;
 }
 
 /* follow the system like the landing page does, until a toggle exists */
@@ -195,37 +195,37 @@
     --sidebar-border: #222222;
     --sidebar-ring: #3a3a3a;
 
-    --wd-green: #69db7c;
-    --wd-amber: #e0b420;
-    --wd-faint: #3a3a3a;
-    --wd-sel: #1c2333;
-    --wd-accent: #91a7ff; /* see .dark above */
+    --wh-green: #69db7c;
+    --wh-amber: #e0b420;
+    --wh-faint: #3a3a3a;
+    --wh-sel: #1c2333;
+    --wh-accent: #91a7ff; /* see .dark above */
 
-    --wd-lane-0: #91a7ff;
-    --wd-lane-1: #f06595;
-    --wd-lane-2: #38d9a9;
-    --wd-lane-3: #ffa94d;
-    --wd-lane-4: #b197fc;
-    --wd-lane-5: #66d9e8;
+    --wh-lane-0: #91a7ff;
+    --wh-lane-1: #f06595;
+    --wh-lane-2: #38d9a9;
+    --wh-lane-3: #ffa94d;
+    --wh-lane-4: #b197fc;
+    --wh-lane-5: #66d9e8;
   }
 }
 
 /* user font preferences (set via /font, /fontsize, /ligatures) */
 :root[data-font="fira"] {
-  --font-wd: var(--font-fira), ui-monospace, Menlo, monospace;
+  --font-wh: var(--font-fira), ui-monospace, Menlo, monospace;
 }
 :root[data-font="jetbrains"] {
-  --font-wd: var(--font-jetbrains), ui-monospace, Menlo, monospace;
+  --font-wh: var(--font-jetbrains), ui-monospace, Menlo, monospace;
 }
 :root[data-font="plex"] {
-  --font-wd: var(--font-plex), ui-monospace, Menlo, monospace;
+  --font-wh: var(--font-plex), ui-monospace, Menlo, monospace;
 }
 :root[data-lig="off"] body {
   font-feature-settings: "calt" 0, "liga" 0;
 }
 
 ::selection {
-  background: var(--wd-sel);
+  background: var(--wh-sel);
   color: inherit; /* accent and amber text keep their color when selected */
 }
 
@@ -238,10 +238,10 @@
 .app-main {
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: var(--wd-font-size, 13px);
+  font-size: var(--wh-font-size, 13px);
 }
 .row-sel {
-  background: var(--wd-sel);
+  background: var(--wh-sel);
   border-radius: 3px;
 }
 .cursor {
@@ -293,13 +293,13 @@
   overflow-x: auto; /* graph rows never wrap; only this box scrolls sideways */
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: var(--wd-faint) transparent;
+  scrollbar-color: var(--wh-faint) transparent;
 }
 .term-scroll::-webkit-scrollbar {
   width: 6px;
 }
 .term-scroll::-webkit-scrollbar-thumb {
-  background: var(--wd-faint);
+  background: var(--wh-faint);
   border-radius: 3px;
 }
 .term-scroll::-webkit-scrollbar-track {
@@ -319,11 +319,11 @@
   cursor: grab; /* rows are draggable (onto a branch, or to reorder) */
 }
 .log-row:hover {
-  background: color-mix(in srgb, var(--wd-sel) 60%, transparent);
+  background: color-mix(in srgb, var(--wh-sel) 60%, transparent);
 }
 .log-row.row-sel,
 .log-row.row-sel:hover {
-  background: var(--wd-sel);
+  background: var(--wh-sel);
 }
 /* the file view: numbered lines in a box capped at ~24 rows that
    scrolls inside. code color is the lanes' kind of exception (see the
@@ -338,7 +338,7 @@
   border-bottom: 1px solid var(--border);
   margin: 2px 0;
   scrollbar-width: thin;
-  scrollbar-color: var(--wd-faint) transparent;
+  scrollbar-color: var(--wh-faint) transparent;
 }
 .file-line {
   display: grid;
@@ -357,16 +357,16 @@
   user-select: none;
 }
 .file-num:hover {
-  color: var(--wd-accent); /* it is a command: why <path>:<n> */
+  color: var(--wh-accent); /* it is a command: why <path>:<n> */
 }
 .file-code {
   white-space: pre;
 }
 .file-mark {
-  background: var(--wd-sel);
+  background: var(--wh-sel);
 }
 .file-mark .file-num {
-  color: var(--wd-amber); /* the asked-for line, labeled */
+  color: var(--wh-amber); /* the asked-for line, labeled */
 }
 /* hljs onto the palette: the lane colors, already the one sanctioned
    exception zone, double as the token colors, so both themes come free
@@ -380,26 +380,26 @@
 .file-code .hljs-string,
 .file-code .hljs-regexp,
 .file-code .hljs-addition {
-  color: var(--wd-green);
+  color: var(--wh-green);
 }
 .file-code .hljs-keyword,
 .file-code .hljs-literal,
 .file-code .hljs-built_in {
-  color: var(--wd-lane-4); /* violet */
+  color: var(--wh-lane-4); /* violet */
 }
 .file-code .hljs-number,
 .file-code .hljs-symbol {
-  color: var(--wd-lane-3); /* orange */
+  color: var(--wh-lane-3); /* orange */
 }
 .file-code .hljs-title,
 .file-code .hljs-title.function_,
 .file-code .hljs-title.class_ {
-  color: var(--wd-accent);
+  color: var(--wh-accent);
 }
 .file-code .hljs-type,
 .file-code .hljs-name,
 .file-code .hljs-selector-tag {
-  color: var(--wd-lane-2); /* teal, for types and markup tags */
+  color: var(--wh-lane-2); /* teal, for types and markup tags */
 }
 
 /* stat rows are read-only: no grab cursor, no hover highlight */
@@ -464,7 +464,7 @@
   height: 0.75em;
   vertical-align: -1px;
   border-radius: 2px;
-  background: var(--wd-faint);
+  background: var(--wh-faint);
   animation: skel 1.6s ease-in-out infinite;
 }
 @keyframes skel {
@@ -613,7 +613,7 @@ button {
   }
 }
 .log-action {
-  color: var(--wd-accent);
+  color: var(--wh-accent);
   cursor: pointer;
   background: none;
   border: none;
@@ -629,7 +629,7 @@ button {
 }
 .log-action:hover {
   text-decoration: underline;
-  text-decoration-color: var(--wd-faint);
+  text-decoration-color: var(--wh-faint);
   text-underline-offset: 2px;
 }
 @media (max-width: 560px) {
@@ -643,7 +643,7 @@ button {
    over its siblings, which slide aside; the message field is the bordered
    paste field, the commands sit in a pre */
 .log-row.row-drag {
-  background: var(--wd-sel);
+  background: var(--wh-sel);
   outline: 1px solid var(--border);
   position: relative;
   z-index: 1;
@@ -681,7 +681,7 @@ button {
   line-height: 1.7;
 }
 .drop-over {
-  background: var(--wd-sel);
+  background: var(--wh-sel);
   outline: 1px solid var(--border);
   border-radius: 3px;
 }
@@ -696,7 +696,7 @@ body.dragging * {
 .plan-drop {
   color: var(--muted-foreground);
   text-decoration: line-through;
-  text-decoration-color: var(--wd-faint);
+  text-decoration-color: var(--wh-faint);
 }
 .plan-pre {
   white-space: pre;
@@ -784,7 +784,7 @@ button:focus-visible,
 
 @media (max-width: 560px) {
   .app-main {
-    font-size: var(--wd-font-size, 12px);
+    font-size: var(--wh-font-size, 12px);
   }
 }
 @media (pointer: coarse) {
@@ -805,12 +805,12 @@ button:focus-visible,
   }
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-wd);
+    font-family: var(--font-wh);
     font-size: 13px;
     line-height: 1.7;
     -webkit-font-smoothing: antialiased;
   }
   html {
-    font-family: var(--font-wd);
+    font-family: var(--font-wh);
   }
 }

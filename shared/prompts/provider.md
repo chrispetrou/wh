@@ -51,7 +51,7 @@ Detection order:
 | spend limit | `your groq key hit its spend limit` | `raise it at <limits url>` |
 | rate limit, daily | `provider daily limit reached, resets in 3h 12m` (`resets tomorrow` when no wait is known) | none |
 | rate limit | `provider rate limit, try again in 12s` when a wait is known, else `provider rate limit, try again in a moment` | none |
-| too large | `the diff is too big for <model>: 17842 tokens, limit 8000` (the counts when known) | web `try fewer commits, cut it to a path (add: in src/), or /model one with a larger context`; cli `try fewer commits, a narrower range, or WD_MODEL with a larger context` |
+| too large | `the diff is too big for <model>: 17842 tokens, limit 8000` (the counts when known) | web `try fewer commits, cut it to a path (add: in src/), or /model one with a larger context`; cli `try fewer commits, a narrower range, or WH_MODEL with a larger context` |
 | unknown model | `provider has no model <model>` | web `/model lists the ones it knows`; cli none |
 | overloaded | `provider is overloaded, try again in a moment` | none |
 | generic | `provider error: <message>` | none |
@@ -64,7 +64,7 @@ The web wraps these as `{"error", "hint"}` json with status 401 (key),
 (unknown model), 503 (overloaded), 502 (generic, network). An error frame
 that arrives after text (anthropic `{"type":"error",...}`, an openai-shaped
 `{"error":...}` with no `choices`) is classified by its body alone and
-delivered in-stream (web: a `[wd:error] ` line, then `[wd:hint] `; cli:
+delivered in-stream (web: a `[wh:error] ` line, then `[wh:hint] `; cli:
 the text is flushed, then the error, exit 1).
 
 Urls, the one thing here that may drift:

@@ -137,12 +137,12 @@ export function FileBlock({
     return (
       <div className={`file-block ${fresh ? "block-in" : ""}`}>
         <div>
-          <span className="text-wd-amber">error:</span>{" "}
+          <span className="text-wh-amber">error:</span>{" "}
           {detail.auth ? "your github session ended" : detail.failed}
         </div>
         {detail.auth ? (
           <Action onClick={() => signInAgain(storeKey, {})}>
-            sign in again <span className="text-wd-green">→</span>
+            sign in again <span className="text-wh-green">→</span>
           </Action>
         ) : null}
       </div>
@@ -194,7 +194,7 @@ export function FileBlock({
         {f.lines.length > VIEW_CAP ? " · scroll" : ""}
       </div>
       {f.truncated ? (
-        <div className="text-wd-amber">truncated: the first {f.lines.length} lines only</div>
+        <div className="text-wh-amber">truncated: the first {f.lines.length} lines only</div>
       ) : null}
       {mine ? <div className="text-muted-foreground">↑↓ scroll · esc back</div> : null}
     </div>

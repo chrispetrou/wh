@@ -47,11 +47,11 @@ export function PreviewStat({ dark }: { dark: boolean }) {
   return (
     <div className="app-main p-4">
       <div className="text-muted-foreground">
-        chrispetrou/wd $ <span className="font-semibold text-foreground">activity</span>
+        chrispetrou/wh $ <span className="font-semibold text-foreground">activity</span>
       </div>
       <StatBlock block={activity} fresh={false} />
       <div className="mt-4 text-muted-foreground">
-        chrispetrou/wd $ <span className="font-semibold text-foreground">who src/git.rs</span>
+        chrispetrou/wh $ <span className="font-semibold text-foreground">who src/git.rs</span>
       </div>
       <StatBlock block={who} fresh={false} />
     </div>

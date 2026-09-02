@@ -1,9 +1,9 @@
-use crate::{git, output, WdError};
+use crate::{git, output, WhError};
 use std::env;
 use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 
-pub fn run(name: Option<&str>, dry_run: bool, yes: bool, force: bool) -> Result<(), WdError> {
+pub fn run(name: Option<&str>, dry_run: bool, yes: bool, force: bool) -> Result<(), WhError> {
     let cwd = env::current_dir()?;
     let wts = git::worktrees(&cwd)?;
     let current = git::toplevel(&cwd).ok().and_then(|p| p.canonicalize().ok());
@@ -47,15 +47,15 @@ fn squash_merged(cwd: &Path, sha: &str, default: &str) -> bool {
         cwd,
         &[
             "-c",
-            "user.name=wd",
+            "user.name=wh",
             "-c",
-            "user.email=wd@localhost",
+            "user.email=wh@localhost",
             "commit-tree",
             &tree,
             "-p",
             &base,
             "-m",
-            "wd squash check",
+            "wh squash check",
         ],
     ) else {
         return false;
@@ -87,7 +87,7 @@ fn prune(
     wts: &[git::Worktree],
     cwd: &Path,
     current: Option<&Path>,
-) -> Result<(), WdError> {
+) -> Result<(), WhError> {
     let default = git::default_ref(cwd)?;
     let mut candidates = Vec::new();
     for w in wts {
@@ -140,9 +140,9 @@ fn prune(
     Ok(())
 }
 
-fn confirm(n: usize) -> Result<bool, WdError> {
+fn confirm(n: usize) -> Result<bool, WhError> {
     if !io::stdin().is_terminal() {
-        return Err(WdError::Msg(
+        return Err(WhError::Msg(
             "not a terminal; run with --yes to remove".into(),
         ));
     }
@@ -166,23 +166,23 @@ fn remove_named(
     wts: &[git::Worktree],
     cwd: &Path,
     current: Option<&Path>,
-) -> Result<(), WdError> {
+) -> Result<(), WhError> {
     let matches_dir = |p: &PathBuf| p.file_name().is_some_and(|f| f == name);
     let w = wts
         .iter()
         .find(|w| w.branch.as_deref() == Some(name) || matches_dir(&w.path))
-        .ok_or_else(|| WdError::Msg(format!("no worktree for {name}")))?;
+        .ok_or_else(|| WhError::Msg(format!("no worktree for {name}")))?;
 
     if w.is_main || w.is_bare {
-        return Err(WdError::Msg("refusing to remove the main worktree".into()));
+        return Err(WhError::Msg("refusing to remove the main worktree".into()));
     }
     if is_current(w, current) {
-        return Err(WdError::Msg(
+        return Err(WhError::Msg(
             "refusing to remove the current worktree".into(),
         ));
     }
     if w.locked {
-        return Err(WdError::Msg(format!(
+        return Err(WhError::Msg(format!(
             "{} is locked",
             output::display_path(&w.path, cwd)
         )));
@@ -191,7 +191,7 @@ fn remove_named(
     let dirty = git::status_of(&w.path).map(|s| s.dirty).unwrap_or(0);
     if !force {
         if dirty > 0 {
-            return Err(WdError::Msg(format!(
+            return Err(WhError::Msg(format!(
                 "{} is dirty (use --force)",
                 output::display_path(&w.path, cwd)
             )));
@@ -200,11 +200,11 @@ fn remove_named(
             Some(b) => {
                 let default = git::default_ref(cwd)?;
                 if !merged(cwd, &w.head, &default) {
-                    return Err(WdError::Msg(format!("{b} is not merged (use --force)")));
+                    return Err(WhError::Msg(format!("{b} is not merged (use --force)")));
                 }
             }
             None => {
-                return Err(WdError::Msg("detached worktree (use --force)".into()));
+                return Err(WhError::Msg("detached worktree (use --force)".into()));
             }
         }
     }
@@ -223,7 +223,7 @@ fn remove_named(
     Ok(())
 }
 
-fn remove_one(cwd: &Path, w: &git::Worktree, force: bool) -> Result<(), WdError> {
+fn remove_one(cwd: &Path, w: &git::Worktree, force: bool) -> Result<(), WhError> {
     // resolve the shown path while the dir still exists
     let shown = output::display_path(&w.path, cwd);
     let path_s = w.path.to_string_lossy().into_owned();

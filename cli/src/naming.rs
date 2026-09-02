@@ -1,4 +1,4 @@
-use crate::WdError;
+use crate::WhError;
 use std::path::{Path, PathBuf};
 
 /// Branch name -> directory-safe suffix: `/` and anything outside
@@ -27,18 +27,18 @@ pub fn sanitize(branch: &str) -> String {
 
 /// Sibling dir for a branch: `<parent>/<main-dirname>.<sanitized-branch>`.
 /// A bare repo's trailing `.git` is stripped from the dirname.
-pub fn sibling_path(main_worktree: &Path, branch: &str) -> Result<PathBuf, WdError> {
+pub fn sibling_path(main_worktree: &Path, branch: &str) -> Result<PathBuf, WhError> {
     let parent = main_worktree
         .parent()
-        .ok_or_else(|| WdError::Msg("repository has no parent directory".into()))?;
+        .ok_or_else(|| WhError::Msg("repository has no parent directory".into()))?;
     let name = main_worktree
         .file_name()
-        .ok_or_else(|| WdError::Msg("cannot determine repository directory name".into()))?
+        .ok_or_else(|| WhError::Msg("cannot determine repository directory name".into()))?
         .to_string_lossy();
     let name = name.strip_suffix(".git").unwrap_or(&name);
     let suffix = sanitize(branch);
     if suffix.is_empty() {
-        return Err(WdError::Msg(format!(
+        return Err(WhError::Msg(format!(
             "cannot derive a directory name from '{branch}'"
         )));
     }

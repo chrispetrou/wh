@@ -1,10 +1,10 @@
-//! Provider plumbing for wd explain. HTTP goes through the system curl
+//! Provider plumbing for wh explain. HTTP goes through the system curl
 //! (same philosophy as shelling out to git): no TLS dependency, request
 //! bodies and stream frames via serde_json, and the API key travels via
 //! curl's config stdin, never argv.
 
 use crate::usage::Usage;
-use crate::WdError;
+use crate::WhError;
 use serde::Serialize;
 use serde_json::Value;
 use std::env;
@@ -76,42 +76,42 @@ impl Provider {
     }
 }
 
-/// Provider choice: WD_PROVIDER wins, else the first key found (paid
+/// Provider choice: WH_PROVIDER wins, else the first key found (paid
 /// keys before the free groq tier, so nobody is silently downgraded),
 /// else a local ollama. `get` abstracts env lookup so this is testable.
-pub fn choose(get: &dyn Fn(&str) -> Option<String>) -> Result<Provider, WdError> {
+pub fn choose(get: &dyn Fn(&str) -> Option<String>) -> Result<Provider, WhError> {
     let url_or = |var: &str, default: &str| get(var).unwrap_or_else(|| default.to_string());
     let anthropic = |key: String| Provider::Anthropic {
         key,
-        url: url_or("WD_ANTHROPIC_URL", "https://api.anthropic.com"),
+        url: url_or("WH_ANTHROPIC_URL", "https://api.anthropic.com"),
     };
     let openai = |key: String| Provider::OpenAi {
         key,
-        url: url_or("WD_OPENAI_URL", "https://api.openai.com"),
+        url: url_or("WH_OPENAI_URL", "https://api.openai.com"),
     };
     let groq = |key: String| Provider::Groq {
         key,
-        url: url_or("WD_GROQ_URL", "https://api.groq.com/openai"),
+        url: url_or("WH_GROQ_URL", "https://api.groq.com/openai"),
     };
     let ollama = || Provider::Ollama {
-        url: url_or("WD_OLLAMA_URL", "http://localhost:11434"),
+        url: url_or("WH_OLLAMA_URL", "http://localhost:11434"),
     };
-    match get("WD_PROVIDER").as_deref() {
+    match get("WH_PROVIDER").as_deref() {
         Some("anthropic") => match get("ANTHROPIC_API_KEY") {
             Some(key) => Ok(anthropic(key)),
-            None => Err(WdError::Msg("ANTHROPIC_API_KEY is not set".into())),
+            None => Err(WhError::Msg("ANTHROPIC_API_KEY is not set".into())),
         },
         Some("openai") => match get("OPENAI_API_KEY") {
             Some(key) => Ok(openai(key)),
-            None => Err(WdError::Msg("OPENAI_API_KEY is not set".into())),
+            None => Err(WhError::Msg("OPENAI_API_KEY is not set".into())),
         },
         Some("groq") => match get("GROQ_API_KEY") {
             Some(key) => Ok(groq(key)),
-            None => Err(WdError::Msg("GROQ_API_KEY is not set".into())),
+            None => Err(WhError::Msg("GROQ_API_KEY is not set".into())),
         },
         Some("ollama") => Ok(ollama()),
-        Some(other) => Err(WdError::Msg(format!(
-            "unknown WD_PROVIDER '{other}' (anthropic, openai, groq, ollama)"
+        Some(other) => Err(WhError::Msg(format!(
+            "unknown WH_PROVIDER '{other}' (anthropic, openai, groq, ollama)"
         ))),
         None => {
             if let Some(key) = get("ANTHROPIC_API_KEY") {
@@ -128,7 +128,7 @@ pub fn choose(get: &dyn Fn(&str) -> Option<String>) -> Result<Provider, WdError>
 }
 
 pub fn model_for(provider: &Provider, get: &dyn Fn(&str) -> Option<String>) -> String {
-    if let Some(m) = get("WD_MODEL") {
+    if let Some(m) = get("WH_MODEL") {
         return m;
     }
     match provider {
@@ -236,7 +236,7 @@ fn request_body(
     model: &str,
     system: &str,
     user: &str,
-) -> Result<String, WdError> {
+) -> Result<String, WhError> {
     let user_msg = Message {
         role: "user",
         content: user,
@@ -270,7 +270,7 @@ fn request_body(
             })
         }
     };
-    encoded.map_err(|e| WdError::Msg(format!("could not encode the request: {e}")))
+    encoded.map_err(|e| WhError::Msg(format!("could not encode the request: {e}")))
 }
 
 /// One stream frame or error body, parsed; None for anything that is not
@@ -329,9 +329,9 @@ impl Drop for TempBody {
     }
 }
 
-fn write_body(body: &str) -> Result<TempBody, WdError> {
+fn write_body(body: &str) -> Result<TempBody, WhError> {
     use std::os::unix::fs::OpenOptionsExt;
-    let path = env::temp_dir().join(format!("wd-explain-{}.json", std::process::id()));
+    let path = env::temp_dir().join(format!("wh-explain-{}.json", std::process::id()));
     let mut f = fs::OpenOptions::new()
         .write(true)
         .create(true)
@@ -365,7 +365,7 @@ impl Head {
 /// Reads one header block: `HTTP/1.1 429 Too Many Requests` or `HTTP/2
 /// 429`, header lines, a blank line. Interim 1xx blocks (100 continue,
 /// 103 early hints) are skipped for the real one.
-fn read_head<I: Iterator<Item = std::io::Result<String>>>(lines: &mut I) -> Result<Head, WdError> {
+fn read_head<I: Iterator<Item = std::io::Result<String>>>(lines: &mut I) -> Result<Head, WhError> {
     loop {
         let first = loop {
             match lines.next() {
@@ -376,7 +376,7 @@ fn read_head<I: Iterator<Item = std::io::Result<String>>>(lines: &mut I) -> Resu
                         break l.to_string();
                     }
                 }
-                None => return Err(WdError::Msg("provider sent no reply".into())),
+                None => return Err(WhError::Msg("provider sent no reply".into())),
             }
         };
         let mut parts = first.split_whitespace();
@@ -384,7 +384,7 @@ fn read_head<I: Iterator<Item = std::io::Result<String>>>(lines: &mut I) -> Resu
             (Some(v), Some(code)) if v.starts_with("HTTP/") => code.parse::<u16>().ok(),
             _ => None,
         };
-        let status = status.ok_or_else(|| WdError::Msg("provider sent no http status".into()))?;
+        let status = status.ok_or_else(|| WhError::Msg("provider sent no http status".into()))?;
         let mut headers = Vec::new();
         for l in lines.by_ref() {
             let l = l?;
@@ -417,7 +417,7 @@ pub fn stream(
     system: &str,
     user: &str,
     on_text: &mut dyn FnMut(&str),
-) -> Result<Reply, WdError> {
+) -> Result<Reply, WhError> {
     let base = provider.base_url().trim_end_matches('/');
     let (url, headers): (String, Vec<String>) = match provider {
         Provider::Anthropic { key, .. } => (
@@ -436,7 +436,7 @@ pub fn stream(
     let body = request_body(provider, model, system, user)?;
 
     if !valid_url(&url) {
-        return Err(WdError::Msg("invalid provider url".into()));
+        return Err(WhError::Msg("invalid provider url".into()));
     }
     let body_file = write_body(&body)?;
     // include: the status line and headers come first on stdout, which is
@@ -460,7 +460,7 @@ pub fn stream(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|_| WdError::Msg("curl not found".into()))?;
+        .map_err(|_| WhError::Msg("curl not found".into()))?;
     child
         .stdin
         .take()
@@ -491,7 +491,7 @@ pub fn stream(
             }
         }
         let _ = child.wait();
-        return Err(WdError::Msg(provider_failure(
+        return Err(WhError::Msg(provider_failure(
             Some(head.status),
             Some(&head),
             body.trim(),
@@ -536,7 +536,7 @@ pub fn stream(
         return Err(curl_failure(&mut child, status.code(), provider, got_text));
     }
     if let Some(body) = stream_error {
-        return Err(WdError::Msg(provider_failure(
+        return Err(WhError::Msg(provider_failure(
             None,
             Some(&head),
             &body,
@@ -546,7 +546,7 @@ pub fn stream(
     }
     if !got_text {
         let tail = raw_tail.trim();
-        return Err(WdError::Msg(if tail.is_empty() {
+        return Err(WhError::Msg(if tail.is_empty() {
             "provider returned no text".to_string()
         } else {
             provider_failure(None, Some(&head), tail, model, provider)
@@ -628,7 +628,7 @@ fn curl_failure(
     code: Option<i32>,
     provider: &Provider,
     got_text: bool,
-) -> WdError {
+) -> WhError {
     let mut err = String::new();
     if let Some(mut e) = child.stderr.take() {
         let _ = e.read_to_string(&mut err);
@@ -643,11 +643,11 @@ fn curl_failure(
     let detail = lowercase_first(detail);
     let host = provider.host();
     match code {
-        Some(18) | Some(56) if got_text => WdError::Msg(format!("lost the connection to {host}")),
+        Some(18) | Some(56) if got_text => WhError::Msg(format!("lost the connection to {host}")),
         Some(6) | Some(7) | Some(28) | Some(35) | Some(52) | Some(56) if !got_text => {
-            WdError::Msg(format!("could not reach {host}\n{detail}"))
+            WhError::Msg(format!("could not reach {host}\n{detail}"))
         }
-        _ => WdError::Msg(format!("request failed: {detail}")),
+        _ => WhError::Msg(format!("request failed: {detail}")),
     }
 }
 
@@ -767,7 +767,7 @@ pub fn provider_failure(
             None => String::new(),
         };
         return format!(
-            "the diff is too big for {model}{size}\ntry fewer commits, a narrower range, or WD_MODEL with a larger context"
+            "the diff is too big for {model}{size}\ntry fewer commits, a narrower range, or WH_MODEL with a larger context"
         );
     }
     if status == 429 {
@@ -850,7 +850,7 @@ mod tests {
             }
             _ => panic!("expected groq"),
         }
-        let e = env_of(&[("GROQ_API_KEY", "g"), ("WD_GROQ_URL", "http://x")]);
+        let e = env_of(&[("GROQ_API_KEY", "g"), ("WH_GROQ_URL", "http://x")]);
         match choose(&e).unwrap() {
             Provider::Groq { url, .. } => assert_eq!(url, "http://x"),
             _ => panic!("expected groq"),
@@ -864,25 +864,25 @@ mod tests {
 
     #[test]
     fn explicit_provider_wins_and_needs_its_key() {
-        let e = env_of(&[("WD_PROVIDER", "ollama"), ("ANTHROPIC_API_KEY", "a")]);
+        let e = env_of(&[("WH_PROVIDER", "ollama"), ("ANTHROPIC_API_KEY", "a")]);
         assert!(matches!(choose(&e).unwrap(), Provider::Ollama { .. }));
         let e = env_of(&[
-            ("WD_PROVIDER", "groq"),
+            ("WH_PROVIDER", "groq"),
             ("GROQ_API_KEY", "g"),
             ("ANTHROPIC_API_KEY", "a"),
         ]);
         assert!(matches!(choose(&e).unwrap(), Provider::Groq { .. }));
-        let e = env_of(&[("WD_PROVIDER", "openai")]);
+        let e = env_of(&[("WH_PROVIDER", "openai")]);
         assert!(choose(&e).is_err());
-        let e = env_of(&[("WD_PROVIDER", "groq")]);
+        let e = env_of(&[("WH_PROVIDER", "groq")]);
         assert!(choose(&e).is_err());
-        let e = env_of(&[("WD_PROVIDER", "nope")]);
+        let e = env_of(&[("WH_PROVIDER", "nope")]);
         assert!(choose(&e).is_err());
     }
 
     #[test]
     fn model_override_and_defaults() {
-        let e = env_of(&[("WD_MODEL", "custom")]);
+        let e = env_of(&[("WH_MODEL", "custom")]);
         let p = Provider::Ollama { url: "x".into() };
         assert_eq!(model_for(&p, &e), "custom");
         let e = env_of(&[]);

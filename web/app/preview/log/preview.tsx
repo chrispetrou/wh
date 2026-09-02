@@ -6,11 +6,11 @@ import { chatStore } from "@/lib/chat-store";
 import { layout, laneCount } from "@/lib/graph";
 import { LogBlock } from "@/components/log-block";
 
-const KEY = "preview/wd";
+const KEY = "preview/wh";
 const NOW = Date.now();
 const ago = (h: number) => new Date(NOW - h * 3600_000).toISOString();
 
-// the wd repo's shape: two merged feature branches and one unmerged
+// the wh repo's shape: two merged feature branches and one unmerged
 const history: Array<[string, string[], string, number, string[]]> = [
   ["f1a2b3c", ["e005fd9"], "Log graph polish: box-drawing rails, solid dots", 0.2, ["feat/more_git_features"]],
   ["e005fd9", ["c5ad6f2"], "File history, path cuts, and why <path>:<line>", 0.5, []],
@@ -28,7 +28,7 @@ const history: Array<[string, string[], string, number, string[]]> = [
   ["d7cebfc", ["747df4b", "afbca91"], "Merge pull request #1 from chrispetrou/feat/web_app", 73, []],
   ["afbca91", ["2c280a3"], "Add ci and release workflows", 74, ["feat/web_app"]],
   ["2c280a3", ["747df4b"], "Add web app: github sign-in, repo picker, terminal chat", 80, []],
-  ["747df4b", ["48be449"], "Add wd explain: plain-english diff summaries, BYO llm key", 96, ["v0.1.0"]],
+  ["747df4b", ["48be449"], "Add wh explain: plain-english diff summaries, BYO llm key", 96, ["v0.1.0"]],
   ["48be449", ["2c22b93"], "Add shared explain spec and golden fixtures", 97, []],
   ["2c22b93", [], "Setting up repo", 100, []],
 ];
@@ -86,7 +86,7 @@ export function PreviewLog({ dark, open, loading }: { dark: boolean; open: boole
         committer: { name: "GitHub", date: ago(2) },
         message:
           "Merge pull request #2 from chrispetrou/feat/multi_turn\n\nTerminal color roles, command blocks, /copy, and a terminal-vs-web guide",
-        url: "https://github.com/chrispetrou/wd/commit/ec23652",
+        url: "https://github.com/chrispetrou/wh/commit/ec23652",
         files: [
           { path: "README.md", additions: 41, deletions: 6, status: "modified" },
           { path: "web/components/terminal-chat.tsx", additions: 88, deletions: 23, status: "modified" },
@@ -100,10 +100,10 @@ export function PreviewLog({ dark, open, loading }: { dark: boolean; open: boole
   }, [dark, open, loading]);
   return (
     <div className="app-main p-4">
-      <div className="text-muted-foreground">chrispetrou/wd $ <span className="font-semibold text-foreground">log</span></div>
-      <LogBlock block={block} line={0} storeKey={KEY} owner="chrispetrou" repo="wd" submit={() => {}} />
-      <div className="mt-4 text-muted-foreground">chrispetrou/wd $ <span className="font-semibold text-foreground">prs</span></div>
-      <LogBlock block={prs} line={1} storeKey={KEY} owner="chrispetrou" repo="wd" submit={() => {}} />
+      <div className="text-muted-foreground">chrispetrou/wh $ <span className="font-semibold text-foreground">log</span></div>
+      <LogBlock block={block} line={0} storeKey={KEY} owner="chrispetrou" repo="wh" submit={() => {}} />
+      <div className="mt-4 text-muted-foreground">chrispetrou/wh $ <span className="font-semibold text-foreground">prs</span></div>
+      <LogBlock block={prs} line={1} storeKey={KEY} owner="chrispetrou" repo="wh" submit={() => {}} />
     </div>
   );
 }

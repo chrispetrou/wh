@@ -70,7 +70,7 @@ describe("parseCommand", () => {
       ref: "feat/auth",
     });
     expect(parseCommand("branches")).toEqual({ kind: "branches" });
-    expect(parseCommand("wd branches")).toEqual({ kind: "branches" });
+    expect(parseCommand("wh branches")).toEqual({ kind: "branches" });
     expect(parseCommand("list branches")).toEqual({ kind: "branches" });
     expect(parseCommand("what changed in feat/multi_turn")).toEqual({
       kind: "range",
@@ -87,12 +87,12 @@ describe("parseCommand", () => {
   });
 
   it("accepts cli-style input", () => {
-    expect(parseCommand("wd explain HEAD~3..")).toEqual({ kind: "last", n: 3 });
+    expect(parseCommand("wh explain HEAD~3..")).toEqual({ kind: "last", n: 3 });
     expect(parseCommand("HEAD~5..HEAD")).toEqual({ kind: "last", n: 5 });
-    expect(parseCommand("wd explain")).toEqual({ kind: "last", n: 1 });
+    expect(parseCommand("wh explain")).toEqual({ kind: "last", n: 1 });
     expect(parseCommand("explain")).toEqual({ kind: "last", n: 1 });
     expect(parseCommand("last 4")).toEqual({ kind: "last", n: 4 });
-    expect(parseCommand("wd explain main..dev")).toEqual({
+    expect(parseCommand("wh explain main..dev")).toEqual({
       kind: "range",
       base: "main",
       head: "dev",
@@ -221,7 +221,7 @@ describe("parseCommand", () => {
   it("parses describe mode", () => {
     expect(parseCommand("describe pr 42")).toEqual({ kind: "pr", num: 42, mode: "describe" });
     expect(parseCommand("pr description for #42")).toEqual({ kind: "pr", num: 42, mode: "describe" });
-    expect(parseCommand("wd describe pr 42")).toEqual({ kind: "pr", num: 42, mode: "describe" });
+    expect(parseCommand("wh describe pr 42")).toEqual({ kind: "pr", num: 42, mode: "describe" });
     expect(parseCommand("describe feat/auth")).toEqual({
       kind: "range",
       base: "",
@@ -364,11 +364,11 @@ describe("parseCommand", () => {
     expect(parseCommand("ls src")).toEqual({ kind: "ls", dir: "src" });
     expect(parseCommand("ls src on dev")).toEqual({ kind: "ls", dir: "src", ref: "dev" });
     // the worktree commands belong to the cli, so their hint survives
-    expect(parseCommand("wd ls")).toBeNull();
-    expect(parseCommand("wd new feat/x")).toBeNull();
-    expect(parseCommand("wd switch")).toBeNull();
-    expect(parseCommand("wd rm old")).toBeNull();
-    expect(parseCommand("wd explain")).toEqual({ kind: "last", n: 1 });
+    expect(parseCommand("wh ls")).toBeNull();
+    expect(parseCommand("wh new feat/x")).toBeNull();
+    expect(parseCommand("wh switch")).toBeNull();
+    expect(parseCommand("wh rm old")).toBeNull();
+    expect(parseCommand("wh explain")).toEqual({ kind: "last", n: 1 });
   });
 
   it("parses who", () => {
@@ -491,7 +491,7 @@ describe("parseCommand", () => {
       source: { kind: "last", n: 3, ref: "feat/x" },
     });
     expect(parseCommand("rebase 2..5")).toEqual({ kind: "plan", source: { kind: "row", from: 2, to: 5 } });
-    expect(parseCommand("wd rebase 3")).toEqual({ kind: "plan", source: { kind: "row", from: 3 } });
+    expect(parseCommand("wh rebase 3")).toEqual({ kind: "plan", source: { kind: "row", from: 3 } });
     // no source, a single sha, a window, a lookup, a mode, a path
     expect(parseCommand("rebase")).toBeNull();
     expect(parseCommand("rebase a1b2c3d")).toBeNull();
@@ -538,7 +538,7 @@ describe("parseCommand", () => {
     expect(parseCommand("hello")).toBeNull();
     expect(parseCommand("explain everything")).toBeNull();
     expect(parseCommand("last commits")).toBeNull();
-    expect(parseCommand("wd ls")).toBeNull();
+    expect(parseCommand("wh ls")).toBeNull();
     expect(parseCommand("..main")).toBeNull();
   });
 });

@@ -8,13 +8,13 @@ import { detectProvider, type ProviderName } from "./explain/providers";
 
 export type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
-const KEYS = "wd_keys";
-const ACTIVE = "wd_provider";
-const MODELS = "wd_models";
-const EFFORTS = "wd_efforts";
+const KEYS = "wh_keys";
+const ACTIVE = "wh_provider";
+const MODELS = "wh_models";
+const EFFORTS = "wh_efforts";
 // tokens since each key was saved; no provider tells a balance to a key,
 // so this is the only count there is
-const USAGE = "wd_usage";
+const USAGE = "wh_usage";
 
 // what the last answer said was left on the key (see lib/explain/usage.ts)
 export interface Left {
@@ -32,9 +32,9 @@ export interface UsageRecord {
 }
 
 // pre per-provider storage; migrated on first read
-const LEGACY_KEY = "wd_key";
-const LEGACY_MODEL = "wd_model";
-const LEGACY_EFFORT = "wd_effort";
+const LEGACY_KEY = "wh_key";
+const LEGACY_MODEL = "wh_model";
+const LEGACY_EFFORT = "wh_effort";
 
 const ORDER: ProviderName[] = ["anthropic", "openai", "groq"];
 

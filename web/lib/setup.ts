@@ -21,7 +21,7 @@ export function setupAllowed(headers: Headers): boolean {
 }
 
 function envPath(): string {
-  return resolve(process.cwd(), process.env.WD_ENV_FILE ?? ".env.local");
+  return resolve(process.cwd(), process.env.WH_ENV_FILE ?? ".env.local");
 }
 
 // merge key=value pairs into .env.local, preserving unrelated lines

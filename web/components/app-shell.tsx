@@ -27,9 +27,9 @@ export function AppShell({
           data-tip="back to repos · cmd+k"
           className="flex items-center gap-2.5 font-semibold"
         >
-          <Glyph /> <span>wd</span>
+          <Glyph /> <span>wh</span>
         </Link>
-        <span className="font-normal text-wd-faint">/</span>
+        <span className="font-normal text-wh-faint">/</span>
         {section ? (
           <span className="min-w-0 truncate text-muted-foreground">{section}</span>
         ) : null}

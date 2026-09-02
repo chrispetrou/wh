@@ -61,8 +61,8 @@ export function resolvePeriod(phrase: string, now: number, tz: number): Period |
   }
   // the last working day: friday on a monday or a weekend, else yesterday
   if (p === "standup") {
-    const wd = weekday(now, tz);
-    const back = wd === 1 ? 3 : wd === 0 ? 2 : 1;
+    const wh = weekday(now, tz);
+    const back = wh === 1 ? 3 : wh === 0 ? 2 : 1;
     return { since: iso(today - back * DAY), label: "since the last working day" };
   }
   let m = /^(?:last )?(\d{1,3}) days?(?: ago)?$/.exec(p);

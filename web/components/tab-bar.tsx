@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { chatStore } from "@/lib/chat-store";
 
-const TABS_STORE = "wd_tabs";
+const TABS_STORE = "wh_tabs";
 
 // a muted dot after the name while that tab's explain is still streaming
 function Busy({ repo }: { repo: string }) {

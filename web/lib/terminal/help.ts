@@ -1,4 +1,4 @@
-// the /help and /wd tables. a string ending in ":" is an amber section
+// the /help and /wh tables. a string ending in ":" is an amber section
 // label, any other string a muted note, a pair is fg command + muted
 // description, aligned on one column.
 import type { ChatLine } from "../chat-store";
@@ -49,7 +49,7 @@ export const HELP: HelpRow[] = [
   ["/show", "the raw payload of the last command"],
   ["/copy", "copy the last answer to the clipboard"],
   ["/export", "save this transcript as a text file"],
-  ["/wd", "about the wd cli"],
+  ["/wh", "about the wh cli"],
   ["/stop", "stop a running explain (esc works too)"],
   ["/clear", "clear the screen"],
   ["/logout", "sign out"],
@@ -72,15 +72,15 @@ export const HELP: HelpRow[] = [
   ["hover an age", "the absolute date"],
 ];
 
-export const WD_HELP: HelpRow[] = [
-  "wd is also a cli: one tiny binary, no telemetry.",
-  ["wd new <branch>", "worktree in a sibling dir, copies .env*"],
-  ["wd ls", "worktrees with dirty and ahead/behind status"],
-  ["wd switch [query]", "picker that cd's via a shell wrapper"],
-  ["wd rm [name]", "prune worktrees whose branches are merged"],
-  ["wd explain [range]", "this, in your terminal, on the same key"],
-  ["wd init zsh", "the shell wrapper for switch"],
-  "source: github.com/chrispetrou/wd",
+export const WH_HELP: HelpRow[] = [
+  "wh is also a cli: one tiny binary, no telemetry.",
+  ["wh new <branch>", "worktree in a sibling dir, copies .env*"],
+  ["wh ls", "worktrees with dirty and ahead/behind status"],
+  ["wh switch [query]", "picker that cd's via a shell wrapper"],
+  ["wh rm [name]", "prune worktrees whose branches are merged"],
+  ["wh explain [range]", "this, in your terminal, on the same key"],
+  ["wh init zsh", "the shell wrapper for switch"],
+  "source: github.com/chrispetrou/wh",
 ];
 
 export function helpLines(rows: HelpRow[]): ChatLine[] {

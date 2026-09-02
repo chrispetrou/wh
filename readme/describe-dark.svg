@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="720" height="272" viewBox="0 0 720 272" font-family="ui-monospace,SFMono-Regular,'SF Mono','Cascadia Mono','JetBrains Mono',Menlo,Consolas,monospace" font-size="13" role="img" aria-label="wd explain --describe">
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="272" viewBox="0 0 720 272" font-family="ui-monospace,SFMono-Regular,'SF Mono','Cascadia Mono','JetBrains Mono',Menlo,Consolas,monospace" font-size="13" role="img" aria-label="wh explain --describe">
 <style>
 text{fill:#e8e8e8;white-space:pre}
 .o{fill:#7a7a7a}.g{fill:#69db7c}.a{fill:#e0b420}.x{fill:#91a7ff}.f{fill:#3a3a3a}
@@ -151,7 +151,7 @@ text{fill:#e8e8e8;white-space:pre}
 
 <text class="rv o r0x1_711" x="16" y="30">~/repo $</text>
 <text class="rv c r0x1_711" x="86.2" y="30">w</text>
-<text class="rv c r0_749x2_46" x="94" y="30">d</text>
+<text class="rv c r0_749x2_46" x="94" y="30">h</text>
 <text class="rv c r2_246x3_957" x="109.6" y="30">e</text>
 <text class="rv c r2_995x4_706" x="117.4" y="30">x</text>
 <text class="rv c r3_743x5_455" x="125.2" y="30">p</text>

@@ -151,8 +151,8 @@ export function TerminalChat({
     echo(raw);
     const cmd = parseCommand(raw);
     if (!cmd) {
-      if (/^wd\s/i.test(raw)) {
-        muted(["the worktree commands (new, ls, switch, rm) live in the cli: /wd"]);
+      if (/^wh\s/i.test(raw)) {
+        muted(["the worktree commands (new, ls, switch, rm) live in the cli: /wh"]);
         muted([commandHint]);
         return;
       }
@@ -277,7 +277,7 @@ export function TerminalChat({
     }
     // a restored or still-live log means no boot lines
     if (chatStore.lines(storeKey).length) return;
-    push([{ text: `▜ wd · ${owner}/${repo}`, cls: "o" }]);
+    push([{ text: `▜ wh · ${owner}/${repo}`, cls: "o" }]);
     if (!present) {
       muted([
         "paste an api key to enable explanations: anthropic, openai, or groq (free tier at console.groq.com).",
@@ -489,8 +489,8 @@ export function TerminalChat({
       setHistPos(next);
       recall(history[next]);
       // walking far back is the moment ctrl+r earns its line, once ever
-      if (next >= 3 && !prefs.get("wd_ctrlr_hint")) {
-        prefs.set("wd_ctrlr_hint", "seen");
+      if (next >= 3 && !prefs.get("wh_ctrlr_hint")) {
+        prefs.set("wh_ctrlr_hint", "seen");
         muted(["(ctrl+r searches history)"]);
       }
     } else if (e.key === "ArrowDown") {
@@ -577,7 +577,7 @@ export function TerminalChat({
                 )
               ) : l.action === "signin" ? (
                 <button type="button" className="log-action" onClick={reauth}>
-                  sign in again <span className="text-wd-green">→</span>
+                  sign in again <span className="text-wh-green">→</span>
                 </button>
               ) : (
                 <LineText line={l} />
@@ -607,8 +607,8 @@ export function TerminalChat({
           ) : null}
           <input
             ref={inputRef}
-            className={`term-input w-full ${input.startsWith("/") ? "text-wd-accent" : ""}`}
-            style={input.startsWith("/") ? { color: "var(--wd-accent)" } : undefined}
+            className={`term-input w-full ${input.startsWith("/") ? "text-wh-accent" : ""}`}
+            style={input.startsWith("/") ? { color: "var(--wh-accent)" } : undefined}
             value={input}
             onChange={(e) => changeInput(e.target.value)}
             onKeyDown={onKeyDown}
