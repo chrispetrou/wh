@@ -23,8 +23,14 @@ export const HELP: HelpRow[] = [
   ["pick 3 5 onto <branch>", "a cherry-pick plan (backport pr #N to <branch> works too)"],
   ["history <path>", "commits touching a file or dir, numbered"],
   ["... in <path>", "any explain, cut down to a file or dir"],
-  ["why <path>:<line>", "why a line exists (blame, in plain words)"],
+  ["why <path>:<line>[-<line>]", "why a line or a span exists (blame, in plain words)"],
+  ["who <path>", "who knows a file or dir: authors ranked, recent work weighs more"],
+  ["view <path>[:<line>] [on <branch>]", "read a file in place (cat works); a line number asks why"],
+  ["ls [<dir>] [on <branch>]", "directory listing, dirs first"],
+  ["churn [since <ref>] [in <path>]", "hotspots: the files changing most, commit counts per path"],
+  ["activity [since <period>]", "weekly commit spark, top authors, languages"],
   ["branches", "list branches with ahead/behind"],
+  ["stale [8w | since <date>]", "branches with no commits in n weeks"],
   ["tags", "list tags, newest first"],
   ["prs [open|closed|mine]", "pull requests, recently updated first"],
   "  after an explain, plain words are follow-up questions",
@@ -49,7 +55,7 @@ export const HELP: HelpRow[] = [
   ["/logout", "sign out"],
   "keys:",
   ["tab", "complete"],
-  ["up/down", "history; after a log, walk its rows"],
+  ["up/down", "history; after a log, walk its rows; on a file, scroll"],
   ["enter / esc", "open a row, step back out"],
   ["p r s f d e, shift+up/down", "on a plan row: set its action, move it (drag works too)"],
   ["ctrl+r", "search history"],
@@ -76,8 +82,10 @@ export function helpLines(rows: HelpRow[]): ChatLine[] {
       return { text: row, cls: row.endsWith(":") ? "a" : "o" };
     }
     const [cmd, desc] = row;
+    // a command outgrowing the column still gets a gap before its note
+    const head = `  ${cmd}`;
     return {
-      head: { text: `  ${cmd}`.padEnd(HELP_COL), cls: "" },
+      head: { text: head.length >= HELP_COL ? `${head}  ` : head.padEnd(HELP_COL), cls: "" },
       text: desc,
       cls: "o",
     };

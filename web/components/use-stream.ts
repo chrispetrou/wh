@@ -163,7 +163,21 @@ export function useStream({
 
   const run = async (command: string, raw = false) => {
     const kind = parseCommand(command)?.kind;
-    const lookup = ["branches", "log", "tags", "prs", "history", "plan", "pick"].includes(kind ?? "");
+    const lookup = [
+      "branches",
+      "log",
+      "tags",
+      "prs",
+      "stale",
+      "churn",
+      "activity",
+      "history",
+      "who",
+      "view",
+      "ls",
+      "plan",
+      "pick",
+    ].includes(kind ?? "");
     // a message drafted for a plan row is a side quest: it neither starts
     // nor ends a conversation
     const draft = kind === "message";
@@ -185,6 +199,10 @@ export function useStream({
             asm.mode = "tags";
             return;
           }
+          if (meta.ls) {
+            asm.mode = "ls";
+            return;
+          }
           if (meta.block) {
             // the grid goes in as one line; the arrow keys drive it until
             // the next command
@@ -198,7 +216,12 @@ export function useStream({
                 meta.spans !== false
               );
             }
-            if (meta.block.rows.length) {
+            // a stat block is not walkable: the arrows keep their history.
+            // a file block is live without rows: the arrows scroll it
+            if (
+              meta.block.kind === "file" ||
+              (meta.block.kind !== "stat" && meta.block.rows.length)
+            ) {
               chatStore.setLive(storeKey, {
                 line: chatStore.lines(storeKey).length - 1,
                 selected: null,

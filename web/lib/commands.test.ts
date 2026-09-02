@@ -291,6 +291,98 @@ describe("parseCommand", () => {
     expect(parseCommand("changelog prs")).toBeNull();
   });
 
+  it("parses stale branches", () => {
+    expect(parseCommand("stale")).toEqual({ kind: "stale" });
+    expect(parseCommand("stale branches")).toEqual({ kind: "stale" });
+    expect(parseCommand("stale 12w")).toEqual({ kind: "stale", weeks: 12 });
+    expect(parseCommand("stale 2 weeks")).toEqual({ kind: "stale", weeks: 2 });
+    expect(parseCommand("stale since 2026-06-01")).toEqual({
+      kind: "stale",
+      since: "2026-06-01",
+    });
+    expect(parseCommand("stale since last week")).toEqual({
+      kind: "stale",
+      since: "last week",
+    });
+    // a ref is not a cutoff date
+    expect(parseCommand("stale since v1.2")).toBeNull();
+    expect(parseCommand("changelog stale")).toBeNull();
+  });
+
+  it("parses activity", () => {
+    expect(parseCommand("activity")).toEqual({ kind: "activity" });
+    expect(parseCommand("activity since this week")).toEqual({
+      kind: "activity",
+      since: "this week",
+    });
+    expect(parseCommand("activity since 12w")).toEqual({ kind: "activity", since: "12w" });
+    // weekly buckets only cut on a period, never a ref
+    expect(parseCommand("activity since v1.2")).toBeNull();
+    expect(parseCommand("changelog activity")).toBeNull();
+  });
+
+  it("parses churn with its filters in any order", () => {
+    expect(parseCommand("churn")).toEqual({ kind: "churn" });
+    expect(parseCommand("hotspots")).toEqual({ kind: "churn" });
+    expect(parseCommand("churn since v1.2")).toEqual({ kind: "churn", since: "v1.2" });
+    expect(parseCommand("churn since this week")).toEqual({ kind: "churn", since: "this week" });
+    expect(parseCommand("churn on dev in src since v1.2")).toEqual({
+      kind: "churn",
+      ref: "dev",
+      path: "src",
+      since: "v1.2",
+    });
+    expect(parseCommand("hotspots in src/lib on main")).toEqual({
+      kind: "churn",
+      ref: "main",
+      path: "src/lib",
+    });
+    // a period typo or a range is not a window
+    expect(parseCommand("churn since the merge")).toBeNull();
+    expect(parseCommand("churn since main..dev")).toBeNull();
+    expect(parseCommand("changelog churn")).toBeNull();
+  });
+
+  it("parses view, cat, and ls", () => {
+    expect(parseCommand("view src/git.rs")).toEqual({ kind: "view", path: "src/git.rs" });
+    expect(parseCommand("cat src/git.rs")).toEqual({ kind: "view", path: "src/git.rs" });
+    expect(parseCommand("view src/git.rs:42")).toEqual({
+      kind: "view",
+      path: "src/git.rs",
+      line: 42,
+    });
+    expect(parseCommand("view src/git.rs:42 on dev")).toEqual({
+      kind: "view",
+      path: "src/git.rs",
+      line: 42,
+      ref: "dev",
+    });
+    expect(parseCommand("view")).toBeNull();
+    expect(parseCommand("view a b")).toBeNull();
+    expect(parseCommand("changelog view src")).toBeNull();
+    expect(parseCommand("ls")).toEqual({ kind: "ls" });
+    expect(parseCommand("ls src")).toEqual({ kind: "ls", dir: "src" });
+    expect(parseCommand("ls src on dev")).toEqual({ kind: "ls", dir: "src", ref: "dev" });
+    // the worktree commands belong to the cli, so their hint survives
+    expect(parseCommand("wd ls")).toBeNull();
+    expect(parseCommand("wd new feat/x")).toBeNull();
+    expect(parseCommand("wd switch")).toBeNull();
+    expect(parseCommand("wd rm old")).toBeNull();
+    expect(parseCommand("wd explain")).toEqual({ kind: "last", n: 1 });
+  });
+
+  it("parses who", () => {
+    expect(parseCommand("who src/git.rs")).toEqual({ kind: "who", path: "src/git.rs" });
+    expect(parseCommand("who knows src/git.rs")).toEqual({ kind: "who", path: "src/git.rs" });
+    expect(parseCommand("who touched src on dev")).toEqual({
+      kind: "who",
+      path: "src",
+      ref: "dev",
+    });
+    expect(parseCommand("who")).toBeNull();
+    expect(parseCommand("changelog who src")).toBeNull();
+  });
+
   it("parses history, path cuts, and why", () => {
     expect(parseCommand("history src/git.rs")).toEqual({ kind: "history", path: "src/git.rs" });
     expect(parseCommand("history of src on dev")).toEqual({
@@ -348,6 +440,37 @@ describe("parseCommand", () => {
       path: "README.md",
       line: 7,
       ref: "dev",
+    });
+    expect(parseCommand("why src/git.rs:13-17")).toEqual({
+      kind: "why",
+      path: "src/git.rs",
+      line: 13,
+      to: 17,
+    });
+    // a span reads low to high whichever way it was typed; dots work too
+    expect(parseCommand("why src/git.rs:17-13 on dev")).toEqual({
+      kind: "why",
+      path: "src/git.rs",
+      line: 13,
+      to: 17,
+      ref: "dev",
+    });
+    expect(parseCommand("why src/git.rs:13..17")).toEqual({
+      kind: "why",
+      path: "src/git.rs",
+      line: 13,
+      to: 17,
+    });
+    expect(parseCommand("why lines 13-17 of src/git.rs")).toEqual({
+      kind: "why",
+      path: "src/git.rs",
+      line: 13,
+      to: 17,
+    });
+    expect(parseCommand("why src/git.rs:13-13")).toEqual({
+      kind: "why",
+      path: "src/git.rs",
+      line: 13,
     });
     expect(parseCommand("why")).toBeNull();
   });

@@ -361,7 +361,7 @@ fn streams_from_fake_groq_sse() {
         .stdout(predicate::str::contains("summary\nswapped one for two."))
         .stdout(predicate::str::contains("watch out\nnothing notable."))
         .stderr(predicate::str::contains(
-            "\u{b7} llama-3.3-70b-versatile \u{b7} 9 in \u{b7} 4 out",
+            "\u{b7} openai/gpt-oss-120b \u{b7} 9 in \u{b7} 4 out",
         ));
     let request = server.join().unwrap();
     assert!(
@@ -369,7 +369,7 @@ fn streams_from_fake_groq_sse() {
         "{request}"
     );
     assert!(request.contains("Authorization: Bearer gsk_test"));
-    assert!(request.contains("\"model\":\"llama-3.3-70b-versatile\""));
+    assert!(request.contains("\"model\":\"openai/gpt-oss-120b\""));
     assert!(request.contains("\"role\":\"system\""));
     assert!(
         request.contains("\"stream_options\":{\"include_usage\":true}"),

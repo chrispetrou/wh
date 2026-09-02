@@ -20,6 +20,10 @@ describe("slots", () => {
     expect(branchSlot("pick 3 5 onto ma")).toEqual({ prefix: "pick 3 5 onto ", partial: "ma" });
     expect(branchSlot("log 20 on ")).toEqual({ prefix: "log 20 on ", partial: "" });
     expect(branchSlot("since v1")).toEqual({ prefix: "since ", partial: "v1" });
+    expect(branchSlot("churn since v1")).toEqual({ prefix: "churn since ", partial: "v1" });
+    // periods only, a branch would be rejected
+    expect(branchSlot("activity since ")).toBeNull();
+    expect(branchSlot("stale since ")).toBeNull();
     expect(branchSlot("/model x")).toBeNull();
     expect(branchSlot("explain the last 3 commits")).toBeNull();
   });

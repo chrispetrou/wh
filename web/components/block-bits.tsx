@@ -18,6 +18,11 @@ export function absolute(iso: string): string {
     .toLowerCase();
 }
 
+// a value still in flight
+export function Skel({ w }: { w: number }) {
+  return <span className="skel" style={{ width: `${w}ch` }} />;
+}
+
 export function Chip({ name, color }: { name: string; color: string }) {
   return (
     <span className="chip" style={{ color }}>

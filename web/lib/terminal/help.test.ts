@@ -11,6 +11,12 @@ describe("help tables", () => {
     }
   });
 
+  it("keeps a gap between a long command and its note", () => {
+    for (const l of [...helpLines(HELP), ...helpLines(WD_HELP)]) {
+      if (l.head && l.text) expect(l.head.text.endsWith(" "), l.head.text).toBe(true);
+    }
+  });
+
   it("labels sections amber and notes muted", () => {
     const rows = helpLines(HELP);
     expect(rows[0]).toEqual({ text: "repo commands:", cls: "a" });

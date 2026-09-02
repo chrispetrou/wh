@@ -2,23 +2,32 @@ import { NextRequest, NextResponse } from "next/server";
 import { LOG_DEFAULT, parseCommand } from "@/lib/commands";
 import { sameOrigin } from "@/lib/origin";
 import {
+  activityBlock,
   branchesText,
+  churnBlock,
   commitInput,
   compareRange,
+  defaultBranch,
   GithubError,
   historyBlock,
   lastNCommits,
   logBlock,
+  lsText,
   mergeInputs,
   planBlock,
   prInput,
   prsBlock,
   sinceInput,
+  staleText,
   tagsText,
+  validPath,
+  validRef,
+  whoBlock,
   whyInput,
   type ExplainInput,
   type PlanSource,
 } from "@/lib/github";
+import type { Block } from "@/lib/block";
 import { describeTurn } from "@/lib/explain/context";
 import { filterDiff } from "@/lib/explain/filter";
 import { defaultCaps, defaultRules, preprocess, stats } from "@/lib/explain/preprocess";
@@ -245,6 +254,20 @@ export async function POST(req: NextRequest) {
   // the browser's utc offset, so "today" is the user's day
   const tz = Math.max(-840, Math.min(840, Number(req.headers.get("x-wd-tz") ?? 0) || 0));
 
+  if (command.kind === "stale") {
+    try {
+      const text = await staleText(session.token, owner, repo, {
+        weeks: command.weeks,
+        since: command.since,
+        now: Date.now(),
+        tz,
+      });
+      return plain({ branches: true }, text);
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
+
   // blocks: structured rows the terminal renders as a grid, no model
   if (command.kind === "log") {
     try {
@@ -294,6 +317,68 @@ export async function POST(req: NextRequest) {
       return githubFailure(e, destroy);
     }
   }
+  if (command.kind === "who") {
+    try {
+      const w = await whoBlock(session.token, owner, repo, command.path, command.ref);
+      return plain({ block: w.block }, "");
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
+  // the view block is an address only: the content is fetched lazily by
+  // the client through /api/detail, so the command answers instantly
+  if (command.kind === "view") {
+    if (!validPath(command.path)) return err(400, "bad path");
+    if (command.ref && !validRef(command.ref)) return err(400, "bad ref");
+    try {
+      const ref = command.ref ?? (await defaultBranch(session.token, owner, repo));
+      const block: Block = {
+        kind: "file",
+        path: command.path,
+        ref,
+        ...(command.line ? { mark: command.line } : {}),
+      };
+      return plain({ block }, "");
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
+  if (command.kind === "ls") {
+    if (command.dir && !validPath(command.dir)) return err(400, "bad path");
+    if (command.ref && !validRef(command.ref)) return err(400, "bad ref");
+    try {
+      const text = await lsText(session.token, owner, repo, command.dir, command.ref);
+      return plain({ ls: true }, text);
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
+  if (command.kind === "activity") {
+    try {
+      const a = await activityBlock(session.token, owner, repo, {
+        since: command.since,
+        now: Date.now(),
+        tz,
+      });
+      return plain({ block: a.block }, "");
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
+  if (command.kind === "churn") {
+    try {
+      const c = await churnBlock(session.token, owner, repo, {
+        ref: command.ref,
+        since: command.since,
+        path: command.path,
+        now: Date.now(),
+        tz,
+      });
+      return plain({ block: c.block }, "");
+    } catch (e) {
+      return githubFailure(e, destroy);
+    }
+  }
   // row numbers only mean something next to the client's last log
   if (command.kind === "row") return err(400, "run log first, then explain a row number");
   // plans: rows to edit and commands to paste, never run here
@@ -332,7 +417,8 @@ export async function POST(req: NextRequest) {
         repo,
         command.path,
         command.line,
-        command.ref
+        command.ref,
+        command.to
       );
       question = w.question;
       mode = "why";

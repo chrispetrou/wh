@@ -15,8 +15,11 @@ export function detectProvider(key: string): ProviderName {
 
 export const DEFAULT_MODELS: Record<ProviderName, string> = {
   anthropic: "claude-opus-5",
-  openai: "gpt-5-mini",
-  groq: "llama-3.3-70b-versatile",
+  // openai superseded the gpt-5/-mini/-nano family with gpt-5.6
+  // sol/terra/luna; terra is their balanced tier, like mini was
+  openai: "gpt-5.6-terra",
+  // groq retired llama-3.3-70b-versatile on 2026-08-16
+  groq: "openai/gpt-oss-120b",
 };
 
 // providers with a no-cost tier, for the "free" note in the terminal
@@ -24,9 +27,9 @@ export const FREE_TIER: ProviderName[] = ["groq"];
 
 // what the terminal suggests for /model; the default comes first
 export const SUGGESTED_MODELS: Record<ProviderName, string[]> = {
-  anthropic: ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"],
-  openai: ["gpt-5-mini", "gpt-5"],
-  groq: ["llama-3.3-70b-versatile", "openai/gpt-oss-120b"],
+  anthropic: ["claude-opus-5", "claude-fable-5", "claude-sonnet-5", "claude-haiku-4-5"],
+  openai: ["gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna"],
+  groq: ["openai/gpt-oss-120b", "openai/gpt-oss-20b"],
 };
 
 // which provider a model id belongs to, when that can be told: exact
@@ -53,7 +56,9 @@ export const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$/;
 // combination surfaces as a provider error.
 export const EFFORTS: Record<ProviderName, string[]> = {
   anthropic: ["low", "medium", "high", "xhigh", "max"],
-  openai: ["minimal", "low", "medium", "high"],
+  // the full documented range for gpt-5.6; which subset a model takes
+  // varies, and an unsupported pick surfaces as a provider error
+  openai: ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
   groq: [],
 };
 

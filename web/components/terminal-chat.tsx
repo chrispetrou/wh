@@ -18,8 +18,10 @@ import { activeEffort, effortIgnored, providerInfo, seconds, usageInfo } from "@
 import { COMMANDS, type Menu } from "@/lib/terminal/menu";
 import { rememberRecent } from "@/lib/terminal/prefs";
 import { resolveRows } from "@/lib/terminal/resolve";
+import { FileBlock } from "./file-block";
 import { LogBlock } from "./log-block";
 import { PlanBlock } from "./plan-block";
+import { StatBlock } from "./stat-block";
 import { DragLayer, type Drop } from "./drag-layer";
 import { ModelGlyph } from "./glyph";
 import { LineText } from "./terminal-line";
@@ -305,6 +307,19 @@ export function TerminalChat({
       logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
     }
   }, [lines, busy]);
+  // blocks also grow without a new line (a file's text or a panel's
+  // detail landing after its skeleton); while pinned, any growth keeps
+  // the bottom pinned, so content above only ever shifts, never hides
+  const contentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      if (pinnedRef.current) logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // cmd+k / ctrl+k jumps back to the repo picker
   useEffect(() => {
@@ -362,7 +377,37 @@ export function TerminalChat({
     // its rows, enter opens one, esc steps back out (then history again)
     const live = chatStore.live(storeKey);
     const liveBlock = live ? lines[live.line]?.block : undefined;
-    if (live && liveBlock && input === "" && !menu) {
+    // a live file block has no rows: the arrows scroll it in place. the
+    // position is ephemeral dom state, never written to the store; keys
+    // not handled here fall through to history and submit
+    if (live && liveBlock?.kind === "file" && input === "" && !menu) {
+      if (["ArrowDown", "ArrowUp", "PageDown", "PageUp"].includes(e.key)) {
+        e.preventDefault();
+        const el = document.querySelector<HTMLElement>(`[data-file-line="${live.line}"]`);
+        if (el) {
+          // the step follows /fontsize, so never a hard-coded pixel count
+          const lineH = parseFloat(getComputedStyle(el).lineHeight) || 22;
+          const step = e.key.startsWith("Page") ? el.clientHeight : lineH;
+          el.scrollTop += e.key.endsWith("Down") ? step : -step;
+        }
+        return;
+      }
+      if (e.key === "Escape" && !busy) {
+        e.preventDefault();
+        chatStore.setLive(storeKey, undefined);
+        return;
+      }
+    }
+    // a stat block is never live (nothing to walk), so its guard is for
+    // the type only; the file check narrows past the branch above
+    else if (
+      live &&
+      liveBlock &&
+      liveBlock.kind !== "stat" &&
+      liveBlock.kind !== "file" &&
+      input === "" &&
+      !menu
+    ) {
       const n = liveBlock.rows.length;
       const idAt = (i: number) => {
         const r = liveBlock.rows[i];
@@ -461,54 +506,71 @@ export function TerminalChat({
         className="term-scroll"
         onScroll={onLogScroll}
       >
-        {lines.map((l, i) => (
-          // a prompt line opens a block: command and its output read as one
-          <div
-            key={l.id ?? i}
-            className={`${l.prefix && i > 0 ? "mt-3" : ""} ${
-              !l.block && freshRef.current.has(l) ? "line-in" : ""
-            }`}
-            data-drop={l.drop}
-          >
-            {l.prefix ? (
-              <span className="text-muted-foreground">{l.prefix} </span>
-            ) : null}
-            {l.block ? (
-              l.block.kind === "plan" ? (
-                <PlanBlock
-                  block={l.block}
-                  line={i}
-                  storeKey={storeKey}
-                  submit={(c) => submit(c)}
-                  fresh={freshRef.current.has(l)}
-                />
+        <div ref={contentRef}>
+          {lines.map((l, i) => (
+            // a prompt line opens a block: command and its output read as one
+            <div
+              key={l.id ?? i}
+              className={`${l.prefix && i > 0 ? "mt-3" : ""} ${
+                !l.block && freshRef.current.has(l) ? "line-in" : ""
+              }`}
+              data-drop={l.drop}
+            >
+              {l.prefix ? (
+                <span className="text-muted-foreground">{l.prefix} </span>
+              ) : null}
+              {l.block ? (
+                l.block.kind === "plan" ? (
+                  <PlanBlock
+                    block={l.block}
+                    line={i}
+                    storeKey={storeKey}
+                    submit={(c) => submit(c)}
+                    fresh={freshRef.current.has(l)}
+                  />
+                ) : l.block.kind === "stat" ? (
+                  <StatBlock block={l.block} fresh={freshRef.current.has(l)} />
+                ) : l.block.kind === "file" ? (
+                  <FileBlock
+                    block={l.block}
+                    line={i}
+                    storeKey={storeKey}
+                    owner={owner}
+                    repo={repo}
+                    prefill={(v) => {
+                      recall(v);
+                      inputRef.current?.focus();
+                    }}
+                    fresh={freshRef.current.has(l)}
+                  />
+                ) : (
+                  <LogBlock
+                    block={l.block}
+                    line={i}
+                    storeKey={storeKey}
+                    owner={owner}
+                    repo={repo}
+                    submit={(c) => submit(c)}
+                    fresh={freshRef.current.has(l)}
+                  />
+                )
+              ) : l.action === "signin" ? (
+                <button type="button" className="log-action" onClick={reauth}>
+                  sign in again <span className="text-wd-green">→</span>
+                </button>
               ) : (
-                <LogBlock
-                  block={l.block}
-                  line={i}
-                  storeKey={storeKey}
-                  owner={owner}
-                  repo={repo}
-                  submit={(c) => submit(c)}
-                  fresh={freshRef.current.has(l)}
-                />
-              )
-            ) : l.action === "signin" ? (
-              <button type="button" className="log-action" onClick={reauth}>
-                sign in again <span className="text-wd-green">→</span>
-              </button>
-            ) : (
-              <LineText line={l} />
-            )}
-          </div>
-        ))}
-        <DragLayer onDrop={onDrop} />
-        {busy ? (
-          <div>
-            <span className="cursor" />
-            <span className="text-muted-foreground"> {seconds(elapsed)}</span>
-          </div>
-        ) : null}
+                <LineText line={l} />
+              )}
+            </div>
+          ))}
+          <DragLayer onDrop={onDrop} />
+          {busy ? (
+            <div>
+              <span className="cursor" />
+              <span className="text-muted-foreground"> {seconds(elapsed)}</span>
+            </div>
+          ) : null}
+        </div>
       </div>
       <div className="flex items-baseline gap-2 pt-3">
         <span className="shrink-0 text-muted-foreground">{prompt}</span>

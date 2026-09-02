@@ -236,8 +236,8 @@ Environment only, no config files:
 
 ```
 ANTHROPIC_API_KEY   used if set (model: claude-opus-5)
-OPENAI_API_KEY      used if no anthropic key (model: gpt-5-mini)
-GROQ_API_KEY        used if neither (model: llama-3.3-70b-versatile)
+OPENAI_API_KEY      used if no anthropic key (model: gpt-5.6-terra)
+GROQ_API_KEY        used if neither (model: openai/gpt-oss-120b)
                     none set: local ollama (model: llama3.2)
 WD_PROVIDER         force one of: anthropic, openai, groq, ollama
 WD_MODEL            override the model for any provider
@@ -332,13 +332,19 @@ log row belongs, a completion menu drops down, filtered as you type.
 | a rebase plan | `rebase feat/auth`, `rebase main..feat/auth`, `rebase pr #42`, `rebase 2..5` (log rows) |
 | a cherry-pick plan | `pick 3 5 onto release/1.x`, `backport pr #42 to release/1.x` |
 | a file's story | `history src/git.rs`, `history src/ on feat/auth` |
-| one line | `why src/git.rs:42`, `why line 42 of src/git.rs on v1.2` |
+| a line or a span | `why src/git.rs:42`, `why src/git.rs:13-17`, `why line 42 of src/git.rs on v1.2` |
+| who knows a file | `who src/git.rs`, `who knows src/ on dev` |
+| read a file | `view src/git.rs:42`, `cat` works too; click a line number to ask why |
+| a listing | `ls`, `ls src on dev` |
+| hotspots | `churn`, `churn since v1.2 in src/`, `hotspots on dev` |
+| the repo's pulse | `activity`, `activity since this week` |
 | cut to a path | any explain plus `in <path>`: `explain the last 5 commits in src/`, `changelog of pr 42 in docs/` |
-| lists | `branches`, `tags`, `prs`, `closed prs`, `my prs` |
+| lists | `branches`, `tags`, `prs`, `closed prs`, `my prs`, `stale` (quiet branches), `stale 12w` |
 | follow-ups | plain words after an explain: `why is that risky?`, `which files touch auth?` |
 
-Periods are plain words: `today`, `yesterday`, `this week`, `since monday`,
-`since 3 days ago`, `since v1.2`; `by <login>` keeps one person's commits,
+Periods are plain words: `today`, `yesterday`, `this week`, `last month`,
+`last year`, `since monday`, `since 3 days ago`, `since 12w`, `since v1.2`;
+`by <login>` keeps one person's commits,
 `by me` yours, and `standup` is your commits since the last working day.
 `changelog` and `describe` wrap any diff command and produce the same
 sections as the cli; `describe pr #42` keeps the pr's own title and body
@@ -384,8 +390,8 @@ are never stored, logged, or echoed back by the server.
 | provider | default model | effort | free tier |
 |---|---|---|---|
 | anthropic | claude-opus-5 | low, medium, high, xhigh, max | |
-| openai | gpt-5-mini | minimal, low, medium, high | |
-| groq | llama-3.3-70b-versatile | (ignored) | console.groq.com |
+| openai | gpt-5.6-terra | none, minimal, low, medium, high, xhigh, max | |
+| groq | openai/gpt-oss-120b | (ignored) | console.groq.com |
 
 `/model` switches models (any id; picking another provider's model makes
 that provider active) and `/effort` sets the reasoning effort where the

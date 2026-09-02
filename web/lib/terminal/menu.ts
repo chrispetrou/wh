@@ -97,13 +97,14 @@ export function branchSlot(input: string): BranchSlot | null {
     input
   );
   if (m) return { prefix: m[1], partial: m[2] };
-  m = /^((?:wd\s+)?(?:git\s+)?(?:log|graph|history)(?:\s+\S+)?\s+on\s+)(\S*)$/i.exec(input);
+  m = /^((?:wd\s+)?(?:git\s+)?(?:log|graph|history|who|churn|hotspots|view|cat|ls)(?:\s+\S+)?\s+on\s+)(\S*)$/i.exec(input);
   if (m) return { prefix: m[1], partial: m[2] };
-  m = /^((?:wd\s+)?why\s+\S+:\d+\s+on\s+)(\S*)$/i.exec(input);
+  m = /^((?:wd\s+)?why\s+\S+:\d+(?:-\d+)?\s+on\s+)(\S*)$/i.exec(input);
   if (m) return { prefix: m[1], partial: m[2] };
-  // "since <ref>" anywhere at the end, and the first side of a changelog range
+  // "since <ref>" anywhere at the end, and the first side of a changelog
+  // range; activity and stale take periods only, so no branches there
   m = /^((?:wd\s+)?(?:.*\s)?since\s+)([^\s.]*)$/i.exec(input);
-  if (m) return { prefix: m[1], partial: m[2] };
+  if (m && !/^(?:wd\s+)?(?:activity|stale)\b/i.test(input)) return { prefix: m[1], partial: m[2] };
   m = /^((?:wd\s+)?(?:changelog|release\s+notes|describe|rebase)\s+)([^\s.]*)$/i.exec(input);
   if (m) return { prefix: m[1], partial: m[2] };
   // the target of a cherry-pick plan

@@ -64,7 +64,17 @@ export interface PrDetail {
   commits: number;
   files: Array<{ path: string; additions: number; deletions: number; status: string }>;
 }
-export type Detail = CommitDetail | PrDetail;
+// a file's text for the view block, keyed "file:<ref>:<path>" (git
+// forbids ":" in refnames, so the key is unambiguous)
+export interface FileDetail {
+  kind: "file";
+  path: string;
+  ref: string;
+  lines: string[]; // raw text, one entry per line
+  size: number; // bytes before any cap
+  truncated: boolean;
+}
+export type Detail = CommitDetail | PrDetail | FileDetail;
 
 // why a detail fetch failed; `auth` means the github session is gone
 export interface DetailFailure {
