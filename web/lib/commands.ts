@@ -502,5 +502,5 @@ export const commandHint = [
   "  churn [since <period | ref>] [on <branch>] [in <path>] (the files changing most)",
   "  activity [since <period>] (commit spark, authors, languages)",
   "  cli-style works too: wd explain HEAD~3..",
-  "  /help for everything else",
+  "  /help for everything else: keys and mouse too",
 ].join("\n");

@@ -312,7 +312,7 @@ export function PlanBlock({
           </>
         ) : null}
       </div>
-      {mine ? <div className="text-wd-faint">{hint}</div> : null}
+      {mine ? <div className="text-muted-foreground">{hint}</div> : null}
     </div>
   );
 }

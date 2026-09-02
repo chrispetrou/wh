@@ -55,6 +55,7 @@ export const HELP: HelpRow[] = [
   ["/logout", "sign out"],
   "keys:",
   ["tab", "complete"],
+  ["right", "take the gray suggestion (your history)"],
   ["up/down", "history; after a log, walk its rows; on a file, scroll"],
   ["enter / esc", "open a row, step back out"],
   ["p r s f d e, shift+up/down", "on a plan row: set its action, move it (drag works too)"],
@@ -63,6 +64,12 @@ export const HELP: HelpRow[] = [
   ["cmd+k / ctrl+k", "repo picker"],
   ["ctrl+t", "new tab"],
   ["ctrl+1..9", "switch tabs"],
+  "mouse:",
+  ["drag a log row", "onto a branch line for a cherry-pick plan, or into a plan"],
+  ["drag a pr row", "onto a branch line to backport it"],
+  ["click a sha", "copy it"],
+  ["click a line number", "why that line (shift+click spans)"],
+  ["hover an age", "the absolute date"],
 ];
 
 export const WD_HELP: HelpRow[] = [

@@ -227,6 +227,14 @@ export function useStream({
                 selected: null,
               });
             }
+            // the mouse tricks nothing on screen reveals, said once ever
+            if (meta.block.kind === "log" && !prefs.get("wd_drag_hint")) {
+              prefs.set("wd_drag_hint", "seen");
+              muted(["(drag a row onto a branch line for a cherry-pick plan)"]);
+            } else if (meta.block.kind === "file" && !prefs.get("wd_why_hint")) {
+              prefs.set("wd_why_hint", "seen");
+              muted(["(click a line number to ask why it exists)"]);
+            }
             return;
           }
           if (meta.empty) {

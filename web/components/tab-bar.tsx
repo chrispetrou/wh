@@ -130,7 +130,7 @@ export function TabBar() {
             aria-label={`close ${t}`}
             data-tip="close tab"
             onClick={() => close(t)}
-            className="cursor-pointer text-wd-faint hover:text-foreground"
+            className="cursor-pointer text-muted-foreground hover:text-foreground"
           >
             ×
           </button>
@@ -139,7 +139,7 @@ export function TabBar() {
       <Link
         href="/repos"
         data-tip="new tab · ctrl+t"
-        className="shrink-0 px-2 py-0.5 text-wd-faint hover:text-foreground"
+        className="shrink-0 px-2 py-0.5 text-muted-foreground hover:text-foreground"
       >
         +
       </Link>

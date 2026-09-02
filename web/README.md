@@ -245,12 +245,14 @@ gets an amber warning after the answer.
 | keys | |
 |---|---|
 | enter, up/down, ctrl+r | send; recall history; search it |
+| right | take the gray suggestion (typed ahead from history) |
 | esc | stop a running explain; close a menu or panel |
 | tab, enter, esc (menu open) | complete; use; dismiss |
 | arrows, enter, esc (after a log, prs, or history) | walk rows; open one; step out |
 | arrows, esc (on a file view) | scroll; step out |
 | p r s f d e, shift+up/down (in a plan) | set a row's action; move it (drag works too) |
 | drag a log / prs row | onto a branch: cherry-pick; into a plan: add it |
+| click a sha | copy it |
 | cmd+k / ctrl+k | repo picker |
 | ctrl+t, ctrl+1..9, × | new repo tab; switch tabs; close |
 
