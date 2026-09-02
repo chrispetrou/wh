@@ -27,9 +27,10 @@ export const FREE_TIER: ProviderName[] = ["groq"];
 
 // what the terminal suggests for /model; the default comes first
 export const SUGGESTED_MODELS: Record<ProviderName, string[]> = {
-  anthropic: ["claude-opus-5", "claude-fable-5", "claude-sonnet-5", "claude-haiku-4-5"],
+  anthropic: ["claude-opus-5", "claude-fable-5-1", "claude-sonnet-5", "claude-haiku-4-5"],
   openai: ["gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna"],
-  groq: ["openai/gpt-oss-120b", "openai/gpt-oss-20b"],
+  // qwen3.8 is a groq preview: may be discontinued at short notice
+  groq: ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"],
 };
 
 // which provider a model id belongs to, when that can be told: exact
@@ -51,15 +52,17 @@ export function modelFamily(id: string): ProviderName | null {
 export const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$/;
 
 // reasoning effort levels each provider understands (anthropic:
-// output_config.effort; openai: reasoning_effort; groq: none, its llama
-// models take no effort level). model support varies; an unsupported
-// combination surfaces as a provider error.
+// output_config.effort; openai and groq: reasoning_effort). model
+// support varies; an unsupported combination surfaces as a provider
+// error.
 export const EFFORTS: Record<ProviderName, string[]> = {
   anthropic: ["low", "medium", "high", "xhigh", "max"],
   // the full documented range for gpt-5.6; which subset a model takes
   // varies, and an unsupported pick surfaces as a provider error
   openai: ["none", "minimal", "low", "medium", "high", "xhigh", "max"],
-  groq: [],
+  // groq's gpt-oss range; the qwen previews also take none/default,
+  // added on demand if those graduate
+  groq: ["low", "medium", "high"],
 };
 
 function effortBody(provider: ProviderName, effort?: string) {

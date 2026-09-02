@@ -41,9 +41,9 @@ describe("detectProvider", () => {
 });
 
 describe("groq defaults", () => {
-  it("has a default model and no effort levels", () => {
+  it("has a default model and the gpt-oss effort range", () => {
     expect(DEFAULT_MODELS.groq).toBe("openai/gpt-oss-120b");
-    expect(EFFORTS.groq).toEqual([]);
+    expect(EFFORTS.groq).toEqual(["low", "medium", "high"]);
   });
 });
 
@@ -77,9 +77,9 @@ describe("buildRequest for groq", () => {
     expect(body.messages[1]).toEqual({ role: "user", content: "usr" });
   });
 
-  it("drops effort for groq but keeps it for openai", () => {
+  it("sends reasoning_effort for groq and openai alike", () => {
     const groq = JSON.parse(buildRequest("groq", "gsk_x", "s", "u", undefined, "high").body);
-    expect(groq).not.toHaveProperty("reasoning_effort");
+    expect(groq.reasoning_effort).toBe("high");
     const openai = JSON.parse(buildRequest("openai", "sk-x", "s", "u", undefined, "high").body);
     expect(openai.reasoning_effort).toBe("high");
   });

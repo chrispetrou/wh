@@ -48,7 +48,8 @@ describe("info strings", () => {
     ks.addKey("gsk_x");
     expect(providerInfo(ks)).toBe(`groq · ${DEFAULT_MODELS.groq}`);
     expect(modelName(ks)).toBe(DEFAULT_MODELS.groq);
-    expect(effortIgnored(ks)).toBe(true);
+    // groq's gpt-oss models take reasoning_effort, so it is not ignored
+    expect(effortIgnored(ks)).toBe(false);
     ks.setModel("groq", "openai/gpt-oss-120b");
     expect(providerInfo(ks)).toBe("groq · openai/gpt-oss-120b");
     expect(activeModel(ks)).toBe("openai/gpt-oss-120b");
