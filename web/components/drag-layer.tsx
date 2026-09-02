@@ -7,7 +7,7 @@
 // terminal. sources call startDrag from a pointermove past a threshold;
 // the layer owns the rest through window listeners
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 
 export interface DragPayload {
@@ -29,11 +29,27 @@ interface Session {
   over: string | null;
 }
 
+// the session is a tiny external store: the component reads it through
+// useSyncExternalStore and never touches the global itself. inside a
+// compiled component the react compiler treats a module-level let as
+// constant (it folds local aliases back into it and caches jsx that
+// reads it), so every read and write lives here at module scope
 let current: Session | null = null;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((f) => f());
+const subscribe = (f: () => void) => {
+  listeners.add(f);
+  return () => {
+    listeners.delete(f);
+  };
+};
+const snapshot = (): Session | null => current;
+const none = (): Session | null => null;
 
-export function startDrag(payload: DragPayload, at: { clientX: number; clientY: number }) {
+export function startDrag(
+  payload: DragPayload,
+  at: { clientX: number; clientY: number },
+) {
   current = { payload, x: at.clientX, y: at.clientY, over: null };
   document.body.classList.add("dragging");
   emit();
@@ -41,17 +57,23 @@ export function startDrag(payload: DragPayload, at: { clientX: number; clientY: 
 
 export const dragging = (): boolean => current !== null;
 
-function end() {
-  current = null;
-  document.body.classList.remove("dragging");
-  document.querySelectorAll(".drop-over").forEach((el) => el.classList.remove("drop-over"));
+// a fresh object per move so the store snapshot changes identity
+function moveTo(x: number, y: number, over: string | null) {
+  if (!current) return;
+  current = { ...current, x, y, over };
   emit();
 }
 
-// ends the drag and hands back the session it ended. lives at module
-// scope on purpose: inside the component the react compiler folds a
-// local alias of `current` back into the global, which is null once
-// end() has run
+function end() {
+  current = null;
+  document.body.classList.remove("dragging");
+  document
+    .querySelectorAll(".drop-over")
+    .forEach((el) => el.classList.remove("drop-over"));
+  emit();
+}
+
+// ends the drag and hands back the session it ended
 function release(): Session | null {
   const s = current;
   if (s) end();
@@ -62,36 +84,30 @@ const EDGE = 40;
 const CRAWL = 6;
 
 export function DragLayer({ onDrop }: { onDrop: (d: Drop) => void }) {
-  const [, tick] = useState(0);
+  const session = useSyncExternalStore(subscribe, snapshot, none);
   const dropRef = useRef(onDrop);
   useEffect(() => {
     dropRef.current = onDrop;
   });
 
   useEffect(() => {
-    const f = () => tick((n) => n + 1);
-    listeners.add(f);
-    return () => {
-      listeners.delete(f);
-    };
-  }, []);
-
-  useEffect(() => {
     const under = (x: number, y: number) => document.elementFromPoint(x, y);
     const clearOver = () =>
-      document.querySelectorAll(".drop-over").forEach((el) => el.classList.remove("drop-over"));
+      document
+        .querySelectorAll(".drop-over")
+        .forEach((el) => el.classList.remove("drop-over"));
     const move = (e: PointerEvent) => {
-      if (!current) return;
-      current.x = e.clientX;
-      current.y = e.clientY;
-      const t = under(e.clientX, e.clientY)?.closest<HTMLElement>("[data-drop]") ?? null;
+      const s = snapshot();
+      if (!s) return;
+      const t =
+        under(e.clientX, e.clientY)?.closest<HTMLElement>("[data-drop]") ??
+        null;
       const id = t?.dataset.drop ?? null;
-      if (id !== current.over) {
+      if (id !== s.over) {
         clearOver();
         t?.classList.add("drop-over");
-        current.over = id;
       }
-      emit();
+      moveTo(e.clientX, e.clientY, id);
     };
     const up = () => {
       const s = release();
@@ -100,13 +116,19 @@ export function DragLayer({ onDrop }: { onDrop: (d: Drop) => void }) {
       if (!s.over || !el) return;
       const target = el.closest<HTMLElement>("[data-drop]");
       const rowEl = el.closest<HTMLElement>("[data-row]");
-      const rows = target ? [...target.querySelectorAll<HTMLElement>("[data-row]")] : [];
+      const rows = target
+        ? [...target.querySelectorAll<HTMLElement>("[data-row]")]
+        : [];
       const row = rowEl ? rows.indexOf(rowEl) : -1;
-      dropRef.current({ target: s.over, payload: s.payload, row: row >= 0 ? row : null });
+      dropRef.current({
+        target: s.over,
+        payload: s.payload,
+        row: row >= 0 ? row : null,
+      });
     };
     // esc abandons the drag, dropping nothing
     const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && current) {
+      if (e.key === "Escape" && dragging()) {
         e.preventDefault();
         e.stopPropagation();
         end();
@@ -115,12 +137,13 @@ export function DragLayer({ onDrop }: { onDrop: (d: Drop) => void }) {
     // the scroll box crawls while the pointer sits near its top or bottom
     let raf = 0;
     const crawl = () => {
-      if (current) {
+      const s = snapshot();
+      if (s) {
         const box = document.querySelector<HTMLElement>(".term-scroll");
         if (box) {
           const r = box.getBoundingClientRect();
-          if (current.y < r.top + EDGE) box.scrollTop -= CRAWL;
-          else if (current.y > r.bottom - EDGE) box.scrollTop += CRAWL;
+          if (s.y < r.top + EDGE) box.scrollTop -= CRAWL;
+          else if (s.y > r.bottom - EDGE) box.scrollTop += CRAWL;
         }
       }
       raf = requestAnimationFrame(crawl);
@@ -140,11 +163,15 @@ export function DragLayer({ onDrop }: { onDrop: (d: Drop) => void }) {
     };
   }, []);
 
-  if (!current) return null;
+  if (!session) return null;
   return createPortal(
-    <div className="drag-ghost" style={{ left: current.x + 12, top: current.y + 12 }} aria-hidden="true">
-      {current.payload.label}
+    <div
+      className="drag-ghost"
+      style={{ left: session.x + 12, top: session.y + 12 }}
+      aria-hidden="true"
+    >
+      {session.payload.label}
     </div>,
-    document.body
+    document.body,
   );
 }
