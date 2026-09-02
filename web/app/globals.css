@@ -264,6 +264,16 @@
 }
 
 /* invisible-chrome input so pickers and the chat keep the terminal look */
+/* the ghost suggestion drawn behind the transparent input; pre keeps
+   the invisible prefix at the input's exact width, nowrap plus hidden
+   overflow clips the ghost when the input itself would scroll */
+.ghost-line {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  white-space: pre;
+  overflow: hidden;
+}
 .term-input {
   border: none;
   outline: none;
@@ -319,7 +329,9 @@
    scrolls inside. code color is the lanes' kind of exception (see the
    lane note below): three quiet roles, everything else stays fg */
 .file-scroll {
-  max-height: calc(24 * 1.7em);
+  /* +2px: the hairline borders are inside the box, so without it the
+     24th line gets clipped */
+  max-height: calc(24 * 1.7em + 2px);
   overflow: auto;
   overscroll-behavior: contain;
   border-top: 1px solid var(--border);
@@ -608,6 +620,13 @@ button {
   padding: 0;
   font: inherit;
 }
+.log-sha {
+  cursor: pointer;
+  background: none;
+  border: none;
+  font: inherit;
+  text-align: left;
+}
 .log-action:hover {
   text-decoration: underline;
   text-decoration-color: var(--wd-faint);
@@ -719,7 +738,7 @@ body.dragging * {
   border-color: var(--muted-foreground);
 }
 .field-input::placeholder {
-  color: var(--wd-faint);
+  color: var(--muted-foreground);
 }
 
 /* shortcut popovers: hairline, flat, muted, no shadow (brand) */
@@ -769,8 +788,9 @@ button:focus-visible,
   }
 }
 @media (pointer: coarse) {
-  .term-input {
-    font-size: 16px; /* below 16px ios zooms the page on focus */
+  .term-input,
+  .ghost-line {
+    font-size: 16px; /* below 16px ios zooms the page on focus; the ghost tracks the input */
   }
   .picker-row {
     padding-top: 8px;

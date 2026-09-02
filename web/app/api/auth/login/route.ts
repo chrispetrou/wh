@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
-import { appOrigin, githubWeb } from "@/lib/origin";
+import { appOrigin, githubWeb, secureCookies } from "@/lib/origin";
 
 // ?return=/repos/o/r: where to land after github, so a session that
 // ended mid-transcript comes back to that transcript. same-site paths
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   const jar = await cookies();
   const cookie = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: secureCookies(),
     sameSite: "lax" as const,
     path: "/",
     maxAge: 600,

@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { CommitRow, ListBlock, PrRow } from "@/lib/block";
-import { absolute, Action, Chip, CopyAction, Skel } from "./block-bits";
+import { absolute, Action, Chip, CopyAction, CopySha, Skel } from "./block-bits";
 import { dragging, startDrag, type DragPayload } from "./drag-layer";
 import {
   chatStore,
@@ -416,7 +416,7 @@ export function LogBlock({
         </div>
       ))}
       {mine ? (
-        <div className="text-wd-faint">↑↓ select · enter open · esc back</div>
+        <div className="text-muted-foreground">↑↓ select · enter open · esc back</div>
       ) : null}
     </div>
   );
@@ -456,7 +456,7 @@ function LogCells({ row, i, lanes, selected }: { row: CommitRow; i: number; lane
       <span className="log-cell log-age text-muted-foreground" data-tip={absolute(row.date)}>
         {relTime(row.date)}
       </span>
-      <span className="log-cell text-muted-foreground">{row.sha.slice(0, 7)}</span>
+      <CopySha sha={row.sha} />
     </>
   );
 }

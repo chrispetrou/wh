@@ -17,8 +17,9 @@ import { useHydrated } from "@/lib/hydrated";
 import { createEmit } from "@/lib/terminal/emit";
 import { activeEffort, effortIgnored, providerInfo, seconds, usageInfo } from "@/lib/terminal/info";
 import { COMMANDS, type Menu } from "@/lib/terminal/menu";
-import { rememberRecent } from "@/lib/terminal/prefs";
+import { prefs, rememberRecent } from "@/lib/terminal/prefs";
 import { resolveRows } from "@/lib/terminal/resolve";
+import { suggest } from "@/lib/terminal/suggest";
 import { FileBlock } from "./file-block";
 import { LogBlock } from "./log-block";
 import { PlanBlock } from "./plan-block";
@@ -79,6 +80,10 @@ export function TerminalChat({
   const { menu, menuSel, setMenuSel, changeInput, dismiss, branchList, logRows, prRows, menuKey } =
     useCompletion({ storeKey, owner, repo, input, setInput });
   const { run, runFollowup, addToPlan } = useStream({ storeKey, owner, repo, emit });
+
+  // the ghost suggestion sits out while the menu or a reverse search is
+  // up: one suggestion on screen at a time
+  const ghost = !menu && !search ? suggest(input, history) : "";
 
   // sign in again via github and come back here; the command that hit
   // the wall reruns on return (see the mount effect)
@@ -483,12 +488,24 @@ export function TerminalChat({
       const next = Math.min(histPos + 1, history.length - 1);
       setHistPos(next);
       recall(history[next]);
+      // walking far back is the moment ctrl+r earns its line, once ever
+      if (next >= 3 && !prefs.get("wd_ctrlr_hint")) {
+        prefs.set("wd_ctrlr_hint", "seen");
+        muted(["(ctrl+r searches history)"]);
+      }
     } else if (e.key === "ArrowDown") {
       if (histPos < 0) return;
       e.preventDefault();
       const next = histPos - 1;
       setHistPos(next);
       recall(next < 0 ? "" : history[next]);
+    } else if (e.key === "ArrowRight" && ghost) {
+      // only at the end of the line: anywhere else the caret just moves
+      const el = inputRef.current;
+      if (el && el.selectionStart === input.length && el.selectionEnd === input.length) {
+        e.preventDefault();
+        changeInput(input + ghost);
+      }
     } else if (e.key === "Escape") {
       chatStore.abort(storeKey);
     }
@@ -578,20 +595,31 @@ export function TerminalChat({
       </div>
       <div className="flex items-baseline gap-2 pt-3">
         <span className="shrink-0 text-muted-foreground">{prompt}</span>
-        <input
-          ref={inputRef}
-          className={`term-input ${input.startsWith("/") ? "text-wd-accent" : ""}`}
-          style={input.startsWith("/") ? { color: "var(--wd-accent)" } : undefined}
-          value={input}
-          onChange={(e) => changeInput(e.target.value)}
-          onKeyDown={onKeyDown}
-          autoFocus
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          enterKeyHint="send"
-          aria-label="command input"
-        />
+        <div className="relative min-w-0 flex-1">
+          {ghost ? (
+            // behind the input: the typed part invisible but space-taking,
+            // so the ghost lands exactly after the caret (monospace). an
+            // overflowing input clips it away, which is the right fallback
+            <div aria-hidden className="ghost-line text-muted-foreground">
+              <span className="invisible">{input}</span>
+              {ghost}
+            </div>
+          ) : null}
+          <input
+            ref={inputRef}
+            className={`term-input w-full ${input.startsWith("/") ? "text-wd-accent" : ""}`}
+            style={input.startsWith("/") ? { color: "var(--wd-accent)" } : undefined}
+            value={input}
+            onChange={(e) => changeInput(e.target.value)}
+            onKeyDown={onKeyDown}
+            autoFocus
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="send"
+            aria-label="command input"
+          />
+        </div>
       </div>
       {search ? (
         <div className="pt-1 text-muted-foreground">
@@ -617,8 +645,22 @@ export function TerminalChat({
         data-tip="the model runs on your key; /model changes it. tokens are counted here since the key was saved; /usage for the breakdown"
       >
         {/* localStorage reads must wait for mount or hydration breaks */}
-        {mounted && keyStore.active() ? <ModelGlyph /> : null}
-        {mounted ? providerInfo() : " "}
+        {mounted ? (
+          <button
+            type="button"
+            data-tip="change model: /model"
+            className="cursor-pointer hover:text-foreground"
+            onClick={() => {
+              recall("/model ");
+              inputRef.current?.focus();
+            }}
+          >
+            {keyStore.active() ? <ModelGlyph /> : null}
+            {providerInfo()}
+          </button>
+        ) : (
+          " "
+        )}
         {mounted && activeEffort() && !effortIgnored() ? ` · effort ${activeEffort()}` : ""}
         {mounted ? usageInfo() : ""}
       </div>

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Fira_Code, IBM_Plex_Mono, JetBrains_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import "./globals.css";
 
 // optional terminal fonts, self-hosted at build time (/font to switch)
@@ -31,11 +32,14 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // set by the middleware; the boot script must carry it or the csp
+  // blocks the one inline script we actually want
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html
       lang="en"
@@ -44,6 +48,7 @@ export default function RootLayout({
     >
       <body className="antialiased">
         <script
+          nonce={nonce}
           // apply stored preferences before paint so there is no flash
           dangerouslySetInnerHTML={{
             __html: `try{var d=document.documentElement,g=function(k){return localStorage.getItem(k)};

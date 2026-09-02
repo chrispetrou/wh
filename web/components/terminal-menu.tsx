@@ -94,7 +94,7 @@ export function CompletionMenu({
           );
         })}
       </div>
-      <div className="pt-1 text-wd-faint">
+      <div className="pt-1 text-muted-foreground">
         ↑↓ navigate · tab complete · enter use · esc close
       </div>
     </div>

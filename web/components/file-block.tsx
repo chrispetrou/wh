@@ -20,6 +20,9 @@ import { signInAgain } from "@/lib/signin";
 
 type FileBlockShape = Extract<Block, { kind: "file" }>;
 
+// rows visible before the box scrolls; must match .file-scroll max-height
+const VIEW_CAP = 24;
+
 function humanSize(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
@@ -188,11 +191,12 @@ export function FileBlock({
       </div>
       <div className="text-muted-foreground">
         {f.lines.length} lines · {humanSize(f.size)} · {f.path} on {f.ref}
+        {f.lines.length > VIEW_CAP ? " · scroll" : ""}
       </div>
       {f.truncated ? (
         <div className="text-wd-amber">truncated: the first {f.lines.length} lines only</div>
       ) : null}
-      {mine ? <div className="text-wd-faint">↑↓ scroll · esc back</div> : null}
+      {mine ? <div className="text-muted-foreground">↑↓ scroll · esc back</div> : null}
     </div>
   );
 }

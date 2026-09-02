@@ -3,6 +3,8 @@
 import { getIronSession, type IronSession, type SessionOptions } from "iron-session";
 import { experimental_taintUniqueValue as taintUniqueValue } from "react";
 import { cookies } from "next/headers";
+import { loginAllowed } from "./allowlist";
+import { secureCookies } from "./origin";
 
 export interface WdSession {
   token?: string;
@@ -22,7 +24,7 @@ export const sessionOptions = (): SessionOptions => ({
   ttl: 60 * 60 * 24 * 7,
   cookieOptions: {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: secureCookies(),
     sameSite: "lax",
     path: "/",
   },
@@ -30,6 +32,15 @@ export const sessionOptions = (): SessionOptions => ({
 
 export async function getSession(): Promise<IronSession<WdSession>> {
   const session = await getIronSession<WdSession>(await cookies(), sessionOptions());
+  // a login dropped from WD_ALLOWED_LOGINS loses access on its next
+  // request: strip the in-memory session, never destroy() (cookie
+  // writes are illegal during server-component render). touch() then
+  // never re-seals it, so the stale cookie lapses within its ttl
+  if (session.token && !loginAllowed(session.login)) {
+    session.token = undefined;
+    session.login = undefined;
+    session.since = undefined;
+  }
   // the github token stays on the server: react throws if it is ever
   // passed to a client component or serialized into the rsc payload
   if (session.token) {

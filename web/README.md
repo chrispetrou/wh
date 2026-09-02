@@ -30,11 +30,64 @@ has the same list):
 GITHUB_CLIENT_ID       oauth app; callback must be $APP_URL/api/auth/callback
 GITHUB_CLIENT_SECRET
 SESSION_SECRET         32+ random chars (openssl rand -hex 32)
-APP_URL                base url of this instance
+APP_URL                base url of this instance; https turns on secure cookies
+WD_ALLOWED_LOGINS      optional: github logins that may sign in, comma-separated
 GITHUB_API_URL         optional, for github enterprise (and GITHUB_GRAPHQL_URL)
 WD_ANTHROPIC_URL       optional provider gateways, same names as the cli
 WD_OPENAI_URL
 WD_GROQ_URL
+```
+
+## deploy
+
+The app is stateless: no database, no volume, keys and transcripts stay
+in each visitor's browser. Hosting it is one node process (or one
+container) and the environment above. The setup screen only appears on a
+localhost dev server, on purpose: a hosted instance is configured
+through env vars alone.
+
+1. Create a GitHub OAuth app (Settings > Developer settings > OAuth
+   Apps) with the callback url set to exactly
+   `$APP_URL/api/auth/callback`.
+2. Set `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `SESSION_SECRET`,
+   and `APP_URL`. Keep `SESSION_SECRET` stable across restarts, or
+   every session cookie dies with it.
+3. Optionally set `WD_ALLOWED_LOGINS` to the github logins allowed to
+   sign in (comma-separated, case-insensitive). Unset, anyone with a
+   github account can use the instance. Removing a login signs that
+   account out on its next request.
+
+Behind a reverse proxy, `APP_URL` must be the public origin: it drives
+the oauth redirect uri, the same-origin guards, and the cookie secure
+flag (an `https://` `APP_URL` sets secure cookies even though the node
+process itself speaks http; a mismatched scheme is the one way to break
+sign-in). Nothing trusts `x-forwarded-*` headers.
+
+With docker, build from the repo root (the image needs
+`../shared/prompts`):
+
+```
+docker build -f web/Dockerfile -t wd-web .
+docker run -p 3000:3000 \
+  -e GITHUB_CLIENT_ID=... -e GITHUB_CLIENT_SECRET=... \
+  -e SESSION_SECRET=... -e APP_URL=https://wd.example.com \
+  wd-web
+```
+
+or with compose:
+
+```yaml
+services:
+  wd:
+    image: wd-web
+    ports: ["3000:3000"]
+    environment:
+      GITHUB_CLIENT_ID: "..."
+      GITHUB_CLIENT_SECRET: "..."
+      SESSION_SECRET: "..."
+      APP_URL: "https://wd.example.com"
+      WD_ALLOWED_LOGINS: "alice,bob"
+    restart: unless-stopped
 ```
 
 ## sessions
@@ -192,12 +245,14 @@ gets an amber warning after the answer.
 | keys | |
 |---|---|
 | enter, up/down, ctrl+r | send; recall history; search it |
+| right | take the gray suggestion (typed ahead from history) |
 | esc | stop a running explain; close a menu or panel |
 | tab, enter, esc (menu open) | complete; use; dismiss |
 | arrows, enter, esc (after a log, prs, or history) | walk rows; open one; step out |
 | arrows, esc (on a file view) | scroll; step out |
 | p r s f d e, shift+up/down (in a plan) | set a row's action; move it (drag works too) |
 | drag a log / prs row | onto a branch: cherry-pick; into a plan: add it |
+| click a sha | copy it |
 | cmd+k / ctrl+k | repo picker |
 | ctrl+t, ctrl+1..9, × | new repo tab; switch tabs; close |
 

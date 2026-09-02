@@ -128,6 +128,7 @@ export function runSlash(ctx: SlashContext, raw: string) {
           `model: ${providerInfo()}`,
           "usage: /model <name> or /model default; another provider's model switches to it",
           ...modelSuggestionLines(),
+          "any model id the provider accepts works too, suggestions are the current lineup",
         ]);
       } else if (!active) {
         muted(["paste an api key first."]);

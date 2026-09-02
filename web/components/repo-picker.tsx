@@ -114,7 +114,7 @@ export function RepoPicker({ repos }: { repos: RepoItem[] }) {
               <span className="min-w-0 flex-1 truncate">
                 {r.fullName}
                 {r.private ? (
-                  <span className="text-wd-faint"> private</span>
+                  <span className="text-muted-foreground"> private</span>
                 ) : null}
               </span>
               <span className="shrink-0 text-muted-foreground">

@@ -9,6 +9,7 @@ const ERRORS: Record<string, string> = {
   session: "session expired, sign in again.",
   config: "github oauth is not configured on this server.",
   setup: "that did not look like a client id and secret, try again.",
+  denied: "this instance is limited to invited accounts.",
 };
 
 function SetupBlock({ origin }: { origin: string }) {

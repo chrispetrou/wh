@@ -1,0 +1,7 @@
+.git
+**/node_modules
+**/.env*
+web/.next
+cli/target
+site
+readme
