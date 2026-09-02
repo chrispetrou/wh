@@ -9,7 +9,7 @@ export interface Resume {
   open?: string;
 }
 
-const KEY = (repo: string) => `wd_resume:${repo}`;
+const KEY = (repo: string) => `wh_resume:${repo}`;
 
 export function signInAgain(repo: string, resume: Resume): void {
   try {

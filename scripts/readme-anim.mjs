@@ -1,4 +1,4 @@
-// readme animations for wd: ten terminal clips as self-contained animated
+// readme animations for wh: ten terminal clips as self-contained animated
 // svgs (css keyframes, no js, no gif), dark and light.
 //
 //   node scripts/readme-anim.mjs            writes readme/*.svg
@@ -128,31 +128,31 @@ function webChrome(A) {
 <rect x="0.5" y="${BAR}" width="${A.width - 1}" height="1" fill="${c.line}"/>
 <circle cx="20" cy="15" r="4" fill="none" stroke="${c.faint}"/><circle cx="34" cy="15" r="4" fill="none" stroke="${c.faint}"/><circle cx="48" cy="15" r="4" fill="none" stroke="${c.faint}"/>
 <rect x="70" y="7" width="${A.width - 140}" height="16" fill="${c.term}" stroke="${c.line}" rx="3"/>
-<text class="o sm" x="80" y="19">localhost:3000/repos/demo/wd</text>
+<text class="o sm" x="80" y="19">localhost:3000/repos/demo/wh</text>
 <path d="M 24 ${BAR + 15} h 14 v 14 h -9.1 v -9.1 h -4.9 z" fill="${c.fg}"/>
-<text class="b" x="46" y="${BAR + 27}">wd</text><text class="f" x="70" y="${BAR + 27}">/</text><text class="o" x="82" y="${BAR + 27}">demo/wd</text>
+<text class="b" x="46" y="${BAR + 27}">wh</text><text class="f" x="70" y="${BAR + 27}">/</text><text class="o" x="82" y="${BAR + 27}">demo/wh</text>
 <text class="o sm" x="${A.width - 100}" y="${BAR + 27}">demo</text><text class="o sm" x="${A.width - 52}" y="${BAR + 27}">logout</text>
 <rect x="0.5" y="${BAR + HEAD}" width="${A.width - 1}" height="1" fill="${c.line}"/>
 <rect x="16" y="${BAR + HEAD + 4}" width="34" height="19" fill="${c.sel}" rx="3"/>
-<text class="b sm" x="23" y="${BAR + HEAD + 18}">wd</text><text class="f sm" x="60" y="${BAR + HEAD + 18}">+</text>
+<text class="b sm" x="23" y="${BAR + HEAD + 18}">wh</text><text class="f sm" x="60" y="${BAR + HEAD + 18}">+</text>
 <rect x="0.5" y="${BAR + HEAD + TABS}" width="${A.width - 1}" height="1" fill="${c.line}"/>`);
   return A;
 }
 
 export const SPECS = {
-  // wd new: created worktree / copied / green arrow (commands/new.rs)
+  // wh new: created worktree / copied / green arrow (commands/new.rs)
   new: () => {
     const A = new Anim();
-    A.cmd('wd new feat/auth');
+    A.cmd('wh new feat/auth');
     A.out([[0, 'created worktree ../repo.feat-auth', '']], 0.35);
     A.out([[0, 'copied .env .env.local', '']], 0.35);
     A.out([[0, '→', 'g'], [2, 'ready feat/auth checked out', '']]);
     return A;
   },
-  // wd ls: column widths from ls.rs render() (name+2, status+2)
+  // wh ls: column widths from ls.rs render() (name+2, status+2)
   ls: () => {
     const A = new Anim();
-    A.cmd('wd ls');
+    A.cmd('wh ls');
     const rows = [['main', 'clean', ''], ['feat/auth', 'clean', ''], ['fix/nav-323', '2 dirty', 'ahead 3'], ['spike/wasm', 'clean', 'behind 12']];
     for (const [n, s, e] of rows) {
       const segs = [[0, n, ''], [13, s, '']];
@@ -161,11 +161,11 @@ export const SPECS = {
     }
     return A;
   },
-  // wd switch: the /dev/tty picker (switch.rs draw()): muted question,
+  // wh switch: the /dev/tty picker (switch.rs draw()): muted question,
   // inverse-video selected row, then the green line on stderr
   switch: () => {
     const A = new Anim();
-    A.cmd('wd switch');
+    A.cmd('wh switch');
     A.out([[0, '? select worktree', 'o']], 0.35);
     const q = A.row - 1, t0 = A.t;
     [...'au'].forEach((ch, i) => A.text(18 + i, ch, '', t0 + i * 0.18, q));
@@ -179,10 +179,10 @@ export const SPECS = {
     A.out([[0, '→', 'g'], [2, 'switched ../repo.feat-auth', '']]);
     return A;
   },
-  // wd rm: skipped (muted), would remove, the [y/N] prompt, then pruned
+  // wh rm: skipped (muted), would remove, the [y/N] prompt, then pruned
   rm: () => {
     const A = new Anim();
-    A.cmd('wd rm');
+    A.cmd('wh rm');
     A.out([[0, 'skipped ../repo.fix-nav-323 (fix/nav-323): 2 dirty', 'o']], 0.35);
     A.out([[0, 'would remove ../repo.feat-auth (feat/auth)', '']], 0.5);
     A.cmd('y', { prompt: 'remove 1 worktree? [y/N]', promptCls: '', cls: '', after: 0.5 });
@@ -190,11 +190,11 @@ export const SPECS = {
     A.out([[0, '→', 'g'], [2, 'pruned 1 worktree', '']]);
     return A;
   },
-  // wd explain: status line, amber labels, the answer streamed word by
+  // wh explain: status line, amber labels, the answer streamed word by
   // word, closing elapsed/model/tokens (commands/explain.rs)
   explain: () => {
     const A = new Anim();
-    A.cmd('wd explain HEAD~3..');
+    A.cmd('wh explain HEAD~3..');
     A.out([[0, 'reading 3 commits · 14 files · +212 −87', 'o']], 0.5);
     A.out([[0, 'summary', 'a']], 0.2);
     A.stream(['Moves session handling from cookies to signed jwts, so a', 'restart no longer signs everyone out. Login and refresh', 'issue tokens; the cookie path is gone.']);
@@ -205,10 +205,10 @@ export const SPECS = {
   },
   changelog: () => {
     const A = new Anim();
-    A.cmd('wd explain --changelog v1.1..v1.2');
+    A.cmd('wh explain --changelog v1.1..v1.2');
     A.out([[0, 'reading 24 commits · 61 files · +1840 −520', 'o']], 0.5);
     A.out([[0, 'added', 'a']], 0.2);
-    A.stream(['Signed jwt sessions, kept across a restart.', 'wd rm --force removes squash-merged branches.']);
+    A.stream(['Signed jwt sessions, kept across a restart.', 'wh rm --force removes squash-merged branches.']);
     A.out([[0, 'changed', 'a']], 0.2);
     A.stream(['explain streams its answer line by line.']);
     A.out([[0, 'fixed', 'a']], 0.2);
@@ -218,7 +218,7 @@ export const SPECS = {
   },
   describe: () => {
     const A = new Anim();
-    A.cmd('wd explain --describe');
+    A.cmd('wh explain --describe');
     A.out([[0, 'reading 6 commits · 19 files · +324 −96', 'o']], 0.5);
     A.out([[0, 'title', 'a']], 0.2);
     A.stream(['sessions: move from cookies to signed jwts']);
@@ -229,34 +229,34 @@ export const SPECS = {
     A.out([[0, '· 7.2s · gpt-5-mini · 2.1k in · 380 out', 'o']]);
     return A;
   },
-  // wd init zsh: POSIX_WRAPPER verbatim from commands/init.rs
+  // wh init zsh: POSIX_WRAPPER verbatim from commands/init.rs
   init: () => {
     const A = new Anim();
-    A.cmd('wd init zsh');
+    A.cmd('wh init zsh');
     const wrapper = [
-      ['# wd shell integration: add to your rc file', 'o'],
-      ['#   eval "$(wd init zsh)"', 'o'],
-      ['wd() {', ''],
+      ['# wh shell integration: add to your rc file', 'o'],
+      ['#   eval "$(wh init zsh)"', 'o'],
+      ['wh() {', ''],
       ['  if [ "$1" = "switch" ]; then', ''],
-      ['    local _wd_dir', ''],
-      ['    _wd_dir="$(command wd "$@")" && cd "$_wd_dir"', ''],
+      ['    local _wh_dir', ''],
+      ['    _wh_dir="$(command wh "$@")" && cd "$_wh_dir"', ''],
       ['  else', ''],
-      ['    command wd "$@"', ''],
+      ['    command wh "$@"', ''],
       ['  fi', ''],
       ['}', '']
     ];
     for (const [s, cls] of wrapper) A.out([[0, s, cls]], 0.13);
     A.blank(); A.wait(0.5);
-    A.cmd('eval "$(wd init zsh)"', { cps: 0.045 });
-    A.cmd('wd switch auth', { cps: 0.055 });
+    A.cmd('eval "$(wh init zsh)"', { cps: 0.045 });
+    A.cmd('wh switch auth', { cps: 0.055 });
     A.out([[0, '→', 'g'], [2, 'switched ../repo.feat-auth', '']]);
     return A;
   },
   // web: log draws the graph in the transcript, then explain 3
   // (terminal-chat.tsx, log-block.tsx)
   'web-log': () => {
-    const A = webChrome(new Anim({ prompt: 'demo/wd $' }));
-    A.out([[0, '▜ wd · demo/wd', 'o']], 0.4);
+    const A = webChrome(new Anim({ prompt: 'demo/wh $' }));
+    A.out([[0, '▜ wh · demo/wh', 'o']], 0.4);
     A.cmd('log');
     const NUMX = 2, RAILX = 6, DESCX = 10, AUTHX = 62, AGEX = 70, SHAX = 77;
     const headRow = A.row, tHead = A.t;
@@ -302,8 +302,8 @@ export const SPECS = {
     return A;
   },
   'web-pr': () => {
-    const A = webChrome(new Anim({ prompt: 'demo/wd $' }));
-    A.out([[0, '▜ wd · demo/wd', 'o']], 0.4);
+    const A = webChrome(new Anim({ prompt: 'demo/wh $' }));
+    A.out([[0, '▜ wh · demo/wh', 'o']], 0.4);
     A.cmd('what changed in pr #42');
     A.out([[0, 'reading 4 commits · 11 files · +180 −64', 'o']], 0.18);
     A.out([[0, 'pr: sessions: signed jwts, no cookie path', 'o']], 0.5);
@@ -317,9 +317,9 @@ export const SPECS = {
 };
 
 export const LABELS = {
-  new: 'wd new', ls: 'wd ls', switch: 'wd switch', rm: 'wd rm',
-  explain: 'wd explain', changelog: 'wd explain --changelog',
-  describe: 'wd explain --describe', init: 'wd init zsh',
+  new: 'wh new', ls: 'wh ls', switch: 'wh switch', rm: 'wh rm',
+  explain: 'wh explain', changelog: 'wh explain --changelog',
+  describe: 'wh explain --describe', init: 'wh init zsh',
   'web-log': 'web: log, then explain 3', 'web-pr': 'web: what changed in pr #42'
 };
 

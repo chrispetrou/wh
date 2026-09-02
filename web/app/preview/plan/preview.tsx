@@ -7,7 +7,7 @@ import { chatStore } from "@/lib/chat-store";
 import { setAction, setText, type PlanBlock as Plan } from "@/lib/plan";
 import { PlanBlock } from "@/components/plan-block";
 
-const KEY = "preview/wd";
+const KEY = "preview/wh";
 const NOW = Date.now();
 const ago = (h: number) => new Date(NOW - h * 3600_000).toISOString();
 
@@ -74,7 +74,7 @@ export function PreviewPlan({ dark, open }: { dark: boolean; open: boolean }) {
   return (
     <div className="app-main p-4">
       <div className="text-muted-foreground">
-        chrispetrou/wd $ <span className="font-semibold text-foreground">rebase feat/plan</span>
+        chrispetrou/wh $ <span className="font-semibold text-foreground">rebase feat/plan</span>
       </div>
       <PlanBlock block={shown} line={0} storeKey={KEY} submit={(c) => console.log("submit", c)} />
     </div>

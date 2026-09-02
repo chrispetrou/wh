@@ -1,11 +1,11 @@
 // who may sign in to this instance, read at call time so env changes
 // (and the first-run setup that writes .env.local) are seen per request
 
-// WD_ALLOWED_LOGINS as a lowercase set: comma-separated github logins,
+// WH_ALLOWED_LOGINS as a lowercase set: comma-separated github logins,
 // whitespace tolerated. null means the var is unset or empty: open
 // access, anyone with a github account
 export function allowedLogins(): Set<string> | null {
-  const raw = process.env.WD_ALLOWED_LOGINS ?? "";
+  const raw = process.env.WH_ALLOWED_LOGINS ?? "";
   const logins = raw
     .split(",")
     .map((l) => l.trim().toLowerCase())

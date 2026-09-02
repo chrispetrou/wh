@@ -1,6 +1,6 @@
-# wd · web
+# wh · web
 
-The browser surface of wd: sign in with GitHub, pick a repo, and ask about
+The browser surface of wh: sign in with GitHub, pick a repo, and ask about
 it in a terminal. Explains ranges, commits and pull requests, draws the log
 graph, follows a file's history, answers why a line exists, and lays out
 rebase or cherry-pick plans as git commands to paste. Never writes to
@@ -31,11 +31,11 @@ GITHUB_CLIENT_ID       oauth app; callback must be $APP_URL/api/auth/callback
 GITHUB_CLIENT_SECRET
 SESSION_SECRET         32+ random chars (openssl rand -hex 32)
 APP_URL                base url of this instance; https turns on secure cookies
-WD_ALLOWED_LOGINS      optional: github logins that may sign in, comma-separated
+WH_ALLOWED_LOGINS      optional: github logins that may sign in, comma-separated
 GITHUB_API_URL         optional, for github enterprise (and GITHUB_GRAPHQL_URL)
-WD_ANTHROPIC_URL       optional provider gateways, same names as the cli
-WD_OPENAI_URL
-WD_GROQ_URL
+WH_ANTHROPIC_URL       optional provider gateways, same names as the cli
+WH_OPENAI_URL
+WH_GROQ_URL
 ```
 
 ## deploy
@@ -52,7 +52,7 @@ through env vars alone.
 2. Set `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `SESSION_SECRET`,
    and `APP_URL`. Keep `SESSION_SECRET` stable across restarts, or
    every session cookie dies with it.
-3. Optionally set `WD_ALLOWED_LOGINS` to the github logins allowed to
+3. Optionally set `WH_ALLOWED_LOGINS` to the github logins allowed to
    sign in (comma-separated, case-insensitive). Unset, anyone with a
    github account can use the instance. Removing a login signs that
    account out on its next request.
@@ -67,33 +67,33 @@ With docker, build from the repo root (the image needs
 `../shared/prompts`):
 
 ```
-docker build -f web/Dockerfile -t wd-web .
+docker build -f web/Dockerfile -t wh-web .
 docker run -p 3000:3000 \
   -e GITHUB_CLIENT_ID=... -e GITHUB_CLIENT_SECRET=... \
-  -e SESSION_SECRET=... -e APP_URL=https://wd.example.com \
-  wd-web
+  -e SESSION_SECRET=... -e APP_URL=https://wh.example.com \
+  wh-web
 ```
 
 or with compose:
 
 ```yaml
 services:
-  wd:
-    image: wd-web
+  wh:
+    image: wh-web
     ports: ["3000:3000"]
     environment:
       GITHUB_CLIENT_ID: "..."
       GITHUB_CLIENT_SECRET: "..."
       SESSION_SECRET: "..."
-      APP_URL: "https://wd.example.com"
-      WD_ALLOWED_LOGINS: "alice,bob"
+      APP_URL: "https://wh.example.com"
+      WH_ALLOWED_LOGINS: "alice,bob"
     restart: unless-stopped
 ```
 
 ## sessions
 
 Sign-in requests the `repo` scope so private repos appear in the picker
-(GitHub has no read-only scope for private repos; wd only ever reads). The
+(GitHub has no read-only scope for private repos; wh only ever reads). The
 session slides: every request renews it, so it ends after a week of silence
 or 30 days after sign-in, whichever comes first. An ended session says so in
 the transcript and `sign in again →` brings you back to the same repo with
@@ -129,7 +129,7 @@ one row at a time).
 number, title, `head → base`, author, age, and `draft`, `merged`, or
 `closed` where it applies. `history <path>` lists the commits touching a
 file or directory (30 rows, no lanes). `branches` numbers branches with
-ahead/behind against the default (the web cousin of `wd ls`); `tags` lists
+ahead/behind against the default (the web cousin of `wh ls`); `tags` lists
 tags newest first with sha and age.
 
 All of these are blocks you can walk: arrows move (`›` marks the row),
@@ -202,7 +202,7 @@ start a cherry-pick onto that branch, or into an open plan to add it there,
 its files checked against the target on the way in. Esc abandons a drag.
 
 Under the rows sits the block to paste. For a rebase it is the messages and
-the todo as heredocs under `/tmp/wd-*` and one `git rebase -i` with
+the todo as heredocs under `/tmp/wh-*` and one `git rebase -i` with
 `GIT_SEQUENCE_EDITOR` pointing at the todo, so nothing opens an editor; a
 reword or squash with a drafted message becomes `pick` or `fixup` plus
 `exec git commit --amend -F`. For a cherry-pick it is `git switch` and `git

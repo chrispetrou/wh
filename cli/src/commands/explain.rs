@@ -1,16 +1,16 @@
-use crate::{git, llm, output, preprocess, usage, WdError};
+use crate::{git, llm, output, preprocess, usage, WhError};
 use std::env;
 use std::io::Write;
 use std::time::Instant;
 
-pub fn run(range: Option<&str>, dry_run: bool, mode: llm::Mode) -> Result<(), WdError> {
+pub fn run(range: Option<&str>, dry_run: bool, mode: llm::Mode) -> Result<(), WhError> {
     let cwd = env::current_dir()?;
     let describe = mode == llm::Mode::Describe;
     // a pr draft with no explicit range is judged against the default
     // branch; resolved only then, so every other call stays local to cwd
     let base_default = if describe && range.is_none_or(|r| !r.contains("..")) {
         git::default_ref(&cwd).map_err(|_| {
-            WdError::Msg("cannot determine default branch, pass a range like main..".into())
+            WhError::Msg("cannot determine default branch, pass a range like main..".into())
         })?
     } else {
         String::new()
@@ -22,7 +22,7 @@ pub fn run(range: Option<&str>, dry_run: bool, mode: llm::Mode) -> Result<(), Wd
         &["diff", "-M", "--no-color", "--no-ext-diff", &ranges.diff],
     )?;
     if diff.trim().is_empty() {
-        return Err(WdError::Msg(format!(
+        return Err(WhError::Msg(format!(
             "nothing to explain in {}",
             ranges.diff
         )));

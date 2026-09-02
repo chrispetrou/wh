@@ -63,7 +63,7 @@ describe("MODEL_RE", () => {
 
 describe("buildRequest for groq", () => {
   afterEach(() => {
-    delete process.env.WD_GROQ_URL;
+    delete process.env.WH_GROQ_URL;
   });
 
   it("uses the openai dialect at groq's host", () => {
@@ -84,8 +84,8 @@ describe("buildRequest for groq", () => {
     expect(openai.reasoning_effort).toBe("high");
   });
 
-  it("honours WD_GROQ_URL", () => {
-    process.env.WD_GROQ_URL = "http://127.0.0.1:1234";
+  it("honours WH_GROQ_URL", () => {
+    process.env.WH_GROQ_URL = "http://127.0.0.1:1234";
     expect(buildRequest("groq", "gsk_x", "s", "u").url).toBe(
       "http://127.0.0.1:1234/v1/chat/completions"
     );

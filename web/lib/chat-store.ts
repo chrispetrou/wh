@@ -163,7 +163,7 @@ function load(key: string): Entry {
   if (e.loaded) return e;
   e.loaded = true;
   try {
-    const s = sessionStorage.getItem(`wd_log:${key}`);
+    const s = sessionStorage.getItem(`wh_log:${key}`);
     if (s) {
       const p = JSON.parse(s) as ChatLine[];
       if (Array.isArray(p)) {
@@ -197,9 +197,9 @@ function persist(key: string) {
   try {
     const e = entry(key);
     if (e.lines.length) {
-      sessionStorage.setItem(`wd_log:${key}`, JSON.stringify(e.lines.slice(-LIMIT)));
+      sessionStorage.setItem(`wh_log:${key}`, JSON.stringify(e.lines.slice(-LIMIT)));
     } else {
-      sessionStorage.removeItem(`wd_log:${key}`);
+      sessionStorage.removeItem(`wh_log:${key}`);
     }
   } catch {
     // ignore

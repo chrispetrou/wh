@@ -1,17 +1,17 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="readme/logo-dark.svg">
-    <img alt="wd" src="readme/logo-light.svg" width="56" height="56">
+    <img alt="wh" src="readme/logo-light.svg" width="56" height="56">
   </picture>
 </p>
 
-<h1 align="center">wd</h1>
+<h1 align="center">wh</h1>
 
 <p align="center">Tiny git companion. Worktrees, minus the ceremony. History, diffs, and pull requests in plain English: in the terminal, or in the browser for any GitHub repo.</p>
 
 <p align="center">
-  <a href="https://github.com/chrispetrou/wd/actions/workflows/ci.yml"><img alt="ci" src="https://img.shields.io/github/actions/workflow/status/chrispetrou/wd/ci.yml?branch=main&style=flat-square&label=ci&labelColor=1a1a1a&color=2f9e44"></a>
-  <a href="https://github.com/chrispetrou/wd/releases"><img alt="v0.1.0" src="https://img.shields.io/badge/version-v0.1.0-8a8a8a?style=flat-square&labelColor=1a1a1a"></a>
+  <a href="https://github.com/chrispetrou/wh/actions/workflows/ci.yml"><img alt="ci" src="https://img.shields.io/github/actions/workflow/status/chrispetrou/wh/ci.yml?branch=main&style=flat-square&label=ci&labelColor=1a1a1a&color=2f9e44"></a>
+  <a href="https://github.com/chrispetrou/wh/releases"><img alt="v0.1.0" src="https://img.shields.io/badge/version-v0.1.0-8a8a8a?style=flat-square&labelColor=1a1a1a"></a>
   <img alt="binary 0.6MiB" src="https://img.shields.io/badge/binary-0.6MiB-8a8a8a?style=flat-square&labelColor=1a1a1a">
   <img alt="rust" src="https://img.shields.io/badge/rust-stable-8a8a8a?style=flat-square&labelColor=1a1a1a">
   <a href="LICENSE"><img alt="gpl-3.0 license" src="https://img.shields.io/badge/license-GPL--3.0-8a8a8a?style=flat-square&labelColor=1a1a1a"></a>
@@ -19,7 +19,7 @@
   <img alt="no telemetry" src="https://img.shields.io/badge/telemetry-none-8a8a8a?style=flat-square&labelColor=1a1a1a">
 </p>
 
-**wd** is a git companion with two surfaces. The cli manages worktrees so
+**wh** is a git companion with two surfaces. The cli manages worktrees so
 branch-switching never touches your working state, and explains diffs in
 plain English so review starts with understanding, not archaeology. The web
 app is a terminal for any repo you can see on GitHub, cloned or not: what
@@ -41,18 +41,18 @@ behind both, so an answer reads the same wherever you ask.
 
 ```
 cargo install --path cli                                   # from a clone
-cargo install --git https://github.com/chrispetrou/wd wd   # or straight from git
+cargo install --git https://github.com/chrispetrou/wh wh   # or straight from git
 ```
 
-That puts `wd` in `~/.cargo/bin`. Add the shell wrapper so `wd switch` can
+That puts `wh` in `~/.cargo/bin`. Add the shell wrapper so `wh switch` can
 actually change directory:
 
 ```
-echo 'eval "$(wd init zsh)"' >> ~/.zshrc     # bash: ~/.bashrc
-wd init fish | source                        # fish: add to config.fish
+echo 'eval "$(wh init zsh)"' >> ~/.zshrc     # bash: ~/.bashrc
+wh init fish | source                        # fish: add to config.fish
 ```
 
-Needs `git`, and `curl` for `wd explain` (both ship with macOS and virtually
+Needs `git`, and `curl` for `wh explain` (both ship with macOS and virtually
 every Linux). Tagged releases build static binaries for macOS (arm64, x64)
 and Linux (x64, arm64 musl) with sha256 checksums; a `curl | bash` installer
 comes with the first release.
@@ -60,34 +60,34 @@ comes with the first release.
 ## quick start
 
 ```
-wd new feat/auth              # a sibling worktree, branch created if missing
-wd ls                         # every worktree, dirty count, ahead/behind
-wd switch                     # pick one, cd into it
+wh new feat/auth              # a sibling worktree, branch created if missing
+wh ls                         # every worktree, dirty count, ahead/behind
+wh switch                     # pick one, cd into it
 export GROQ_API_KEY=gsk_...   # free tier at console.groq.com
-wd explain HEAD~3..           # the last three commits, in plain english
-wd rm                         # prune worktrees whose branches are merged
+wh explain HEAD~3..           # the last three commits, in plain english
+wh rm                         # prune worktrees whose branches are merged
 ```
 
 ## cli commands
 
 | command | what it does |
 |---|---|
-| `wd new <branch> [--from <ref>]` | create a worktree in a sibling dir, copy `.env*` files into it |
-| `wd ls` | list worktrees with dirty count and ahead/behind |
-| `wd switch [query]` | pick a worktree (or match one) and cd into it |
-| `wd rm [name] [--dry-run] [--yes] [--force]` | remove merged worktrees, or one by name |
-| `wd explain [range] [--changelog] [--describe] [--dry-run]` | a plain-English review, release notes, or a pr draft for a diff |
-| `wd init <zsh\|bash\|fish>` | print the shell wrapper that makes `switch` a real `cd` |
+| `wh new <branch> [--from <ref>]` | create a worktree in a sibling dir, copy `.env*` files into it |
+| `wh ls` | list worktrees with dirty count and ahead/behind |
+| `wh switch [query]` | pick a worktree (or match one) and cd into it |
+| `wh rm [name] [--dry-run] [--yes] [--force]` | remove merged worktrees, or one by name |
+| `wh explain [range] [--changelog] [--describe] [--dry-run]` | a plain-English review, release notes, or a pr draft for a diff |
+| `wh init <zsh\|bash\|fish>` | print the shell wrapper that makes `switch` a real `cd` |
 
 `--help` on any of them is short and lowercase. Colors only when the output
 is a terminal and `NO_COLOR` is unset. Exit codes: 0 success (including a
 declined prompt), 1 for any error or a cancelled picker, 2 for bad usage.
 
-### wd new
+### wh new
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="readme/new-dark.svg">
-  <img alt="wd new feat/auth: creates a sibling worktree, copies .env files" src="readme/new-light.svg" width="720">
+  <img alt="wh new feat/auth: creates a sibling worktree, copies .env files" src="readme/new-light.svg" width="720">
 </picture>
 
 The worktree lands next to the main one as `<repo>.<branch>` (`/` and other
@@ -98,19 +98,19 @@ files are copied over (not `.envrc`, nothing recursive), skipping any that
 already exist; the `copied` line is left out when there was nothing to copy.
 
 ```
-wd new fix/nav-323                  # ../repo.fix-nav-323, from HEAD
-wd new hotfix/1.2 --from v1.2       # branch from a tag
-wd new feat/auth                    # existing branch: just checks it out
+wh new fix/nav-323                  # ../repo.fix-nav-323, from HEAD
+wh new hotfix/1.2 --from v1.2       # branch from a tag
+wh new feat/auth                    # existing branch: just checks it out
 ```
 
 Refuses with a one-line reason when the directory exists or the branch is
 already checked out somewhere.
 
-### wd ls
+### wh ls
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="readme/ls-dark.svg">
-  <img alt="wd ls: worktrees with dirty count and ahead/behind" src="readme/ls-light.svg" width="720">
+  <img alt="wh ls: worktrees with dirty count and ahead/behind" src="readme/ls-light.svg" width="720">
 </picture>
 
 Main worktree first, then alphabetical. Status is `clean`, `N dirty`, or
@@ -118,43 +118,43 @@ Main worktree first, then alphabetical. Status is `clean`, `N dirty`, or
 muted column is `ahead N`, `behind N`, or both, against the upstream. A
 detached worktree shows as `<sha> detached`.
 
-### wd switch
+### wh switch
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="readme/switch-dark.svg">
-  <img alt="wd switch: type to filter the picker, enter to cd into the worktree" src="readme/switch-light.svg" width="720">
+  <img alt="wh switch: type to filter the picker, enter to cd into the worktree" src="readme/switch-light.svg" width="720">
 </picture>
 
 Type to filter, arrows (or ctrl-p/ctrl-n) to move, enter to select, esc to
 cancel. The picker draws on `/dev/tty` and prints only the chosen path to
-stdout, which is what the `wd init` wrapper turns into a `cd`. Without the
-wrapper, `cd "$(wd switch)"` does the same.
+stdout, which is what the `wh init` wrapper turns into a `cd`. Without the
+wrapper, `cd "$(wh switch)"` does the same.
 
 ```
-wd switch auth        # unique match: no picker, straight there
-wd switch fix         # 'fix' matches 2 worktrees: lists them, exit 1
-wd switch             # no terminal (a script, a pipe): asks for a query
+wh switch auth        # unique match: no picker, straight there
+wh switch fix         # 'fix' matches 2 worktrees: lists them, exit 1
+wh switch             # no terminal (a script, a pipe): asks for a query
 ```
 
 An exact name wins over a substring match.
 
-### wd rm
+### wh rm
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="readme/rm-dark.svg">
-  <img alt="wd rm: skips dirty worktrees, prompts, prunes the merged one" src="readme/rm-light.svg" width="720">
+  <img alt="wh rm: skips dirty worktrees, prompts, prunes the merged one" src="readme/rm-light.svg" width="720">
 </picture>
 
-With no name, `wd rm` prunes worktrees whose branches are merged into the
+With no name, `wh rm` prunes worktrees whose branches are merged into the
 default branch and deletes those branches. It never touches dirty, locked,
 or detached worktrees, the main worktree, or the one you are standing in;
 `nothing to prune` when there is nothing to do.
 
 ```
-wd rm --dry-run                   # preview only
-wd rm --yes                       # no prompt (required when not a terminal)
-wd rm feat/auth                   # one worktree, by branch or directory
-wd rm feat/auth --force           # even if dirty or unmerged
+wh rm --dry-run                   # preview only
+wh rm --yes                       # no prompt (required when not a terminal)
+wh rm feat/auth                   # one worktree, by branch or directory
+wh rm feat/auth --force           # even if dirty or unmerged
 ```
 
 Merged means the branch is an ancestor of the default branch, every one of
@@ -163,11 +163,11 @@ tree landed as a single commit (a squash merge). `--force` is for dirty or
 genuinely unmerged worktrees; it needs a name. Named removals print
 `removed <path> (<branch>)` and no summary line.
 
-### wd explain
+### wh explain
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="readme/explain-dark.svg">
-  <img alt="wd explain HEAD~3..: streams a summary and a watch out section" src="readme/explain-light.svg" width="720">
+  <img alt="wh explain HEAD~3..: streams a summary and a watch out section" src="readme/explain-light.svg" width="720">
 </picture>
 
 Reads a diff, preprocesses it (lockfiles, vendored paths, minified and
@@ -186,28 +186,28 @@ Three modes, one diff:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="readme/changelog-dark.svg">
-  <img alt="wd explain --changelog v1.1..v1.2: release notes in added, changed, fixed sections" src="readme/changelog-light.svg" width="720">
+  <img alt="wh explain --changelog v1.1..v1.2: release notes in added, changed, fixed sections" src="readme/changelog-light.svg" width="720">
 </picture>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="readme/describe-dark.svg">
-  <img alt="wd explain --describe: a pr draft with title, description, testing" src="readme/describe-light.svg" width="720">
+  <img alt="wh explain --describe: a pr draft with title, description, testing" src="readme/describe-light.svg" width="720">
 </picture>
 
 Ranges:
 
 ```
-wd explain                          # HEAD~1.. (the last commit)
-wd explain HEAD~3..                 # the last three
-wd explain main..dev                # two-dot: exactly what git diff gets
-wd explain main...dev               # three-dot: from the merge base, log walks dev only
-wd explain v1.2                     # a bare ref means v1.2..HEAD
-wd explain abc123~1..abc123         # one commit
-wd explain --changelog v1.1..v1.2   # notes for a tag
-wd explain --changelog v1.2.. > notes.md
-wd explain --describe               # current branch vs the default branch, main...HEAD
-wd explain --describe > body.md
-wd explain --dry-run HEAD~3..       # the payload the model would see, no call
+wh explain                          # HEAD~1.. (the last commit)
+wh explain HEAD~3..                 # the last three
+wh explain main..dev                # two-dot: exactly what git diff gets
+wh explain main...dev               # three-dot: from the merge base, log walks dev only
+wh explain v1.2                     # a bare ref means v1.2..HEAD
+wh explain abc123~1..abc123         # one commit
+wh explain --changelog v1.1..v1.2   # notes for a tag
+wh explain --changelog v1.2.. > notes.md
+wh explain --describe               # current branch vs the default branch, main...HEAD
+wh explain --describe > body.md
+wh explain --dry-run HEAD~3..       # the payload the model would see, no call
 ```
 
 `--describe` with no range compares against the default branch from their
@@ -219,15 +219,15 @@ When stdout is not a terminal the two muted status lines go to stderr, so
 redirecting to a file holds only the answer. `--changelog` and `--describe`
 are mutually exclusive.
 
-### wd init
+### wh init
 
-`wd init zsh` (or `bash`, `fish`) prints a small `wd()` function that
-forwards every command and turns `wd switch` into a `cd`. Nothing is
+`wh init zsh` (or `bash`, `fish`) prints a small `wh()` function that
+forwards every command and turns `wh switch` into a `cd`. Nothing is
 written; you `eval` it from your rc file.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="readme/init-dark.svg">
-  <img alt="wd init zsh prints the wd() wrapper; after eval, wd switch really cds" src="readme/init-light.svg" width="720">
+  <img alt="wh init zsh prints the wh() wrapper; after eval, wh switch really cds" src="readme/init-light.svg" width="720">
 </picture>
 
 ## configuration (explain)
@@ -239,22 +239,22 @@ ANTHROPIC_API_KEY   used if set (model: claude-opus-5)
 OPENAI_API_KEY      used if no anthropic key (model: gpt-5.6-terra)
 GROQ_API_KEY        used if neither (model: openai/gpt-oss-120b)
                     none set: local ollama (model: llama3.2)
-WD_PROVIDER         force one of: anthropic, openai, groq, ollama
-WD_MODEL            override the model for any provider
-WD_OLLAMA_URL       default http://localhost:11434
-WD_GROQ_URL         default https://api.groq.com/openai
-WD_OPENAI_URL       default https://api.openai.com
-WD_ANTHROPIC_URL    default https://api.anthropic.com
+WH_PROVIDER         force one of: anthropic, openai, groq, ollama
+WH_MODEL            override the model for any provider
+WH_OLLAMA_URL       default http://localhost:11434
+WH_GROQ_URL         default https://api.groq.com/openai
+WH_OPENAI_URL       default https://api.openai.com
+WH_ANTHROPIC_URL    default https://api.anthropic.com
 NO_COLOR            any value disables color
 ```
 
 Paid keys win the auto-detect so nobody is silently downgraded;
-`WD_PROVIDER=groq` opts into the free tier, `WD_PROVIDER=ollama` into the
-no-key option. The `WD_*_URL` variables point at any compatible gateway.
+`WH_PROVIDER=groq` opts into the free tier, `WH_PROVIDER=ollama` into the
+no-key option. The `WH_*_URL` variables point at any compatible gateway.
 
 Requests go through the system `curl`; the key travels in curl's config on
 stdin (never argv) and the request body sits in a `0600` temp file for the
-duration of the call. Nothing is sent anywhere unless you run `wd explain`.
+duration of the call. Nothing is sent anywhere unless you run `wh explain`.
 
 ### when a call fails
 
@@ -302,14 +302,14 @@ Open http://localhost:3000. The first run shows a one-time setup screen that
 links to a prefilled GitHub OAuth-app form and saves the client id and
 secret to `web/.env.local` for you. Sign-in asks for the `repo` scope so
 private repos appear in the picker (GitHub has no read-only scope for
-private repos; wd only ever reads). Hosting it somewhere (env-only
+private repos; wh only ever reads). Hosting it somewhere (env-only
 config, an optional sign-in allowlist, a dockerfile), sessions, and the
 api limits are in [web/README.md](web/README.md).
 
 ### commands
 
 Phrasing is flexible: `explain`, `summarize`, `show me`, `what changed in`
-work as leading verbs, a trailing `?` is fine, and cli-style input (`wd
+work as leading verbs, a trailing `?` is fine, and cli-style input (`wh
 explain HEAD~3..`) works verbatim. Wherever a branch, tag, pr number, or
 log row belongs, a completion menu drops down, filtered as you type.
 
@@ -406,13 +406,13 @@ Typing `/` opens a menu of all of them with their options.
 
 | command | does |
 |---|---|
-| `/help`, `/wd` | the web grammar; the cli commands |
+| `/help`, `/wh` | the web grammar; the cli commands |
 | `/repos` | back to the repo picker |
 | `/key [value \| clear [provider]]` | add or replace a key, list them, drop one or all |
 | `/model [id \| default]`, `/effort [level \| default]` | per provider |
 | `/usage [reset [provider]]` | tokens per key |
 | `/show` | the raw diff payload the model saw, pager-colored |
-| `/copy`, `/export` | last answer to the clipboard; save the transcript as `wd-<owner>-<repo>.txt` |
+| `/copy`, `/export` | last answer to the clipboard; save the transcript as `wh-<owner>-<repo>.txt` |
 | `/theme auto\|light\|dark`, `/font default\|fira\|jetbrains\|plex`, `/fontsize 11..18`, `/ligatures on\|off` | looks |
 | `/account`, `/info` | who you are; repo, provider, keys, usage, prefs |
 | `/stop`, `/clear`, `/logout` | abort a running explain; new transcript; sign out |
@@ -427,25 +427,25 @@ Same tool, two surfaces, one explain spec (`shared/prompts/`), so an answer
 reads the same wherever you ask.
 
 ```
-                    terminal (wd)                 web
+                    terminal (wh)                 web
 worktrees           new, ls, switch, rm           (cli only)
-explain a range     wd explain main..dev          diff main..dev
-last N commits      wd explain HEAD~3..           explain the last 3 commits [on <branch>]
+explain a range     wh explain main..dev          diff main..dev
+last N commits      wh explain HEAD~3..           explain the last 3 commits [on <branch>]
 a pull request      fetch the branch, then a range what changed in pr #42
-one commit          wd explain <sha>~1..<sha>     explain <sha>
+one commit          wh explain <sha>~1..<sha>     explain <sha>
 the graph           git log --graph               log, then explain 3
 time and people     git log --since, --author     since yesterday by me, standup
-release notes       wd explain --changelog v1..   changelog v1.1..v1.2
-a pr description    wd explain --describe         describe pr #42, describe <branch>
+release notes       wh explain --changelog v1..   changelog v1.1..v1.2
+a pr description    wh explain --describe         describe pr #42, describe <branch>
 a file's story      git log -p -- <path>          history <path>, why <path>:<line>
 rebase, cherry-pick git rebase -i, git cherry-pick rebase <branch>, pick 3 5 onto <branch>
-branches            wd ls (worktrees, dirty)      branches (ahead/behind), tags
+branches            wh ls (worktrees, dirty)      branches (ahead/behind), tags
 follow-ups          (not yet)                     plain words after an explain
-raw payload         wd explain --dry-run          /show
+raw payload         wh explain --dry-run          /show
 keys                env: ANTHROPIC_API_KEY, ...   pasted once, kept in browser
 providers           anthropic, openai, groq,      anthropic, openai, groq
                     ollama
-model / effort      WD_MODEL, WD_PROVIDER         /model, /effort, per provider
+model / effort      WH_MODEL, WH_PROVIDER         /model, /effort, per provider
 private repos       whatever git can reach        github oauth, repo scope
 ```
 
@@ -459,7 +459,7 @@ two.
 ## layout
 
 ```
-cli/     rust cli: the wd binary
+cli/     rust cli: the wh binary
 web/     next.js app: the web terminal
 site/    landing page
 shared/  explain spec: prompt template, preprocessing rules, provider
@@ -474,7 +474,7 @@ reproduced byte for byte by the Rust and the TypeScript preprocessors.
 ## building
 
 ```
-cd cli && cargo build --release   # binary at target/release/wd
+cd cli && cargo build --release   # binary at target/release/wh
 cd cli && cargo test              # unit + integration (isolated git config)
 cd web && npm test                # vitest: grammar, preprocessing, providers, usage
 cd web && npm run build

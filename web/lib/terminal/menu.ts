@@ -67,7 +67,7 @@ export function buildCommands(ks: KeyStore): CmdSpec[] {
     { name: "/show", desc: "raw payload of the last command" },
     { name: "/copy", desc: "copy the last answer" },
     { name: "/export", desc: "save the transcript" },
-    { name: "/wd", desc: "about the wd cli" },
+    { name: "/wh", desc: "about the wh cli" },
     { name: "/stop", desc: "stop a running explain" },
     { name: "/clear", desc: "clear the screen" },
     { name: "/logout", desc: "sign out" },
@@ -91,28 +91,28 @@ export interface BranchSlot {
 
 export function branchSlot(input: string): BranchSlot | null {
   if (!input || input.startsWith("/")) return null;
-  let m = /^((?:wd\s+)?what\s+changed\s+(?:in|on)\s+)(\S*)$/i.exec(input);
+  let m = /^((?:wh\s+)?what\s+changed\s+(?:in|on)\s+)(\S*)$/i.exec(input);
   if (m && !/^pr\b|^#/i.test(m[2])) return { prefix: m[1], partial: m[2] };
-  m = /^((?:wd\s+)?(?:explain\s+(?:the\s+)?)?last\s+\d{1,3}(?:\s+commits?)?\s+on\s+)(\S*)$/i.exec(
+  m = /^((?:wh\s+)?(?:explain\s+(?:the\s+)?)?last\s+\d{1,3}(?:\s+commits?)?\s+on\s+)(\S*)$/i.exec(
     input
   );
   if (m) return { prefix: m[1], partial: m[2] };
-  m = /^((?:wd\s+)?(?:git\s+)?(?:log|graph|history|who|churn|hotspots|view|cat|ls)(?:\s+\S+)?\s+on\s+)(\S*)$/i.exec(input);
+  m = /^((?:wh\s+)?(?:git\s+)?(?:log|graph|history|who|churn|hotspots|view|cat|ls)(?:\s+\S+)?\s+on\s+)(\S*)$/i.exec(input);
   if (m) return { prefix: m[1], partial: m[2] };
-  m = /^((?:wd\s+)?why\s+\S+:\d+(?:-\d+)?\s+on\s+)(\S*)$/i.exec(input);
+  m = /^((?:wh\s+)?why\s+\S+:\d+(?:-\d+)?\s+on\s+)(\S*)$/i.exec(input);
   if (m) return { prefix: m[1], partial: m[2] };
   // "since <ref>" anywhere at the end, and the first side of a changelog
   // range; activity and stale take periods only, so no branches there
-  m = /^((?:wd\s+)?(?:.*\s)?since\s+)([^\s.]*)$/i.exec(input);
-  if (m && !/^(?:wd\s+)?(?:activity|stale)\b/i.test(input)) return { prefix: m[1], partial: m[2] };
-  m = /^((?:wd\s+)?(?:changelog|release\s+notes|describe|rebase)\s+)([^\s.]*)$/i.exec(input);
+  m = /^((?:wh\s+)?(?:.*\s)?since\s+)([^\s.]*)$/i.exec(input);
+  if (m && !/^(?:wh\s+)?(?:activity|stale)\b/i.test(input)) return { prefix: m[1], partial: m[2] };
+  m = /^((?:wh\s+)?(?:changelog|release\s+notes|describe|rebase)\s+)([^\s.]*)$/i.exec(input);
   if (m) return { prefix: m[1], partial: m[2] };
   // the target of a cherry-pick plan
-  m = /^((?:wd\s+)?(?:(?:cherry-)?pick\s+.+?\s+onto\s+|backport\s+.+?\s+to\s+))(\S*)$/i.exec(input);
+  m = /^((?:wh\s+)?(?:(?:cherry-)?pick\s+.+?\s+onto\s+|backport\s+.+?\s+to\s+))(\S*)$/i.exec(input);
   if (m) return { prefix: m[1], partial: m[2] };
-  m = /^((?:(?:wd\s+)?(?:diff|compare|explain)\s+)?\S*?\.{2,3})(\S*)$/i.exec(input);
+  m = /^((?:(?:wh\s+)?(?:diff|compare|explain)\s+)?\S*?\.{2,3})(\S*)$/i.exec(input);
   if (m && m[1].includes("..")) return { prefix: m[1], partial: m[2] };
-  m = /^((?:wd\s+)?(?:diff|compare)\s+)([^\s.]*)$/i.exec(input);
+  m = /^((?:wh\s+)?(?:diff|compare)\s+)([^\s.]*)$/i.exec(input);
   if (m) return { prefix: m[1], partial: m[2] };
   return null;
 }
@@ -120,14 +120,14 @@ export function branchSlot(input: string): BranchSlot | null {
 // "explain " with a log on screen offers its row numbers; so do a rebase
 // and a pick (which takes several)
 export function rowSlot(input: string): BranchSlot | null {
-  const m = /^((?:wd\s+)?(?:explain|show|rebase|(?:cherry-)?pick)\s+(?:\d{1,3}\s+)*)(\d{0,3})$/i.exec(input);
+  const m = /^((?:wh\s+)?(?:explain|show|rebase|(?:cherry-)?pick)\s+(?:\d{1,3}\s+)*)(\d{0,3})$/i.exec(input);
   return m ? { prefix: m[1], partial: m[2] } : null;
 }
 
 // "pr " with a prs list on screen offers its numbers
 export function prSlot(input: string): BranchSlot | null {
   const m =
-    /^((?:wd\s+)?(?:(?:explain|changelog|release\s+notes|describe|draft\s+pr|pr\s+description)\s+(?:for\s+)?|what\s+changed\s+in\s+)?(?:pr|pull\s+request)\s*#?)(\d{0,6})$/i.exec(
+    /^((?:wh\s+)?(?:(?:explain|changelog|release\s+notes|describe|draft\s+pr|pr\s+description)\s+(?:for\s+)?|what\s+changed\s+in\s+)?(?:pr|pull\s+request)\s*#?)(\d{0,6})$/i.exec(
       input
     );
   return m ? { prefix: m[1], partial: m[2] } : null;
@@ -172,8 +172,8 @@ export function argNotes(spec: CmdSpec | undefined, row: string, ks: KeyStore = 
   const p = modelFamily(row);
   if (!p) return [];
   const notes: Note[] = [{ text: p }];
-  if (FREE_TIER.includes(p)) notes.push({ text: "free", cls: "text-wd-green" });
+  if (FREE_TIER.includes(p)) notes.push({ text: "free", cls: "text-wh-green" });
   if (DEFAULT_MODELS[p] === row) notes.push({ text: "default", cls: "text-muted-foreground" });
-  if (!ks.hasKey(p)) notes.push({ text: "no key", cls: "text-wd-amber" });
+  if (!ks.hasKey(p)) notes.push({ text: "no key", cls: "text-wh-amber" });
   return notes;
 }

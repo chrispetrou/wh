@@ -61,7 +61,7 @@ export function CompletionMenu({
                   the whole menu so descriptions line up */}
               <span className="shrink-0 text-muted-foreground">{selected ? "›" : " "}</span>
               <span
-                className={`shrink-0 ${selected ? "font-semibold" : "text-wd-accent"}`}
+                className={`shrink-0 ${selected ? "font-semibold" : "text-wh-accent"}`}
                 style={{ minWidth: `${menuCol}ch` }}
               >
                 {row}

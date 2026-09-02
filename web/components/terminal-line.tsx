@@ -10,11 +10,11 @@ export const CLS: Record<Cls, string> = {
   p: "text-muted-foreground",
   c: "font-semibold",
   o: "text-muted-foreground",
-  g: "text-wd-green",
-  a: "text-wd-amber",
-  x: "text-wd-accent",
+  g: "text-wh-green",
+  a: "text-wh-amber",
+  x: "text-wh-accent",
   r: "text-destructive",
-  f: "text-wd-faint",
+  f: "text-wh-faint",
   "": "",
 };
 
@@ -33,7 +33,7 @@ export function renderText(text: string) {
           href={url.startsWith("http") ? url : `https://${url}`}
           target="_blank"
           rel="noreferrer"
-          className="text-wd-accent underline decoration-wd-faint underline-offset-2 hover:decoration-wd-accent"
+          className="text-wh-accent underline decoration-wh-faint underline-offset-2 hover:decoration-wh-accent"
         >
           {url}
         </a>

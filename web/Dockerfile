@@ -1,6 +1,6 @@
 # build from the repo root, not web/: the build step syncs prompt
 # templates from ../shared/prompts
-#   docker build -f web/Dockerfile -t wd-web .
+#   docker build -f web/Dockerfile -t wh-web .
 
 FROM node:22-alpine AS build
 WORKDIR /app

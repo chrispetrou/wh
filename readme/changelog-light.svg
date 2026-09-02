@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="720" height="250" viewBox="0 0 720 250" font-family="ui-monospace,SFMono-Regular,'SF Mono','Cascadia Mono','JetBrains Mono',Menlo,Consolas,monospace" font-size="13" role="img" aria-label="wd explain --changelog">
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="250" viewBox="0 0 720 250" font-family="ui-monospace,SFMono-Regular,'SF Mono','Cascadia Mono','JetBrains Mono',Menlo,Consolas,monospace" font-size="13" role="img" aria-label="wh explain --changelog">
 <style>
 text{fill:#1a1a1a;white-space:pre}
 .o{fill:#8a8a8a}.g{fill:#2f9e44}.a{fill:#b08900}.x{fill:#4263eb}.f{fill:#c8c8c8}
@@ -139,7 +139,7 @@ text{fill:#1a1a1a;white-space:pre}
 
 <text class="rv o r0x1_841" x="16" y="30">~/repo $</text>
 <text class="rv c r0x1_841" x="86.2" y="30">w</text>
-<text class="rv c r0_806x2_647" x="94" y="30">d</text>
+<text class="rv c r0_806x2_647" x="94" y="30">h</text>
 <text class="rv c r2_417x4_258" x="109.6" y="30">e</text>
 <text class="rv c r3_222x5_063" x="117.4" y="30">x</text>
 <text class="rv c r4_028x5_869" x="125.2" y="30">p</text>
@@ -178,7 +178,7 @@ text{fill:#1a1a1a;white-space:pre}
 <text class="rv  r44_879x46_72" x="218.8" y="96">across</text>
 <text class="rv  r45_857x47_699" x="273.4" y="96">a</text>
 <text class="rv  r46_835x48_677" x="289" y="96">restart.</text>
-<text class="rv  r48_389x50_23" x="16" y="118">wd</text>
+<text class="rv  r48_389x50_23" x="16" y="118">wh</text>
 <text class="rv  r49_367x51_208" x="39.4" y="118">rm</text>
 <text class="rv  r50_345x52_186" x="62.8" y="118">--force</text>
 <text class="rv  r51_323x53_165" x="125.2" y="118">removes</text>

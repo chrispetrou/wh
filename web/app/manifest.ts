@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "wd · tiny git companion",
-    short_name: "wd",
+    name: "wh · tiny git companion",
+    short_name: "wh",
     description: "worktrees, minus the ceremony. diffs, in plain english.",
     start_url: "/",
     display: "standalone",

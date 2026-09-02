@@ -38,7 +38,7 @@ export function delimiter(texts: string[]): string {
   return d;
 }
 
-const files = (b: PlanBlock) => `/tmp/wd-${b.base.sha.slice(0, 7)}`;
+const files = (b: PlanBlock) => `/tmp/wh-${b.base.sha.slice(0, 7)}`;
 
 // rows in todo order: oldest first
 const todoOrder = (rows: PlanRow[]): PlanRow[] => [...rows].reverse();

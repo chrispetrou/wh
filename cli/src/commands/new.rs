@@ -1,12 +1,12 @@
-use crate::{envfiles, git, naming, output, WdError};
+use crate::{envfiles, git, naming, output, WhError};
 use std::env;
 
-pub fn run(branch: &str, from: Option<&str>) -> Result<(), WdError> {
+pub fn run(branch: &str, from: Option<&str>) -> Result<(), WhError> {
     let cwd = env::current_dir()?;
     let main = git::main_worktree(&cwd)?;
     let dest = naming::sibling_path(&main, branch)?;
     if dest.exists() {
-        return Err(WdError::Msg(format!(
+        return Err(WhError::Msg(format!(
             "{} already exists",
             output::display_path(&dest, &cwd)
         )));
@@ -31,7 +31,7 @@ pub fn run(branch: &str, from: Option<&str>) -> Result<(), WdError> {
         )
     };
     if let Err(e) = added {
-        if let WdError::Git { stderr } = &e {
+        if let WhError::Git { stderr } = &e {
             if stderr.contains("already checked out") || stderr.contains("already used by worktree")
             {
                 let at = git::worktrees(&cwd)?
@@ -39,7 +39,7 @@ pub fn run(branch: &str, from: Option<&str>) -> Result<(), WdError> {
                     .find(|w| w.branch.as_deref() == Some(branch))
                     .map(|w| output::display_path(&w.path, &cwd))
                     .unwrap_or_else(|| "another worktree".into());
-                return Err(WdError::Msg(format!(
+                return Err(WhError::Msg(format!(
                     "{branch} already checked out at {at}"
                 )));
             }

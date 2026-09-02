@@ -9,7 +9,7 @@ fn creates_sibling_with_sanitized_name() {
     let t = TestRepo::new();
     t.write("a.txt", "hi");
     t.commit("init");
-    t.wd()
+    t.wh()
         .args(["new", "feat/auth"])
         .assert()
         .success()
@@ -33,7 +33,7 @@ fn reuses_existing_branch() {
     t.git(&["branch", "feat/x"]);
     t.write("a.txt", "2");
     t.commit("two");
-    t.wd().args(["new", "feat/x"]).assert().success();
+    t.wh().args(["new", "feat/x"]).assert().success();
     let wt = t.root.join("repo.feat-x");
     let branch_sha = t.git(&["rev-parse", "feat/x"]);
     assert_eq!(t.git_in(&wt, &["rev-parse", "HEAD"]), branch_sha);
@@ -46,7 +46,7 @@ fn from_ref_respected() {
     t.commit("one");
     t.commit("two");
     let old = t.git(&["rev-parse", "main~1"]);
-    t.wd()
+    t.wh()
         .args(["new", "feat/old", "--from", "main~1"])
         .assert()
         .success();
@@ -65,7 +65,7 @@ fn copies_env_files() {
     t.write(".env", "A=1");
     t.write(".env.local", "B=2");
     t.write(".envrc", "no");
-    t.wd()
+    t.wh()
         .args(["new", "feat/auth"])
         .assert()
         .success()
@@ -80,7 +80,7 @@ fn copies_env_files() {
 fn no_env_no_copied_line() {
     let t = TestRepo::new();
     t.commit("init");
-    t.wd()
+    t.wh()
         .args(["new", "feat/a"])
         .assert()
         .success()
@@ -93,7 +93,7 @@ fn tracked_env_file_not_clobbered() {
     t.write(".env.example", "tracked");
     t.commit("init");
     t.write(".env", "A=1");
-    t.wd()
+    t.wh()
         .args(["new", "feat/a"])
         .assert()
         .success()
@@ -110,7 +110,7 @@ fn existing_dir_errors() {
     let t = TestRepo::new();
     t.commit("init");
     fs::create_dir(t.root.join("repo.feat-auth")).unwrap();
-    t.wd()
+    t.wh()
         .args(["new", "feat/auth"])
         .assert()
         .failure()
@@ -122,7 +122,7 @@ fn branch_checked_out_elsewhere() {
     let t = TestRepo::new();
     t.commit("init");
     t.git(&["worktree", "add", "-b", "feat/x", "../elsewhere"]);
-    t.wd()
+    t.wh()
         .args(["new", "feat/x"])
         .assert()
         .failure()
@@ -135,8 +135,8 @@ fn branch_checked_out_elsewhere() {
 fn works_from_linked_worktree() {
     let t = TestRepo::new();
     t.commit("init");
-    t.wd().args(["new", "feat/a"]).assert().success();
-    t.wd_in(&t.root.join("repo.feat-a"))
+    t.wh().args(["new", "feat/a"]).assert().success();
+    t.wh_in(&t.root.join("repo.feat-a"))
         .args(["new", "feat/b"])
         .assert()
         .success()

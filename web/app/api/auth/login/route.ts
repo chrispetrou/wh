@@ -19,10 +19,10 @@ export async function GET(req: NextRequest) {
     path: "/",
     maxAge: 600,
   };
-  jar.set("wd_oauth_state", state, cookie);
+  jar.set("wh_oauth_state", state, cookie);
   const back = req.nextUrl.searchParams.get("return") ?? "";
-  if (/^\/repos\/[^/?#]+\/[^/?#]+$/.test(back)) jar.set("wd_oauth_return", back, cookie);
-  else jar.delete("wd_oauth_return");
+  if (/^\/repos\/[^/?#]+\/[^/?#]+$/.test(back)) jar.set("wh_oauth_return", back, cookie);
+  else jar.delete("wh_oauth_return");
   const params = new URLSearchParams({
     client_id: process.env.GITHUB_CLIENT_ID ?? "",
     redirect_uri: `${appOrigin()}/api/auth/callback`,

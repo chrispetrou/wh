@@ -10,7 +10,7 @@ export async function generateMetadata({
   params: Promise<{ owner: string; repo: string }>;
 }): Promise<Metadata> {
   const { owner, repo } = await params;
-  return { title: `${owner}/${repo} · wd` };
+  return { title: `${owner}/${repo} · wh` };
 }
 
 export default async function ChatPage({

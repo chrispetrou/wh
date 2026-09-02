@@ -14,9 +14,9 @@ export function SiteHeader({
       <div className="flex items-center gap-7">
         <div className="flex min-w-0 items-center gap-2.5">
           <Link href="/" className="flex items-center gap-2.5 font-semibold">
-            <Glyph /> <span>wd</span>
+            <Glyph /> <span>wh</span>
           </Link>
-          <span className="font-normal text-wd-faint">/</span>
+          <span className="font-normal text-wh-faint">/</span>
           {section ? (
             <span className="truncate text-muted-foreground">{section}</span>
           ) : null}

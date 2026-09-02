@@ -25,7 +25,7 @@ const LANE_W = 14;
 const PAD = 7;
 const ROW_H = 22; // the viewBox height; the svg stretches to the row
 const x = (lane: number) => PAD + lane * LANE_W;
-const laneColor = (c: number) => `var(--wd-lane-${c % 6})`;
+const laneColor = (c: number) => `var(--wh-lane-${c % 6})`;
 
 function railWidth(lanes: number): number {
   return lanes ? PAD * 2 + (lanes - 1) * LANE_W : 0;
@@ -381,7 +381,7 @@ export function LogBlock({
                       ) : "failed" in detail ? (
                         <div className="detail-in">
                           <div>
-                            <span className="text-wd-amber">error:</span>{" "}
+                            <span className="text-wh-amber">error:</span>{" "}
                             {detail.auth ? "your github session ended" : detail.failed}
                           </div>
                           {detail.auth ? (
@@ -437,7 +437,7 @@ function jumpTo(block: ListBlock, sha: string, line: number, storeKey: string, s
 
 function LogCells({ row, i, lanes, selected }: { row: CommitRow; i: number; lanes: number; selected: boolean }) {
   const merge = row.graph?.merge ?? row.parents.length > 1;
-  const color = row.graph ? laneColor(row.graph.color) : "var(--wd-accent)";
+  const color = row.graph ? laneColor(row.graph.color) : "var(--wh-accent)";
   return (
     <>
       <span className="log-num">{i + 1}</span>
@@ -447,7 +447,7 @@ function LogCells({ row, i, lanes, selected }: { row: CommitRow; i: number; lane
           <Chip
             key={r.name}
             name={r.name}
-            color={r.kind === "default" ? "var(--wd-accent)" : r.kind === "tag" ? "var(--muted-foreground)" : color}
+            color={r.kind === "default" ? "var(--wh-accent)" : r.kind === "tag" ? "var(--muted-foreground)" : color}
           />
         ))}
         {row.subject}
@@ -464,7 +464,7 @@ function LogCells({ row, i, lanes, selected }: { row: CommitRow; i: number; lane
 function PrCells({ row }: { row: PrRow }) {
   return (
     <>
-      <span className="log-num text-wd-accent" style={{ color: "var(--wd-accent)" }}>
+      <span className="log-num text-wh-accent" style={{ color: "var(--wh-accent)" }}>
         #{row.num}
       </span>
       <span className="log-cell">
@@ -489,7 +489,7 @@ function SignInAgain({ storeKey, line, id }: { storeKey: string; line: number; i
   return (
     <div>
       <Action onClick={() => signInAgain(storeKey, { line, open: id })}>
-        sign in again <span className="text-wd-green">→</span>
+        sign in again <span className="text-wh-green">→</span>
       </Action>
     </div>
   );
@@ -516,7 +516,7 @@ function Files({
         <div key={f.path} className="log-file">
           <span>{f.path}</span>
           <span className="text-muted-foreground">{" ".repeat(Math.max(w - f.path.length, 0) + 2)}</span>
-          <span className="text-wd-green">+{f.additions}</span> <span className="text-destructive">−{f.deletions}</span>
+          <span className="text-wh-green">+{f.additions}</span> <span className="text-destructive">−{f.deletions}</span>
           {f.status !== "modified" ? <span className="text-muted-foreground"> {f.status}</span> : null}
           <span className="log-file-actions">
             <span className="text-muted-foreground">   </span>

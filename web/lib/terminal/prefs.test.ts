@@ -62,38 +62,38 @@ describe("appliers", () => {
     const r = fakeRoot();
     applyFont("fira", r, p);
     expect(r.attrs.get("data-font")).toBe("fira");
-    expect(m.data.get("wd_font")).toBe("fira");
+    expect(m.data.get("wh_font")).toBe("fira");
     applyFont("default", r, p);
     expect(r.attrs.has("data-font")).toBe(false);
-    expect(m.data.has("wd_font")).toBe(false);
+    expect(m.data.has("wh_font")).toBe(false);
 
     applyFontSize("14", r, p);
-    expect(r.props.get("--wd-font-size")).toBe("14px");
-    expect(m.data.get("wd_fontsize")).toBe("14");
+    expect(r.props.get("--wh-font-size")).toBe("14px");
+    expect(m.data.get("wh_fontsize")).toBe("14");
     applyFontSize("default", r, p);
-    expect(r.props.has("--wd-font-size")).toBe(false);
+    expect(r.props.has("--wh-font-size")).toBe(false);
 
     applyLigatures(false, r, p);
     expect(r.attrs.get("data-lig")).toBe("off");
-    expect(m.data.get("wd_lig")).toBe("off");
+    expect(m.data.get("wh_lig")).toBe("off");
     applyLigatures(true, r, p);
     expect(r.attrs.has("data-lig")).toBe(false);
-    expect(m.data.has("wd_lig")).toBe(false);
+    expect(m.data.has("wh_lig")).toBe(false);
   });
 });
 
 describe("rememberRecent", () => {
   it("moves the repo to the front, dedupes, and keeps five", () => {
-    const m = memory({ wd_recent: JSON.stringify(["a/1", "b/2", "c/3", "d/4", "e/5"]) });
+    const m = memory({ wh_recent: JSON.stringify(["a/1", "b/2", "c/3", "d/4", "e/5"]) });
     rememberRecent("c/3", m);
-    expect(JSON.parse(m.data.get("wd_recent")!)).toEqual(["c/3", "a/1", "b/2", "d/4", "e/5"]);
+    expect(JSON.parse(m.data.get("wh_recent")!)).toEqual(["c/3", "a/1", "b/2", "d/4", "e/5"]);
     rememberRecent("f/6", m);
-    expect(JSON.parse(m.data.get("wd_recent")!)).toEqual(["f/6", "c/3", "a/1", "b/2", "d/4"]);
+    expect(JSON.parse(m.data.get("wh_recent")!)).toEqual(["f/6", "c/3", "a/1", "b/2", "d/4"]);
   });
 
   it("tolerates bad json", () => {
-    const m = memory({ wd_recent: "{" });
+    const m = memory({ wh_recent: "{" });
     expect(() => rememberRecent("a/1", m)).not.toThrow();
-    expect(m.data.get("wd_recent")).toBe("{");
+    expect(m.data.get("wh_recent")).toBe("{");
   });
 });

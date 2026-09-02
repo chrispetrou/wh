@@ -12,30 +12,30 @@ use clap::Parser;
 use std::fmt;
 
 #[derive(Debug)]
-pub enum WdError {
+pub enum WhError {
     NotARepo,
     Git { stderr: String },
     Msg(String),
     Io(std::io::Error),
 }
 
-impl fmt::Display for WdError {
+impl fmt::Display for WhError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            WdError::NotARepo => write!(f, "not a git repository"),
-            WdError::Git { stderr } => {
+            WhError::NotARepo => write!(f, "not a git repository"),
+            WhError::Git { stderr } => {
                 let line = stderr.lines().next().unwrap_or("git failed");
                 write!(f, "{}", line.strip_prefix("fatal: ").unwrap_or(line))
             }
-            WdError::Msg(m) => write!(f, "{m}"),
-            WdError::Io(e) => write!(f, "{e}"),
+            WhError::Msg(m) => write!(f, "{m}"),
+            WhError::Io(e) => write!(f, "{e}"),
         }
     }
 }
 
-impl From<std::io::Error> for WdError {
+impl From<std::io::Error> for WhError {
     fn from(e: std::io::Error) -> Self {
-        WdError::Io(e)
+        WhError::Io(e)
     }
 }
 

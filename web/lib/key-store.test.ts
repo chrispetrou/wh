@@ -20,16 +20,16 @@ describe("key store", () => {
   });
 
   it("migrates the legacy single key with its model and effort", () => {
-    const m = memory({ wd_key: "gsk_old", wd_model: "openai/gpt-oss-120b", wd_effort: "high" });
+    const m = memory({ wh_key: "gsk_old", wh_model: "openai/gpt-oss-120b", wh_effort: "high" });
     const s = createKeyStore(m);
     expect(s.providers()).toEqual(["groq"]);
     expect(s.active()).toBe("groq");
     expect(s.activeKey()).toBe("gsk_old");
     expect(s.model("groq")).toBe("openai/gpt-oss-120b");
     expect(s.effort("groq")).toBe("high");
-    expect(m.data.has("wd_key")).toBe(false);
-    expect(m.data.has("wd_model")).toBe(false);
-    expect(m.data.has("wd_effort")).toBe(false);
+    expect(m.data.has("wh_key")).toBe(false);
+    expect(m.data.has("wh_model")).toBe(false);
+    expect(m.data.has("wh_effort")).toBe(false);
   });
 
   it("stores one key per provider and activates the latest", () => {
@@ -113,7 +113,7 @@ describe("key store", () => {
   });
 
   it("ignores malformed stored json", () => {
-    const s = createKeyStore(memory({ wd_keys: "not json", wd_provider: "groq" }));
+    const s = createKeyStore(memory({ wh_keys: "not json", wh_provider: "groq" }));
     expect(s.providers()).toEqual([]);
     expect(s.active()).toBeNull();
   });
@@ -162,9 +162,9 @@ describe("usage count", () => {
   });
 
   it("ignores a malformed count", () => {
-    const s = createKeyStore(memory({ wd_keys: '{"groq":"gsk_1"}', wd_usage: '{"groq":"nope"}' }));
+    const s = createKeyStore(memory({ wh_keys: '{"groq":"gsk_1"}', wh_usage: '{"groq":"nope"}' }));
     expect(s.usage("groq")).toBeNull();
-    const t = createKeyStore(memory({ wd_keys: '{"groq":"gsk_1"}', wd_usage: '{"groq":"{\\"in\\":\\"x\\"}"}' }));
+    const t = createKeyStore(memory({ wh_keys: '{"groq":"gsk_1"}', wh_usage: '{"groq":"{\\"in\\":\\"x\\"}"}' }));
     expect(t.usage("groq")).toBeNull();
   });
 });

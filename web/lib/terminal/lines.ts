@@ -1,6 +1,6 @@
 // the terminal's line shapes: how streamed text becomes colored rows
 // (diff lines, section labels, the branches and tags listings, the
-// [wd:...] sentinels the route appends), and how a row goes back to
+// [wh:...] sentinels the route appends), and how a row goes back to
 // plain text for /copy and /export. no react, no store.
 import { blockText } from "../block";
 import type { ChatLine, Head } from "../chat-store";
@@ -16,7 +16,7 @@ export function flat(l: ChatLine): string {
 }
 
 // a branches row: "3  feat/web_app    behind 1". like the landing picker
-// and wd ls, the name is fg and the index and status words are muted
+// and wh ls, the name is fg and the index and status words are muted
 const BRANCH_ROW = /^(\s*\d+\s{2})(\S+)(.*)$/;
 
 export function branchLine(text: string): ChatLine {
@@ -98,15 +98,15 @@ export function classify(mode: StreamMode, text: string): ChatLine {
     return { text, cls: "" };
   }
   if (LABELS.has(t)) return { text, cls: "a" };
-  if (t.startsWith("[wd:error] ")) {
+  if (t.startsWith("[wh:error] ")) {
     const head: Head = { text: "error:", cls: "a" };
     return { head, text: ` ${t.slice(11)}`, cls: "" };
   }
-  if (t.startsWith("[wd:hint] ")) return { text: t.slice(10), cls: "o" };
+  if (t.startsWith("[wh:hint] ")) return { text: t.slice(10), cls: "o" };
   return { text, cls: "" };
 }
 
-// what the route said the answer cost, parsed from its [wd:usage] line
+// what the route said the answer cost, parsed from its [wh:usage] line
 export interface UsageSentinel {
   in?: number;
   out?: number;
@@ -114,7 +114,7 @@ export interface UsageSentinel {
 }
 
 // the stream assembler: chunks in, complete rows out. the answer's own
-// lines are kept for the follow-up context; the [wd:...] sentinel lines
+// lines are kept for the follow-up context; the [wh:...] sentinel lines
 // the route appends are taken aside and are not part of it
 export function createAssembler() {
   let mode: StreamMode = "text";
@@ -125,7 +125,7 @@ export function createAssembler() {
   // every complete line passes here: sentinels are taken aside (nothing
   // to show), the rest is kept for the context and returned to show
   const sink = (line: string, complete: boolean): ChatLine | null => {
-    if (line.startsWith("[wd:usage] ")) {
+    if (line.startsWith("[wh:usage] ")) {
       try {
         usage = JSON.parse(line.slice(11));
       } catch {
@@ -133,7 +133,7 @@ export function createAssembler() {
       }
       return null;
     }
-    if (!line.startsWith("[wd:")) answer += complete ? `${line}\n` : line;
+    if (!line.startsWith("[wh:")) answer += complete ? `${line}\n` : line;
     return classify(mode, line);
   };
 

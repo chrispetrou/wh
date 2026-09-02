@@ -5,7 +5,7 @@ import { RepoPicker } from "@/components/repo-picker";
 import { GithubError, listRepos } from "@/lib/github";
 import { getSession } from "@/lib/session";
 
-export const metadata: Metadata = { title: "repos · wd" };
+export const metadata: Metadata = { title: "repos · wh" };
 
 export default async function ReposPage() {
   const session = await getSession();

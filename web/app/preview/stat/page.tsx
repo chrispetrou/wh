@@ -1,6 +1,6 @@
 // a fixture render of the stat block (who, churn, activity), for
 // eyeballing bars and the sparkline without a github session. only
-// served when WD_PREVIEW=1 is set.
+// served when WH_PREVIEW=1 is set.
 import { notFound } from "next/navigation";
 import { PreviewStat } from "./preview";
 
@@ -12,7 +12,7 @@ export default async function Page({
 }: {
   searchParams: Promise<{ theme?: string }>;
 }) {
-  if (process.env.WD_PREVIEW !== "1") notFound();
+  if (process.env.WH_PREVIEW !== "1") notFound();
   const { theme } = await searchParams;
   return <PreviewStat dark={theme === "dark"} />;
 }

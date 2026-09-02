@@ -9,7 +9,7 @@ export default function NotFound() {
           href="/"
           className="border-b border-border pb-0.5 font-semibold hover:border-foreground"
         >
-          back home <span className="text-wd-green">→</span>
+          back home <span className="text-wh-green">→</span>
         </Link>
       </p>
     </div>

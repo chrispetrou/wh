@@ -72,14 +72,14 @@ impl TestRepo {
         String::from_utf8_lossy(&out.stdout).trim_end().to_string()
     }
 
-    /// The wd binary, run from the main repo.
-    pub fn wd(&self) -> assert_cmd::Command {
-        self.wd_in(&self.repo)
+    /// The wh binary, run from the main repo.
+    pub fn wh(&self) -> assert_cmd::Command {
+        self.wh_in(&self.repo)
     }
 
-    /// The wd binary, run from an arbitrary directory (e.g. a linked worktree).
-    pub fn wd_in(&self, dir: &Path) -> assert_cmd::Command {
-        let mut c = assert_cmd::Command::cargo_bin("wd").unwrap();
+    /// The wh binary, run from an arbitrary directory (e.g. a linked worktree).
+    pub fn wh_in(&self, dir: &Path) -> assert_cmd::Command {
+        let mut c = assert_cmd::Command::cargo_bin("wh").unwrap();
         c.current_dir(dir)
             .env("GIT_CONFIG_GLOBAL", "/dev/null")
             .env("GIT_CONFIG_SYSTEM", "/dev/null")

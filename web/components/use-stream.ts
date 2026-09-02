@@ -55,10 +55,10 @@ export function useStream({
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-wd-provider-key": keyStore.activeKey(),
-          "x-wd-model": activeModel(),
-          "x-wd-effort": activeEffort(),
-          "x-wd-tz": String(new Date().getTimezoneOffset()),
+          "x-wh-provider-key": keyStore.activeKey(),
+          "x-wh-model": activeModel(),
+          "x-wh-effort": activeEffort(),
+          "x-wh-tz": String(new Date().getTimezoneOffset()),
         },
         body: JSON.stringify(body),
         signal: abort.signal,
@@ -228,11 +228,11 @@ export function useStream({
               });
             }
             // the mouse tricks nothing on screen reveals, said once ever
-            if (meta.block.kind === "log" && !prefs.get("wd_drag_hint")) {
-              prefs.set("wd_drag_hint", "seen");
+            if (meta.block.kind === "log" && !prefs.get("wh_drag_hint")) {
+              prefs.set("wh_drag_hint", "seen");
               muted(["(drag a row onto a branch line for a cherry-pick plan)"]);
-            } else if (meta.block.kind === "file" && !prefs.get("wd_why_hint")) {
-              prefs.set("wd_why_hint", "seen");
+            } else if (meta.block.kind === "file" && !prefs.get("wh_why_hint")) {
+              prefs.set("wh_why_hint", "seen");
               muted(["(click a line number to ask why it exists)"]);
             }
             return;
@@ -261,8 +261,8 @@ export function useStream({
     if (empty) return;
     if (!raw && context && full?.trim()) {
       chatStore.setContext(storeKey, context, full.trim());
-      if (!prefs.get("wd_fu_hint")) {
-        prefs.set("wd_fu_hint", "seen");
+      if (!prefs.get("wh_fu_hint")) {
+        prefs.set("wh_fu_hint", "seen");
         muted(["(ask follow-ups in plain words, or run another command)"]);
       }
     }

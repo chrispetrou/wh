@@ -65,16 +65,16 @@ describe("paste", () => {
     r = setAction(r, 2, "drop");
     expect(paste(block(r))).toEqual([
       "git switch 'feat/auth'",
-      "cat > /tmp/wd-0000000-msg-1 <<'EOF'",
+      "cat > /tmp/wh-0000000-msg-1 <<'EOF'",
       "add auth with session cookies\n\nwhy: the old flow leaked",
       "EOF",
-      "cat > /tmp/wd-0000000-todo <<'EOF'",
+      "cat > /tmp/wh-0000000-todo <<'EOF'",
       `drop ${SHA("a")} wip`,
       `pick ${SHA("b")} add auth`,
       `fixup ${SHA("c")} fix typo`,
-      "exec git commit --amend -F /tmp/wd-0000000-msg-1",
+      "exec git commit --amend -F /tmp/wh-0000000-msg-1",
       "EOF",
-      `GIT_SEQUENCE_EDITOR='cp /tmp/wd-0000000-todo' git rebase -i ${SHA("0")}`,
+      `GIT_SEQUENCE_EDITOR='cp /tmp/wh-0000000-todo' git rebase -i ${SHA("0")}`,
     ]);
     expect(warnings(block(r))).toEqual([]);
   });
@@ -87,7 +87,7 @@ describe("paste", () => {
     const lines = paste(block(r, { head: undefined }));
     expect(lines[0]).toBe("# check out the branch that holds these commits first");
     expect(lines.slice(1, 6)).toEqual([
-      "cat > /tmp/wd-0000000-todo <<'EOF'",
+      "cat > /tmp/wh-0000000-todo <<'EOF'",
       `edit ${SHA("a")} wip`,
       `reword ${SHA("b")} add auth`,
       `squash ${SHA("c")} fix typo`,
@@ -100,7 +100,7 @@ describe("paste", () => {
     expect(r[2].action).toBe("reword");
     const lines = paste(block(r));
     expect(lines).toContain(`pick ${SHA("a")} wip`);
-    expect(lines).toContain("exec git commit --amend -F /tmp/wd-0000000-msg-1");
+    expect(lines).toContain("exec git commit --amend -F /tmp/wh-0000000-msg-1");
     expect(lines.filter((l) => l.startsWith("cat >"))).toHaveLength(2);
   });
 
@@ -109,7 +109,7 @@ describe("paste", () => {
     expect(delimiter(["a\n  EOF1\nb", "EOF"])).toBe("EOF2");
     const r = setText(rows(), 0, "EOF");
     const lines = paste(block(r));
-    expect(lines).toContain("cat > /tmp/wd-0000000-msg-1 <<'EOF1'");
+    expect(lines).toContain("cat > /tmp/wh-0000000-msg-1 <<'EOF1'");
     expect(lines.filter((l) => l === "EOF1")).toHaveLength(2);
   });
 
@@ -135,7 +135,7 @@ describe("paste", () => {
         `pick ${SHA("a")} wip`,
         `drop ${SHA("b")} add auth`,
         `fixup ${SHA("c")} fix typo`,
-        "exec git commit --amend -F /tmp/wd-0000000-msg-1",
+        "exec git commit --amend -F /tmp/wh-0000000-msg-1",
       ])
     );
     expect(lines.indexOf(`drop ${SHA("b")} add auth`)).toBeLessThan(
@@ -218,7 +218,7 @@ describe("editing", () => {
     r = setText(rows(), 0, "fix typo\n\nbody of c\n");
     expect(r[0].action).toBe("pick");
     expect(r[0].text).toBe("fix typo\n\nbody of c\n");
-    expect(paste(block(r))).not.toContain(`exec git commit --amend -F /tmp/wd-${"0".repeat(7)}-msg-1`);
+    expect(paste(block(r))).not.toContain(`exec git commit --amend -F /tmp/wh-${"0".repeat(7)}-msg-1`);
   });
 
   it("finds the rows a draft should read and where a fold lands", () => {

@@ -16,7 +16,7 @@ pub fn success(msg: &str) {
 }
 
 /// Success line on stderr, for commands whose stdout is machine-read
-/// (e.g. the `wd switch` path captured by the shell wrapper).
+/// (e.g. the `wh switch` path captured by the shell wrapper).
 pub fn success_to_stderr(msg: &str) {
     let colored = std::io::stderr().is_terminal() && env::var_os("NO_COLOR").is_none();
     if colored {
@@ -37,7 +37,7 @@ fn stderr_colored() -> bool {
 
 /// A status line beside an answer (`reading 3 commits ...`, `· 4.1s ·
 /// model`): stdout when it is a terminal, stderr when stdout is piped
-/// somewhere, so `wd explain > notes.md` holds only the answer.
+/// somewhere, so `wh explain > notes.md` holds only the answer.
 pub fn status(msg: &str) {
     if std::io::stdout().is_terminal() {
         info(msg);

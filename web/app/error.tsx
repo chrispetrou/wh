@@ -13,7 +13,7 @@ export default function Error({ reset }: { error: Error; reset: () => void }) {
           onClick={reset}
           className="cursor-pointer border-b border-border pb-0.5 font-semibold hover:border-foreground"
         >
-          try again <span className="text-wd-green">→</span>
+          try again <span className="text-wh-green">→</span>
         </button>
       </p>
     </div>

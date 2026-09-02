@@ -244,7 +244,7 @@ export function PlanBlock({
                   <Chip
                     key={r.name}
                     name={r.name}
-                    color={r.kind === "default" ? "var(--wd-accent)" : "var(--muted-foreground)"}
+                    color={r.kind === "default" ? "var(--wh-accent)" : "var(--muted-foreground)"}
                   />
                 ))}
                 {row.text ? row.text.split("\n")[0] : row.subject}
@@ -255,7 +255,7 @@ export function PlanBlock({
               </span>
               <span className="log-cell text-muted-foreground">{row.sha.slice(0, 7)}</span>
               <span
-                className="log-cell plan-note text-wd-amber"
+                className="log-cell plan-note text-wh-amber"
                 data-tip={
                   row.clash.length > 1 ? row.clash.join(", ") : notes[i].length > 36 ? notes[i] : undefined
                 }
@@ -295,10 +295,10 @@ export function PlanBlock({
         </div>
       ))}
       {rows.length ? (
-        <div className={v.warn ? "text-wd-amber" : "text-muted-foreground"}>{v.text}</div>
+        <div className={v.warn ? "text-wh-amber" : "text-muted-foreground"}>{v.text}</div>
       ) : null}
       {warn.map((w, i) => (
-        <div key={i} className="text-wd-amber">
+        <div key={i} className="text-wh-amber">
           {w}
         </div>
       ))}
@@ -371,7 +371,7 @@ function Panel({
             <div key={f} className="log-file">
               <span>{f}</span>
               {row.clash.includes(f) ? (
-                <span className="text-wd-amber">
+                <span className="text-wh-amber">
                   {" ".repeat(Math.max(w - f.length, 0) + 2)}also changed on {target}
                 </span>
               ) : null}

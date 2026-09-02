@@ -144,16 +144,16 @@ text{fill:#1a1a1a;white-space:pre}
 <rect x="0.5" y="30" width="719" height="1" fill="#e6e6e6"/>
 <circle cx="20" cy="15" r="4" fill="none" stroke="#c8c8c8"/><circle cx="34" cy="15" r="4" fill="none" stroke="#c8c8c8"/><circle cx="48" cy="15" r="4" fill="none" stroke="#c8c8c8"/>
 <rect x="70" y="7" width="580" height="16" fill="#fcfcfc" stroke="#e6e6e6" rx="3"/>
-<text class="o sm" x="80" y="19">localhost:3000/repos/demo/wd</text>
+<text class="o sm" x="80" y="19">localhost:3000/repos/demo/wh</text>
 <path d="M 24 45 h 14 v 14 h -9.1 v -9.1 h -4.9 z" fill="#1a1a1a"/>
-<text class="b" x="46" y="57">wd</text><text class="f" x="70" y="57">/</text><text class="o" x="82" y="57">demo/wd</text>
+<text class="b" x="46" y="57">wh</text><text class="f" x="70" y="57">/</text><text class="o" x="82" y="57">demo/wh</text>
 <text class="o sm" x="620" y="57">demo</text><text class="o sm" x="668" y="57">logout</text>
 <rect x="0.5" y="74" width="719" height="1" fill="#e6e6e6"/>
 <rect x="16" y="78" width="34" height="19" fill="#eef2ff" rx="3"/>
-<text class="b sm" x="23" y="92">wd</text><text class="f sm" x="60" y="92">+</text>
+<text class="b sm" x="23" y="92">wh</text><text class="f sm" x="60" y="92">+</text>
 <rect x="0.5" y="101" width="719" height="1" fill="#e6e6e6"/>
-<text class="rv o r0x1_709" x="24" y="131">▜ wd · demo/wd</text>
-<text class="rv o r4_274x5_983" x="24" y="153">demo/wd $</text>
+<text class="rv o r0x1_709" x="24" y="131">▜ wh · demo/wh</text>
+<text class="rv o r4_274x5_983" x="24" y="153">demo/wh $</text>
 <text class="rv c r4_274x5_983" x="102" y="153">w</text>
 <text class="rv c r5_021x6_731" x="109.8" y="153">h</text>
 <text class="rv c r5_769x7_479" x="117.6" y="153">a</text>

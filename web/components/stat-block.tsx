@@ -33,7 +33,7 @@ function Spark({ values, label }: { values: number[]; label: string }) {
               y={ROW_H - h}
               width={3}
               height={h}
-              fill={v ? "var(--wd-accent)" : "var(--wd-faint)"}
+              fill={v ? "var(--wh-accent)" : "var(--wh-faint)"}
             />
           );
         })}
@@ -64,7 +64,7 @@ export function StatBlock({ block, fresh }: { block: Stat; fresh: boolean }) {
         const head = heads[i];
         return (
           <div key={i}>
-            {head ? <div className={`text-wd-amber ${i ? "mt-2" : ""}`}>{head}</div> : null}
+            {head ? <div className={`text-wh-amber ${i ? "mt-2" : ""}`}>{head}</div> : null}
             <div className="log-row stat-row" style={{ gridTemplateColumns: cols }}>
               <span className="log-cell">{r.label}</span>
               <svg
@@ -78,7 +78,7 @@ export function StatBlock({ block, fresh }: { block: Stat; fresh: boolean }) {
                   y={(ROW_H - BAR_H) / 2}
                   width={Math.max(r.share > 0 ? 1 : 0, r.share * BAR_W)}
                   height={BAR_H}
-                  fill="var(--wd-accent)"
+                  fill="var(--wh-accent)"
                 />
               </svg>
               <span className="log-cell text-muted-foreground">{r.value}</span>

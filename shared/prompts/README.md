@@ -13,11 +13,11 @@ implementations must produce the same payloads and the same output shape.
   `watch out` section, as shown in the landing demo (`site/index.html`).
   `[followup]` is the system prompt for continuing the conversation about
   the same diff (web today; a cli explain repl may use it later).
-  `[changelog]` replaces `[system]` in changelog mode (`wd explain
+  `[changelog]` replaces `[system]` in changelog mode (`wh explain
   --changelog`, `changelog <range>` on the web): the output contract is up
   to four sections, `added`, `changed`, `fixed`, `removed`, empty ones
   left out, or the single line `nothing user-visible`.
-  `[describe]` replaces `[system]` in describe mode (`wd explain
+  `[describe]` replaces `[system]` in describe mode (`wh explain
   --describe`, `describe pr #N` or `describe <branch>` on the web): the
   contract is `title`, `description`, and `testing` when the diff shows
   how to verify. Both implementations append a context block to the user

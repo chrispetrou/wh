@@ -5,7 +5,7 @@ afterEach(() => vi.unstubAllEnvs());
 
 describe("secureCookies", () => {
   it("follows the APP_URL scheme when set", () => {
-    vi.stubEnv("APP_URL", "https://wd.example.com");
+    vi.stubEnv("APP_URL", "https://wh.example.com");
     expect(secureCookies()).toBe(true);
     vi.stubEnv("APP_URL", "http://192.168.1.10:3000");
     expect(secureCookies()).toBe(false);
@@ -13,7 +13,7 @@ describe("secureCookies", () => {
 
   it("an https APP_URL wins even outside production", () => {
     vi.stubEnv("NODE_ENV", "development");
-    vi.stubEnv("APP_URL", "https://wd.example.com");
+    vi.stubEnv("APP_URL", "https://wh.example.com");
     expect(secureCookies()).toBe(true);
   });
 

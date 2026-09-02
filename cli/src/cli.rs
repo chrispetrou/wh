@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(
-    name = "wd",
+    name = "wh",
     version,
     about = "tiny git companion",
     disable_help_subcommand = true,
@@ -30,7 +30,7 @@ pub enum Cmd {
         /// filter; a unique match prints straight away, no picker
         query: Option<String>,
     },
-    /// print the shell wrapper that makes `wd switch` cd for you
+    /// print the shell wrapper that makes `wh switch` cd for you
     Init {
         /// zsh, bash, or fish
         shell: String,
@@ -38,8 +38,8 @@ pub enum Cmd {
     /// explain a diff range in plain english (byo llm key, or local ollama)
     #[command(after_help = "\
 keys via env: ANTHROPIC_API_KEY, OPENAI_API_KEY, or GROQ_API_KEY (free tier
-at console.groq.com). none set: local ollama. WD_PROVIDER forces one,
-WD_MODEL overrides the model.")]
+at console.groq.com). none set: local ollama. WH_PROVIDER forces one,
+WH_MODEL overrides the model.")]
     Explain {
         /// range like main..dev or HEAD~3.. (default HEAD~1..; with
         /// --describe, the default branch...HEAD); a bare ref means

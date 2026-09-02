@@ -1,4 +1,4 @@
-use crate::{git, output, WdError};
+use crate::{git, output, WhError};
 use std::env;
 use std::path::{Path, PathBuf};
 
@@ -9,7 +9,7 @@ pub struct Row {
     pub path: PathBuf,
 }
 
-pub fn run() -> Result<(), WdError> {
+pub fn run() -> Result<(), WhError> {
     let cwd = env::current_dir()?;
     let rows = collect_rows(&cwd)?;
     for line in render(&rows, output::color()) {
@@ -19,8 +19,8 @@ pub fn run() -> Result<(), WdError> {
 }
 
 /// Worktree rows with status columns, main first then alphabetical.
-/// Shared by `wd ls` and the `wd switch` picker.
-pub fn collect_rows(cwd: &Path) -> Result<Vec<Row>, WdError> {
+/// Shared by `wh ls` and the `wh switch` picker.
+pub fn collect_rows(cwd: &Path) -> Result<Vec<Row>, WhError> {
     let wts = git::worktrees(cwd)?;
     let mut list: Vec<&git::Worktree> = wts.iter().filter(|w| !w.is_bare).collect();
     list.sort_by_key(|w| (!w.is_main, name_of(w)));

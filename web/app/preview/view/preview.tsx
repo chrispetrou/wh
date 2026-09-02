@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { chatStore } from "@/lib/chat-store";
 import { FileBlock } from "@/components/file-block";
 
-const KEY = "preview/wd";
+const KEY = "preview/wh";
 const PATH = "web/lib/graph.ts";
 const REF = "main";
 
@@ -74,7 +74,7 @@ export function PreviewView({
   return (
     <div className="app-main p-4">
       <div className="text-muted-foreground">
-        chrispetrou/wd ${" "}
+        chrispetrou/wh ${" "}
         <span className="font-semibold text-foreground">
           view {PATH}
           {mark ? `:${mark}` : ""}
@@ -85,7 +85,7 @@ export function PreviewView({
         line={0}
         storeKey={KEY}
         owner="chrispetrou"
-        repo="wd"
+        repo="wh"
         prefill={() => {}}
       />
     </div>

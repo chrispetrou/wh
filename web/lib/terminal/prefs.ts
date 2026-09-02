@@ -53,22 +53,22 @@ const root = (): RootLike => document.documentElement;
 export function applyFont(font: string, r: RootLike = root(), p: Prefs = prefs) {
   if (font === "default") r.removeAttribute("data-font");
   else r.setAttribute("data-font", font);
-  p.set("wd_font", font === "default" ? "" : font);
+  p.set("wh_font", font === "default" ? "" : font);
 }
 
 export function applyFontSize(size: string, r: RootLike = root(), p: Prefs = prefs) {
-  if (size === "default") r.style.removeProperty("--wd-font-size");
-  else r.style.setProperty("--wd-font-size", `${size}px`);
-  p.set("wd_fontsize", size === "default" ? "" : size);
+  if (size === "default") r.style.removeProperty("--wh-font-size");
+  else r.style.setProperty("--wh-font-size", `${size}px`);
+  p.set("wh_fontsize", size === "default" ? "" : size);
 }
 
 export function applyLigatures(on: boolean, r: RootLike = root(), p: Prefs = prefs) {
   if (on) r.removeAttribute("data-lig");
   else r.setAttribute("data-lig", "off");
-  p.set("wd_lig", on ? "" : "off");
+  p.set("wh_lig", on ? "" : "off");
 }
 
-export const RECENT_STORE = "wd_recent";
+export const RECENT_STORE = "wh_recent";
 
 // remember a repo for the picker's recent-first ordering: newest first,
 // no duplicates, five at most

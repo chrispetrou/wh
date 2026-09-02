@@ -14,7 +14,7 @@ const ERRORS: Record<string, string> = {
 
 function SetupBlock({ origin }: { origin: string }) {
   const params = new URLSearchParams({
-    "oauth_application[name]": "wd (dev)",
+    "oauth_application[name]": "wh (dev)",
     "oauth_application[url]": origin,
     "oauth_application[callback_url]": `${origin}/api/auth/callback`,
   });
@@ -22,7 +22,7 @@ function SetupBlock({ origin }: { origin: string }) {
   return (
     <div className="mt-8 max-w-[560px]">
       <p className="text-muted-foreground">
-        one-time setup: wd needs a github oauth app to sign people in.
+        one-time setup: wh needs a github oauth app to sign people in.
       </p>
       <p className="mt-4">
         1.{" "}
@@ -32,7 +32,7 @@ function SetupBlock({ origin }: { origin: string }) {
           rel="noreferrer"
           className="border-b border-border pb-0.5 font-semibold hover:border-foreground"
         >
-          create the oauth app <span className="text-wd-green">→</span>
+          create the oauth app <span className="text-wh-green">→</span>
         </a>{" "}
         <span className="text-muted-foreground">
           (the form comes prefilled, just register it)
@@ -68,7 +68,7 @@ function SetupBlock({ origin }: { origin: string }) {
           type="submit"
           className="mt-2 w-fit cursor-pointer border-b border-border pb-0.5 font-semibold hover:border-foreground"
         >
-          save and sign in <span className="text-wd-green">→</span>
+          save and sign in <span className="text-wh-green">→</span>
         </button>
       </form>
       <p className="mt-4 text-muted-foreground">
@@ -116,7 +116,7 @@ export default async function Home({
               href="/api/auth/login"
               className="border-b border-border pb-0.5 font-semibold hover:border-foreground"
             >
-              sign in with github <span className="text-wd-green">→</span>
+              sign in with github <span className="text-wh-green">→</span>
             </a>
           </p>
         )}

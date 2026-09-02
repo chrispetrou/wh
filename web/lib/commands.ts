@@ -267,11 +267,11 @@ function clampN(s: string): number {
 export function parseCommand(raw: string): Command | null {
   let input = raw.trim().replace(/\s+/g, " ");
   if (!input) return null;
-  // the worktree commands belong to the cli; parsing "wd ls" here would
+  // the worktree commands belong to the cli; parsing "wh ls" here would
   // shadow the hint that says so
-  if (/^wd\s+(?:new|switch|rm|ls)\b/i.test(input)) return null;
-  // cli muscle memory ("wd explain HEAD~3..") and trailing question marks
-  input = input.replace(/^wd\s+/i, "").replace(/\s*\?+$/, "");
+  if (/^wh\s+(?:new|switch|rm|ls)\b/i.test(input)) return null;
+  // cli muscle memory ("wh explain HEAD~3..") and trailing question marks
+  input = input.replace(/^wh\s+/i, "").replace(/\s*\?+$/, "");
   if (/^explain$/i.test(input)) return { kind: "last", n: 1 }; // cli default
   if (/^(?:list\s+)?branches$/i.test(input)) return { kind: "branches" };
   if (/^(?:list\s+)?tags$/i.test(input)) return { kind: "tags" };
@@ -501,6 +501,6 @@ export const commandHint = [
   "  branches, tags, prs [open | closed | mine], stale [8w]",
   "  churn [since <period | ref>] [on <branch>] [in <path>] (the files changing most)",
   "  activity [since <period>] (commit spark, authors, languages)",
-  "  cli-style works too: wd explain HEAD~3..",
+  "  cli-style works too: wh explain HEAD~3..",
   "  /help for everything else: keys and mouse too",
 ].join("\n");
