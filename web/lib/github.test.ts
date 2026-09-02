@@ -23,6 +23,13 @@ import {
   whoBlock,
   whyInput,
 } from "./github";
+import type { Block } from "./block";
+
+// narrow a block to one kind so the union's other shapes stay out of the way
+function kindOf<K extends Block["kind"]>(block: Block, kind: K) {
+  if (block.kind !== kind) throw new Error(`expected a ${kind} block, got ${block.kind}`);
+  return block as Extract<Block, { kind: K }>;
+}
 
 // a tiny github: main = M(A, F) > A > C, feat = F > C, tag v1 on C
 const SHA = (c: string) => c.repeat(40);
@@ -135,8 +142,8 @@ describe("logBlock", () => {
       return new Response("{}", { status: 404 });
     });
     const log = await logBlock("t", "o", "r", 10, "feat");
-    expect(log.block.footer).toEqual(["2 commits on feat"]);
-    expect(log.block.rows).toHaveLength(2);
+    expect(kindOf(log.block, "log").footer).toEqual(["2 commits on feat"]);
+    expect(kindOf(log.block, "log").rows).toHaveLength(2);
     await expect(logBlock("t", "o", "r", 10, "nope")).rejects.toThrow("branch nope not found");
   });
 
@@ -211,7 +218,9 @@ describe("logBlock", () => {
     expect(q.get("until")).toBe("2026-08-27T00:00:00.000Z");
     expect(q.get("per_page")).toBe("3"); // the budget plus one
     expect(shas(log)).toEqual(["m", "a"]);
-    expect(log.block.footer).toEqual(["the latest 2 commits on main by chris, yesterday"]);
+    expect(kindOf(log.block, "log").footer).toEqual([
+      "the latest 2 commits on main by chris, yesterday",
+    ]);
   });
 
   it("takes a ref as the start of the window and leaves the ref itself out", async () => {
@@ -228,7 +237,7 @@ describe("logBlock", () => {
       expect(q.get("author")).toBeNull();
     }
     expect(shas(log)).toEqual(["a", "f"]);
-    expect(log.block.footer).toEqual(["2 commits, since v1 · 2 branches"]);
+    expect(kindOf(log.block, "log").footer).toEqual(["2 commits, since v1 · 2 branches"]);
     await expect(
       logBlock("t", "o", "r", 40, undefined, { since: "nope", login: "chris", now: NOW, tz: 0 })
     ).rejects.toThrow("unknown ref nope");
@@ -243,8 +252,10 @@ describe("logBlock", () => {
       now: NOW,
       tz: 0,
     });
-    expect(log.block.rows).toEqual([]);
-    expect(log.block.footer).toEqual(["no commits this week by alice on feat (by takes a github login)"]);
+    expect(kindOf(log.block, "log").rows).toEqual([]);
+    expect(kindOf(log.block, "log").footer).toEqual([
+      "no commits this week by alice on feat (by takes a github login)",
+    ]);
     expect(log.spans).toBe(false);
     const bare = await logBlock("t", "o", "r", 40, undefined, {
       since: "today",
@@ -252,7 +263,7 @@ describe("logBlock", () => {
       now: NOW,
       tz: 0,
     });
-    expect(bare.block.footer).toEqual(["no commits today"]);
+    expect(kindOf(bare.block, "log").footer).toEqual(["no commits today"]);
   });
 });
 
@@ -442,11 +453,12 @@ describe("prs", () => {
       ])
     );
     const { block } = await prsBlock("t", "o", "r", "mine", "me");
-    expect(block.rows.map((r) => [(r as { num: number }).num, (r as { flags: string[] }).flags])).toEqual([
+    const prs = kindOf(block, "prs");
+    expect(prs.rows.map((r) => [r.num, r.flags])).toEqual([
       [3, ["merged"]],
       [1, ["closed"]],
     ]);
-    expect(block.footer).toEqual(["2 prs by me"]);
+    expect(prs.footer).toEqual(["2 prs by me"]);
   });
 
   it("puts the mergeable state in the pr explain note", async () => {
@@ -512,8 +524,8 @@ describe("historyBlock", () => {
     stub({});
     (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async () => Response.json([]));
     const h = await historyBlock("t", "o", "r", "nope.txt");
-    expect(h.block.rows).toEqual([]);
-    expect(h.block.footer).toEqual(["no commits touch nope.txt"]);
+    expect(kindOf(h.block, "log").rows).toEqual([]);
+    expect(kindOf(h.block, "log").footer).toEqual(["no commits touch nope.txt"]);
     expect(h.rows).toEqual([]);
   });
 });
