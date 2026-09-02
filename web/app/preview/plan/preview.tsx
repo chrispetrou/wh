@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
+import { useHydrated } from "@/lib/hydrated";
 import type { PlanRow } from "@/lib/block";
 import { chatStore } from "@/lib/chat-store";
 import { setAction, setText, type PlanBlock as Plan } from "@/lib/plan";
@@ -51,8 +52,7 @@ function build(): Plan {
 export function PreviewPlan({ dark, open }: { dark: boolean; open: boolean }) {
   const block = build();
   // the ages are relative to now, so the block is drawn on the client only
-  const [ready, setReady] = useState(false);
-  useEffect(() => setReady(true), []);
+  const ready = useHydrated();
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
     document.documentElement.classList.toggle("light", !dark);

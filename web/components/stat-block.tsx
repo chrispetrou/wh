@@ -49,13 +49,19 @@ export function StatBlock({ block, fresh }: { block: Stat; fresh: boolean }) {
   const cols = `${col(widest(block.rows.map((r) => r.label)))} ${BAR_W}px ${col(
     widest(block.rows.map((r) => r.value))
   )} minmax(0, 1fr)`;
+  // the group header renders once per run; settled before the JSX so no
+  // render-scope variable is written from inside it
+  const heads: Array<string | null> = [];
   let group: string | undefined;
+  for (const r of block.rows) {
+    heads.push(r.group && r.group !== group ? r.group : null);
+    group = r.group ?? group;
+  }
   return (
     <div className={`log-block ${fresh ? "block-in" : ""}`}>
       {block.spark ? <Spark values={block.spark.values} label={block.spark.label} /> : null}
       {block.rows.map((r, i) => {
-        const head = r.group && r.group !== group ? r.group : null;
-        group = r.group ?? group;
+        const head = heads[i];
         return (
           <div key={i}>
             {head ? <div className={`text-wd-amber ${i ? "mt-2" : ""}`}>{head}</div> : null}

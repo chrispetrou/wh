@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 export type Theme = "auto" | "light" | "dark";
 const ORDER: Theme[] = ["auto", "light", "dark"];
@@ -40,21 +40,17 @@ export function currentTheme(): Theme {
   return "auto";
 }
 
+// applyTheme writes storage before dispatching, so currentTheme is the
+// snapshot and the event is only the change signal
+const subscribeTheme = (cb: () => void) => {
+  window.addEventListener("wd-theme", cb);
+  return () => window.removeEventListener("wd-theme", cb);
+};
+
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("auto");
+  const theme = useSyncExternalStore(subscribeTheme, currentTheme, () => "auto" as Theme);
 
-  useEffect(() => {
-    setTheme(currentTheme());
-    const onTheme = (e: Event) => setTheme((e as CustomEvent<Theme>).detail);
-    window.addEventListener("wd-theme", onTheme);
-    return () => window.removeEventListener("wd-theme", onTheme);
-  }, []);
-
-  const cycle = () => {
-    const next = ORDER[(ORDER.indexOf(theme) + 1) % ORDER.length];
-    setTheme(next);
-    switchTheme(next);
-  };
+  const cycle = () => switchTheme(ORDER[(ORDER.indexOf(theme) + 1) % ORDER.length]);
 
   return (
     <button

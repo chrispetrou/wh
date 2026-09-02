@@ -1,10 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import type { RepoItem } from "@/lib/github";
 import { relTime } from "@/lib/utils";
 import { RECENT_STORE } from "@/lib/terminal/prefs";
+
+// the recent list is read once per page view; the server renders the
+// api order and the client pass re-sorts, so nothing sets state on mount
+const noResort = () => () => {};
+const readRecent = () => {
+  try {
+    return localStorage.getItem(RECENT_STORE) ?? "[]";
+  } catch {
+    return "[]";
+  }
+};
 
 export function RepoPicker({ repos }: { repos: RepoItem[] }) {
   const router = useRouter();
@@ -12,25 +23,23 @@ export function RepoPicker({ repos }: { repos: RepoItem[] }) {
   const [sel, setSel] = useState(0);
 
   const rowsRef = useRef<HTMLDivElement>(null);
-  const [ordered, setOrdered] = useState(repos);
 
   // recently opened repos float to the top (stable for the rest)
-  useEffect(() => {
+  const recentRaw = useSyncExternalStore(noResort, readRecent, () => "[]");
+  const ordered = useMemo(() => {
     try {
-      const recent: string[] = JSON.parse(localStorage.getItem(RECENT_STORE) ?? "[]");
-      if (!recent.length) return;
+      const recent: string[] = JSON.parse(recentRaw);
+      if (!recent.length) return repos;
       const rank = new Map(recent.map((name, i) => [name, i]));
-      setOrdered(
-        [...repos].sort(
-          (a, b) =>
-            (rank.get(a.fullName) ?? Number.MAX_SAFE_INTEGER) -
-            (rank.get(b.fullName) ?? Number.MAX_SAFE_INTEGER)
-        )
+      return [...repos].sort(
+        (a, b) =>
+          (rank.get(a.fullName) ?? Number.MAX_SAFE_INTEGER) -
+          (rank.get(b.fullName) ?? Number.MAX_SAFE_INTEGER)
       );
     } catch {
-      // ignore
+      return repos;
     }
-  }, [repos]);
+  }, [recentRaw, repos]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();

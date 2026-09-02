@@ -1,4 +1,7 @@
+/// <reference types="react/experimental" />
+
 import { getIronSession, type IronSession, type SessionOptions } from "iron-session";
+import { experimental_taintUniqueValue as taintUniqueValue } from "react";
 import { cookies } from "next/headers";
 
 export interface WdSession {
@@ -26,7 +29,13 @@ export const sessionOptions = (): SessionOptions => ({
 });
 
 export async function getSession(): Promise<IronSession<WdSession>> {
-  return getIronSession<WdSession>(await cookies(), sessionOptions());
+  const session = await getIronSession<WdSession>(await cookies(), sessionOptions());
+  // the github token stays on the server: react throws if it is ever
+  // passed to a client component or serialized into the rsc payload
+  if (session.token) {
+    taintUniqueValue("the github token must not leave the server", session, session.token);
+  }
+  return session;
 }
 
 // sliding expiry: every api call re-issues the cookie, so a session ends

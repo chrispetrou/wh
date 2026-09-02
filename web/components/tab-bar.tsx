@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { chatStore } from "@/lib/chat-store";
@@ -34,6 +34,24 @@ function writeTabs(tabs: string[]) {
   }
 }
 
+// the open tabs as a tiny store over sessionStorage, so the strip reads
+// them in render instead of copying them into state on mount
+const NO_TABS: string[] = [];
+let tabsCache: string[] | null = null;
+const tabSubs = new Set<() => void>();
+const tabsSnapshot = (): string[] => (tabsCache ??= readTabs());
+const subscribeTabs = (cb: () => void) => {
+  tabSubs.add(cb);
+  return () => {
+    tabSubs.delete(cb);
+  };
+};
+function setTabs(next: string[]) {
+  tabsCache = next;
+  writeTabs(next);
+  tabSubs.forEach((f) => f());
+}
+
 function activeRepo(pathname: string): string | null {
   const m = /^\/repos\/([^/]+)\/([^/]+)$/.exec(pathname);
   return m ? `${decodeURIComponent(m[1])}/${decodeURIComponent(m[2])}` : null;
@@ -42,17 +60,13 @@ function activeRepo(pathname: string): string | null {
 export function TabBar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [tabs, setTabs] = useState<string[]>([]);
+  const tabs = useSyncExternalStore(subscribeTabs, tabsSnapshot, () => NO_TABS);
   const active = activeRepo(pathname);
 
-  // load, and register the repo being viewed as a tab
+  // register the repo being viewed as a tab
   useEffect(() => {
-    let next = readTabs();
-    if (active && !next.includes(active)) {
-      next = [...next, active];
-      writeTabs(next);
-    }
-    setTabs(next);
+    const open = tabsSnapshot();
+    if (active && !open.includes(active)) setTabs([...open, active]);
   }, [active]);
 
   // ctrl+t opens the picker for a new tab; ctrl+1..9 switch tabs
@@ -77,7 +91,6 @@ export function TabBar() {
 
   const close = (t: string) => {
     const next = tabs.filter((x) => x !== t);
-    writeTabs(next);
     setTabs(next);
     if (t === active) {
       router.push(next.length ? `/repos/${next[next.length - 1]}` : "/repos");

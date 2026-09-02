@@ -54,7 +54,9 @@ const CRAWL = 6;
 export function DragLayer({ onDrop }: { onDrop: (d: Drop) => void }) {
   const [, tick] = useState(0);
   const dropRef = useRef(onDrop);
-  dropRef.current = onDrop;
+  useEffect(() => {
+    dropRef.current = onDrop;
+  });
 
   useEffect(() => {
     const f = () => tick((n) => n + 1);
