@@ -9,7 +9,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import type { PlanAction, PlanRow } from "@/lib/block";
 import { chatStore, type ChatLine } from "@/lib/chat-store";
-import { commandHint, parseCommand } from "@/lib/commands";
+import { commandHint, needsModel, parseCommand } from "@/lib/commands";
 import { move, setAction } from "@/lib/plan";
 import { signInAgain, takeResume } from "@/lib/signin";
 import { keyStore } from "@/lib/key-store";
@@ -31,6 +31,9 @@ import { CompletionMenu } from "./terminal-menu";
 import { runSlash } from "./terminal-slash";
 import { useCompletion } from "./use-completion";
 import { useStream } from "./use-stream";
+
+const KEY_NEEDED =
+  "that needs an api key: paste one, anthropic (sk-ant-), groq (gsk_, free tier), or openai";
 
 export function TerminalChat({
   owner,
@@ -136,15 +139,17 @@ export function TerminalChat({
     }
 
     if (!hasKey) {
-      // gated: what was typed is the key; never store or echo it. a
-      // command typed here instead is told what the gate wants
-      if (/\s/.test(raw) || raw.length < 20) {
-        muted(["paste an api key to start: anthropic (sk-ant-), groq (gsk_), or openai"]);
+      // a pasted key: a known prefix, or one long unspaced token that is
+      // not a command; never stored in history, never echoed. everything
+      // else falls through and runs, lookups need no key
+      const keyish =
+        /^(sk-ant-|gsk_|sk-)/.test(raw) ||
+        (!/\s/.test(raw) && raw.length >= 20 && !parseCommand(raw));
+      if (keyish) {
+        saveKey(raw, "***");
+        muted([commandHint]);
         return;
       }
-      saveKey(raw, "***");
-      muted([commandHint]);
-      return;
     }
 
     setHistory((h) => [raw, ...h]);
@@ -158,6 +163,10 @@ export function TerminalChat({
       }
       // plain words after an explain are a follow-up question
       if (chatStore.context(storeKey)) {
+        if (!hasKey) {
+          muted([KEY_NEEDED]);
+          return;
+        }
         void runFollowup(raw);
         return;
       }
@@ -181,6 +190,11 @@ export function TerminalChat({
         "base..head is a placeholder: use real refs, e.g. diff main..feat/x",
         "(run branches to see what exists)",
       ]);
+      return;
+    }
+    // the model paths are the only ones a key gates; lookups already ran
+    if (!hasKey && needsModel(cmd)) {
+      muted([KEY_NEEDED]);
       return;
     }
     // rows of the last log become shas here; the server never sees numbers
@@ -281,11 +295,10 @@ export function TerminalChat({
     if (!present) {
       muted([
         "paste an api key to enable explanations: anthropic, openai, or groq (free tier at console.groq.com).",
-        "it is stored only in this browser and sent per request.",
+        "it is stored only in this browser and sent per request. everything else works without one.",
       ]);
-    } else {
-      muted([commandHint]);
     }
+    muted([commandHint]);
   };
 
   // boot runs once, a tick after mount: the timeout keeps setState out

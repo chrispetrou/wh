@@ -7,7 +7,7 @@
 import { useRef } from "react";
 import type { Block, PlanRow } from "@/lib/block";
 import { chatStore, type LogRow, type PrPick } from "@/lib/chat-store";
-import { parseCommand } from "@/lib/commands";
+import { needsModel, parseCommand } from "@/lib/commands";
 import { parseMeta, type ExplainMeta } from "@/lib/explain/meta";
 import { lowLine, usageParts } from "@/lib/explain/usage";
 import { keyStore } from "@/lib/key-store";
@@ -162,25 +162,11 @@ export function useStream({
   };
 
   const run = async (command: string, raw = false) => {
-    const kind = parseCommand(command)?.kind;
-    const lookup = [
-      "branches",
-      "log",
-      "tags",
-      "prs",
-      "stale",
-      "churn",
-      "activity",
-      "history",
-      "who",
-      "view",
-      "ls",
-      "plan",
-      "pick",
-    ].includes(kind ?? "");
+    const cmd = parseCommand(command);
+    const lookup = cmd ? !needsModel(cmd) : false;
     // a message drafted for a plan row is a side quest: it neither starts
     // nor ends a conversation
-    const draft = kind === "message";
+    const draft = cmd?.kind === "message";
     // a new diff command starts a new context; lookups leave it alone
     if (!raw && !lookup && !draft) chatStore.clearContext(storeKey);
     let context = "";

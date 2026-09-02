@@ -383,8 +383,10 @@ clone, and you push.
 
 ### keys, models, effort
 
-The first time a repo opens with no key stored, the terminal asks for one:
-paste it as the first message. Keys live in your browser only, one per
+Everything that only reads the repo (log, branches, prs, history, who,
+view, the rebase and cherry-pick plans) runs with no key stored. The
+first explain without one asks for a key: paste it as a message. Keys
+live in your browser only, one per
 provider (the prefix decides which), travel per request in a header, and
 are never stored, logged, or echoed back by the server.
 
