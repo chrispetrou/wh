@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCommand } from "./commands";
+import { needsModel, parseCommand } from "./commands";
 
 describe("parseCommand", () => {
   it("parses last-n shapes", () => {
@@ -540,5 +540,51 @@ describe("parseCommand", () => {
     expect(parseCommand("last commits")).toBeNull();
     expect(parseCommand("wh ls")).toBeNull();
     expect(parseCommand("..main")).toBeNull();
+  });
+});
+
+describe("needsModel", () => {
+  const of = (input: string) => {
+    const cmd = parseCommand(input);
+    if (!cmd) throw new Error(`did not parse: ${input}`);
+    return needsModel(cmd);
+  };
+
+  it("lookups run without a key", () => {
+    for (const input of [
+      "branches",
+      "tags",
+      "prs",
+      "log 20",
+      "stale",
+      "churn since v1.2",
+      "activity",
+      "history src/git.rs",
+      "who src/git.rs",
+      "view src/git.rs:42",
+      "ls src",
+      "rebase feat/auth",
+      "pick a1b2c3d onto release/1.x",
+    ]) {
+      expect(of(input), input).toBe(false);
+    }
+  });
+
+  it("explains, why, since, and drafts need one", () => {
+    for (const input of [
+      "explain the last 5 commits",
+      "what changed in pr #42",
+      "diff main..dev",
+      "explain a1b2c3d",
+      "explain 3",
+      "since yesterday",
+      "standup",
+      "changelog v1.1..v1.2",
+      "describe pr #42",
+      "why src/git.rs:42",
+      "message a1b2c3d",
+    ]) {
+      expect(of(input), input).toBe(true);
+    }
   });
 });

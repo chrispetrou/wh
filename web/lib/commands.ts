@@ -484,6 +484,26 @@ export function parseCommand(raw: string): Command | null {
   return null;
 }
 
+// the kinds served straight from github, no model call: they run with no
+// key stored. anything else (explains, why, since, message drafts) needs one
+const LOOKUP_KINDS = new Set<Command["kind"]>([
+  "branches",
+  "log",
+  "tags",
+  "prs",
+  "stale",
+  "churn",
+  "activity",
+  "history",
+  "who",
+  "view",
+  "ls",
+  "plan",
+  "pick",
+]);
+
+export const needsModel = (cmd: Command): boolean => !LOOKUP_KINDS.has(cmd.kind);
+
 export const commandHint = [
   "commands:",
   "  explain the last N commits [on <branch>]",
