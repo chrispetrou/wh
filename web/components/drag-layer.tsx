@@ -48,6 +48,16 @@ function end() {
   emit();
 }
 
+// ends the drag and hands back the session it ended. lives at module
+// scope on purpose: inside the component the react compiler folds a
+// local alias of `current` back into the global, which is null once
+// end() has run
+function release(): Session | null {
+  const s = current;
+  if (s) end();
+  return s;
+}
+
 const EDGE = 40;
 const CRAWL = 6;
 
@@ -84,10 +94,9 @@ export function DragLayer({ onDrop }: { onDrop: (d: Drop) => void }) {
       emit();
     };
     const up = () => {
-      if (!current) return;
-      const s = current;
+      const s = release();
+      if (!s) return;
       const el = s.over ? under(s.x, s.y) : null;
-      end();
       if (!s.over || !el) return;
       const target = el.closest<HTMLElement>("[data-drop]");
       const rowEl = el.closest<HTMLElement>("[data-row]");
