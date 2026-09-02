@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { loginAllowed } from "@/lib/allowlist";
 import { appOrigin, githubApi, githubWeb } from "@/lib/origin";
 import { getSession } from "@/lib/session";
 
@@ -48,6 +49,11 @@ export async function GET(req: NextRequest) {
   });
   if (!userRes.ok) return fail();
   const user = (await userRes.json()) as { login?: string };
+
+  // the token is dropped, never stored; it lapses on its own
+  if (!loginAllowed(user.login)) {
+    return NextResponse.redirect(new URL("/?error=denied", url));
+  }
 
   const session = await getSession();
   session.token = token.access_token;

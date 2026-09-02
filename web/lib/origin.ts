@@ -18,6 +18,16 @@ export function sameOrigin(origin: string | null, fallback = ""): boolean {
   return !origin || !app || origin === app;
 }
 
+// APP_URL's scheme decides the cookie secure flag: an https deploy
+// behind a tls-terminating proxy gets secure cookies even though the
+// node process speaks http, and an http lan deploy is not locked out.
+// with no APP_URL (dev), fall back to NODE_ENV
+export function secureCookies(): boolean {
+  const app = appOrigin();
+  if (app) return app.startsWith("https:");
+  return process.env.NODE_ENV === "production";
+}
+
 export function githubApi(): string {
   return (process.env.GITHUB_API_URL ?? "https://api.github.com").replace(/\/+$/, "");
 }

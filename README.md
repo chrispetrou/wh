@@ -302,7 +302,8 @@ Open http://localhost:3000. The first run shows a one-time setup screen that
 links to a prefilled GitHub OAuth-app form and saves the client id and
 secret to `web/.env.local` for you. Sign-in asks for the `repo` scope so
 private repos appear in the picker (GitHub has no read-only scope for
-private repos; wd only ever reads). Deployed instances, sessions, and the
+private repos; wd only ever reads). Hosting it somewhere (env-only
+config, an optional sign-in allowlist, a dockerfile), sessions, and the
 api limits are in [web/README.md](web/README.md).
 
 ### commands
