@@ -40,7 +40,7 @@ export const HELP: HelpRow[] = [
   ["/usage", "tokens on each key since it was saved (/usage reset)"],
   ["/model <name>", "pick the model; another provider's switches to it"],
   ["/effort <level>", "reasoning effort (model support varies)"],
-  ["/theme <t>", "auto, light, or dark"],
+  ["/theme <t>", "auto, light, dark, vintage, or amber"],
   ["/account", "who is signed in"],
   ["/info", "repo, provider, theme, font"],
   ["/font <f>", "default, fira, jetbrains, or plex"],

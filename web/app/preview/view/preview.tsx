@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { chatStore } from "@/lib/chat-store";
 import { FileBlock } from "@/components/file-block";
+import type { Theme } from "@/lib/terminal/prefs";
+import { applyPreviewTheme } from "../theme";
 
 const KEY = "preview/wh";
 const PATH = "web/lib/graph.ts";
@@ -40,11 +42,11 @@ export function ascii(rows: string[]): string {
 `;
 
 export function PreviewView({
-  dark,
+  theme,
   loading,
   mark,
 }: {
-  dark: boolean;
+  theme: Theme;
   loading: boolean;
   mark?: number;
 }) {
@@ -68,9 +70,8 @@ export function PreviewView({
     return true;
   });
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", dark);
-    document.documentElement.classList.toggle("light", !dark);
-  }, [dark]);
+    applyPreviewTheme(theme);
+  }, [theme]);
   return (
     <div className="app-main p-4">
       <div className="text-muted-foreground">

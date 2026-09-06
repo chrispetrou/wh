@@ -6,6 +6,8 @@ import type { PlanRow } from "@/lib/block";
 import { chatStore } from "@/lib/chat-store";
 import { setAction, setText, type PlanBlock as Plan } from "@/lib/plan";
 import { PlanBlock } from "@/components/plan-block";
+import type { Theme } from "@/lib/terminal/prefs";
+import { applyPreviewTheme } from "../theme";
 
 const KEY = "preview/wh";
 const NOW = Date.now();
@@ -49,20 +51,19 @@ function build(): Plan {
   };
 }
 
-export function PreviewPlan({ dark, open }: { dark: boolean; open: boolean }) {
+export function PreviewPlan({ theme, open }: { theme: Theme; open: boolean }) {
   const block = build();
   // the ages are relative to now, so the block is drawn on the client only
   const ready = useHydrated();
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", dark);
-    document.documentElement.classList.toggle("light", !dark);
+    applyPreviewTheme(theme);
     chatStore.setAll(KEY, [{ text: "", cls: "", block }]);
     if (open) {
       chatStore.setExpanded(KEY, 0, [block.rows[1].sha]);
       chatStore.setLive(KEY, { line: 0, selected: 1 });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dark, open]);
+  }, [theme, open]);
   const lines = useSyncExternalStore(
     (cb) => chatStore.subscribe(KEY, cb),
     () => chatStore.lines(KEY),

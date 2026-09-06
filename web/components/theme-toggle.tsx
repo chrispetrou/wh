@@ -1,13 +1,20 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { isTheme, THEMES, type Theme } from "@/lib/terminal/prefs";
 
-export type Theme = "auto" | "light" | "dark";
+export type { Theme };
+
+// the header cycles the three everyday states only. vintage and amber are
+// opt-in through /theme, so they never sit between a click and auto
 const ORDER: Theme[] = ["auto", "light", "dark"];
+
+// every theme class the root may be wearing, so a switch clears the others
+const CLASSES = THEMES.filter((t) => t !== "auto");
 
 export function applyTheme(theme: Theme) {
   const root = document.documentElement;
-  root.classList.remove("light", "dark");
+  root.classList.remove(...CLASSES);
   if (theme !== "auto") root.classList.add(theme);
   try {
     if (theme === "auto") localStorage.removeItem("wh_theme");
@@ -32,8 +39,9 @@ export function switchTheme(next: Theme) {
 
 export function currentTheme(): Theme {
   try {
-    const stored = localStorage.getItem("wh_theme");
-    if (stored === "light" || stored === "dark") return stored;
+    // auto is the absent key, never a stored value
+    const stored = localStorage.getItem("wh_theme") ?? "";
+    if (stored !== "auto" && isTheme(stored)) return stored;
   } catch {
     // ignore
   }
@@ -50,6 +58,8 @@ const subscribeTheme = (cb: () => void) => {
 export function ThemeToggle() {
   const theme = useSyncExternalStore(subscribeTheme, currentTheme, () => "auto" as Theme);
 
+  // indexOf is -1 on vintage and amber, so the next step is auto: a click
+  // from a phosphor theme drops back into the everyday cycle. intentional
   const cycle = () => switchTheme(ORDER[(ORDER.indexOf(theme) + 1) % ORDER.length]);
 
   return (

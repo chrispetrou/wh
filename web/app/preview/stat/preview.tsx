@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 import type { Block } from "@/lib/block";
 import { StatBlock } from "@/components/stat-block";
+import type { Theme } from "@/lib/terminal/prefs";
+import { applyPreviewTheme } from "../theme";
 
 type Stat = Extract<Block, { kind: "stat" }>;
 
@@ -39,11 +41,10 @@ const who: Stat = {
   ],
 };
 
-export function PreviewStat({ dark }: { dark: boolean }) {
+export function PreviewStat({ theme }: { theme: Theme }) {
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", dark);
-    document.documentElement.classList.toggle("light", !dark);
-  }, [dark]);
+    applyPreviewTheme(theme);
+  }, [theme]);
   return (
     <div className="app-main p-4">
       <div className="text-muted-foreground">
