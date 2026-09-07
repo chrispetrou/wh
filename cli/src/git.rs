@@ -186,6 +186,81 @@ pub fn status_of(wt: &Path) -> Result<WtStatus, WhError> {
     })
 }
 
+/// The commit a line was last changed in, and the source lines themselves.
+pub struct Blame {
+    pub sha: String,
+    pub lines: Vec<String>,
+    /// distinct further commits covering the span
+    pub others: usize,
+}
+
+/// One commit's human fields. git formats the date, so no civil-date
+/// arithmetic here.
+pub struct CommitMeta {
+    pub short: String,
+    pub author: String,
+    pub date: String,
+    pub subject: String,
+}
+
+/// `git blame -L <first>,<last> --porcelain -- <path>`.
+pub fn blame(dir: &Path, path: &str, first: u32, last: u32) -> Result<Blame, WhError> {
+    let range = format!("{first},{last}");
+    let out = run(dir, &["blame", "-L", &range, "--porcelain", "--", path])?;
+    Ok(parse_blame(&out))
+}
+
+/// Parses porcelain blame. A group opens on a line whose first token is a
+/// 40-hex sha; its header lines (author, summary, filename ...) are
+/// skipped, and the content line that follows starts with a tab.
+pub fn parse_blame(s: &str) -> Blame {
+    let mut sha = String::new();
+    let mut lines = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+    for line in s.lines() {
+        if let Some(rest) = line.strip_prefix('\t') {
+            lines.push(rest.to_string());
+            continue;
+        }
+        let tok = line.split(' ').next().unwrap_or("");
+        if tok.len() == 40 && tok.chars().all(|c| c.is_ascii_hexdigit()) {
+            if sha.is_empty() {
+                sha = tok.to_string();
+            }
+            if !seen.iter().any(|s| s == tok) {
+                seen.push(tok.to_string());
+            }
+        }
+    }
+    Blame {
+        sha,
+        lines,
+        others: seen.len().saturating_sub(1),
+    }
+}
+
+/// `git show -s` with a NUL-separated format, so a subject with spaces
+/// survives the split.
+pub fn commit_meta(dir: &Path, sha: &str) -> Result<CommitMeta, WhError> {
+    let out = run(
+        dir,
+        &[
+            "show",
+            "-s",
+            "--format=%h%x00%an%x00%ad%x00%s",
+            "--date=short",
+            sha,
+        ],
+    )?;
+    let mut it = out.splitn(4, '\0');
+    Ok(CommitMeta {
+        short: it.next().unwrap_or_default().to_string(),
+        author: it.next().unwrap_or_default().to_string(),
+        date: it.next().unwrap_or_default().to_string(),
+        subject: it.next().unwrap_or_default().to_string(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,6 +282,33 @@ mod tests {
         assert!(w[3].locked);
         assert_eq!(w[3].branch.as_deref(), Some("x"));
         assert!(w[4].prunable);
+    }
+
+    #[test]
+    fn parses_blame_porcelain() {
+        let one = "70cd65af1da710a1511088084dd6100ad20d696d 5 5 1\n\
+author Ada\n\
+summary a subject\n\
+filename a.txt\n\
+\tthe line\n";
+        let b = parse_blame(one);
+        assert_eq!(b.sha, "70cd65af1da710a1511088084dd6100ad20d696d");
+        assert_eq!(b.lines, vec!["the line".to_string()]);
+        assert_eq!(b.others, 0);
+    }
+
+    #[test]
+    fn blame_keeps_the_first_sha_and_counts_the_rest() {
+        let two = "1111111111111111111111111111111111111111 1 1 1\n\
+filename a.txt\n\
+\tone\n\
+2222222222222222222222222222222222222222 2 2 1\n\
+filename a.txt\n\
+\ttwo\n";
+        let b = parse_blame(two);
+        assert_eq!(b.sha, "1111111111111111111111111111111111111111");
+        assert_eq!(b.lines, vec!["one".to_string(), "two".to_string()]);
+        assert_eq!(b.others, 1);
     }
 
     #[test]

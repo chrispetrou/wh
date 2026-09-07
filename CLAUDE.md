@@ -5,8 +5,10 @@ plain-English diff explanations. Local-first, telemetry-free, BYO LLM key.
 
 ## repo map
 
-- `cli/`: Rust CLI, the `wh` binary. Worktree commands (`new`, `ls`, `rm`,
-  later `switch`) and `wh explain` (LLM diff summaries; later milestone).
+- `cli/`: Rust CLI, the `wh` binary. Worktree commands (`new`, `ls`,
+  `switch`, `rm`, `init`), `wh explain` (LLM diff summaries: a range,
+  `--uncommitted`, `--changelog`, `--describe`, `--chat`, a trailing
+  pathspec) and `wh why <path>:<line>`.
 - `web/`: Next.js + shadcn/ui app: GitHub OAuth, repo picker, a
   terminal-flavored chat that answers questions about a repo by fetching
   diffs/commits via the GitHub API and running them through the same explain

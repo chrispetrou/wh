@@ -64,6 +64,11 @@ fn main() {
             };
             commands::explain::run(range.as_deref(), *dry_run, mode, *uncommitted, *chat, paths)
         }
+        cli::Cmd::Why {
+            target,
+            dry_run,
+            chat,
+        } => commands::why::run(target, *dry_run, *chat),
         cli::Cmd::Rm {
             name,
             dry_run,

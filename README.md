@@ -77,6 +77,7 @@ wh rm                         # prune worktrees whose branches are merged
 | `wh switch [query]` | pick a worktree (or match one) and cd into it |
 | `wh rm [name] [--dry-run] [--yes] [--force]` | remove merged worktrees, or one by name |
 | `wh explain [range] [--uncommitted] [--changelog] [--describe] [--chat] [--dry-run] [-- <pathspec>]` | a plain-English review, release notes, or a pr draft for a diff |
+| `wh why <path>:<line> [--chat] [--dry-run]` | why a line exists: git blame, then the commit that last touched it |
 | `wh init <zsh\|bash\|fish>` | print the shell wrapper that makes `switch` a real `cd` |
 
 `--help` on any of them is short and lowercase. Colors only when the output
@@ -236,6 +237,20 @@ one-shot when either is a pipe. It cannot be combined with `--dry-run`.
 When stdout is not a terminal the two muted status lines go to stderr, so
 redirecting to a file holds only the answer. `--changelog` and `--describe`
 are mutually exclusive.
+
+### wh why
+
+```
+wh why src/git.rs:42        # why that line exists
+wh why src/git.rs:13-17     # a span
+wh why src/git.rs:42 --chat # then keep asking
+```
+
+`git blame` says who and when; this says why. The line is blamed locally,
+the commit that last touched it becomes the payload cut to that file, and
+the answer is a `why` section then `watch out`. The status line names the
+blaming commit, and a span says how many other commits touch it. A line
+you have not committed yet says so instead of guessing.
 
 ### wh init
 
@@ -457,7 +472,8 @@ the graph           git log --graph               log, then explain 3
 time and people     git log --since, --author     since yesterday by me, standup
 release notes       wh explain --changelog v1..   changelog v1.1..v1.2
 a pr description    wh explain --describe         describe pr #42, describe <branch>
-a file's story      git log -p -- <path>          history <path>, why <path>:<line>
+a file's story      git log -p -- <path>          history <path>
+why a line exists   wh why <path>:<line>          why <path>:<line>
 rebase, cherry-pick git rebase -i, git cherry-pick rebase <branch>, pick 3 5 onto <branch>
 branches            wh ls (worktrees, dirty)      branches (ahead/behind), tags
 follow-ups          wh explain --chat             plain words after an explain

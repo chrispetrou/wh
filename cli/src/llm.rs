@@ -157,6 +157,7 @@ pub enum Mode {
     Explain,
     Changelog,
     Describe,
+    Why,
     Followup,
 }
 
@@ -166,6 +167,7 @@ impl Mode {
             Mode::Explain => "[system]",
             Mode::Changelog => "[changelog]",
             Mode::Describe => "[describe]",
+            Mode::Why => "[why]",
             Mode::Followup => "[followup]",
         }
     }
@@ -997,6 +999,13 @@ mod tests {
         let (system, _) = prompt("PAYLOAD", Mode::Followup);
         assert!(system.contains("continuing a conversation"));
         assert!(!system.contains("quiet code reviewer"));
+    }
+
+    #[test]
+    fn the_why_section_frames_a_line() {
+        let (system, user) = prompt("PAYLOAD", Mode::Why);
+        assert!(system.contains("why a line of code exists"));
+        assert_eq!(user, "PAYLOAD");
     }
 
     #[test]

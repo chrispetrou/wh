@@ -65,6 +65,18 @@ WH_MODEL overrides the model.")]
         #[arg(last = true, value_name = "pathspec")]
         paths: Vec<String>,
     },
+    /// explain why a line of code exists (git blame, then the commit
+    /// that last touched it)
+    Why {
+        /// path:line, or path:first-last
+        target: String,
+        /// print the preprocessed payload instead of querying the model
+        #[arg(long)]
+        dry_run: bool,
+        /// keep asking follow-up questions after the answer
+        #[arg(long, conflicts_with = "dry_run")]
+        chat: bool,
+    },
     /// remove worktrees whose branches are merged
     Rm {
         /// branch or directory of a specific worktree to remove

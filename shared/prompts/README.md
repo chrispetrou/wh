@@ -29,11 +29,16 @@ implementations must produce the same payloads and the same output shape.
   into <base>` (either side left out when unknown) and, for an existing
   pull request, `pr #N: <title>` and `current description:` followed by
   the body, trimmed and cut at 2000 characters.
-  `[why]` is the system prompt behind `why <path>:<line>` on the web: the
-  payload is the blaming commit cut down to that file, followed by the
-  line itself; the contract is `why` then `watch out`. (cli parity is
-  deferred: `git blame` is local, so a cli `why` would be a small
-  follow-up.)
+  `[why]` is the system prompt behind `why <path>:<line>` on the web and
+  `wh why <path>:<line>` in the cli: the payload is the blaming commit cut
+  down to that file; the contract is `why` then `watch out`. Both
+  implementations append the line block to the user turn after the
+  payload, never inside it (the preprocess spec and the fixtures are
+  untouched): a blank line, then `the line in question, <path>:<line>:`
+  (`the lines in question` and `<first>-<last>` for a span), then the
+  lines themselves. The web adds ` on <ref>` before the colon because it
+  always resolves a ref; the cli blames the working tree, so it leaves
+  that out.
   `[message]` is the system prompt behind the `draft message` action of
   a rebase plan on the web (`rebase <branch>`): the payload is the commit
   whose message is drafted and, for a squash, the commits folding into
