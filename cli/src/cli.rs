@@ -55,6 +55,15 @@ WH_MODEL overrides the model.")]
         /// review
         #[arg(long, conflicts_with = "changelog")]
         describe: bool,
+        /// staged and unstaged work instead of a range (git diff HEAD)
+        #[arg(long, conflicts_with = "range")]
+        uncommitted: bool,
+        /// keep asking follow-up questions after the answer
+        #[arg(long, conflicts_with = "dry_run")]
+        chat: bool,
+        /// limit to these paths (a git pathspec, after --)
+        #[arg(last = true, value_name = "pathspec")]
+        paths: Vec<String>,
     },
     /// remove worktrees whose branches are merged
     Rm {

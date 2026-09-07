@@ -76,7 +76,7 @@ wh rm                         # prune worktrees whose branches are merged
 | `wh ls` | list worktrees with dirty count and ahead/behind |
 | `wh switch [query]` | pick a worktree (or match one) and cd into it |
 | `wh rm [name] [--dry-run] [--yes] [--force]` | remove merged worktrees, or one by name |
-| `wh explain [range] [--changelog] [--describe] [--dry-run]` | a plain-English review, release notes, or a pr draft for a diff |
+| `wh explain [range] [--uncommitted] [--changelog] [--describe] [--chat] [--dry-run] [-- <pathspec>]` | a plain-English review, release notes, or a pr draft for a diff |
 | `wh init <zsh\|bash\|fish>` | print the shell wrapper that makes `switch` a real `cd` |
 
 `--help` on any of them is short and lowercase. Colors only when the output
@@ -208,12 +208,30 @@ wh explain --changelog v1.2.. > notes.md
 wh explain --describe               # current branch vs the default branch, main...HEAD
 wh explain --describe > body.md
 wh explain --dry-run HEAD~3..       # the payload the model would see, no call
+wh explain --uncommitted            # work you have not committed yet
+wh explain HEAD~5.. -- src/         # cut any of them to a pathspec
 ```
+
+`--uncommitted` is `git diff HEAD`: staged and unstaged together, the
+change you are about to commit. It takes no range, and there is no
+`commits:` block in the payload because there are no commits yet.
+Untracked files are not in a diff until you `git add` them.
+
+Anything after `--` is a git pathspec, passed to the diff and to the
+commit list, so `wh explain HEAD~5.. -- src/` reviews only what happened
+under `src/`.
 
 `--describe` with no range compares against the default branch from their
 merge base, so a base that moved on never leaks into the draft, and tells
 the model the branch names (`branch feat/auth into main`); a bare ref there
 means `<ref>...HEAD`. Nothing is written to GitHub.
+
+`--chat` keeps the conversation open after the answer: a `?` prompt takes
+follow-up questions about the same diff, grounded in what the model has
+already seen, so a second question costs no second diff. An empty line or
+ctrl-d ends it; there is no history beyond what your terminal gives a
+line of input. It needs a terminal on both ends, and quietly stays a
+one-shot when either is a pipe. It cannot be combined with `--dry-run`.
 
 When stdout is not a terminal the two muted status lines go to stderr, so
 redirecting to a file holds only the answer. `--changelog` and `--describe`
@@ -442,7 +460,9 @@ a pr description    wh explain --describe         describe pr #42, describe <bra
 a file's story      git log -p -- <path>          history <path>, why <path>:<line>
 rebase, cherry-pick git rebase -i, git cherry-pick rebase <branch>, pick 3 5 onto <branch>
 branches            wh ls (worktrees, dirty)      branches (ahead/behind), tags
-follow-ups          (not yet)                     plain words after an explain
+follow-ups          wh explain --chat             plain words after an explain
+uncommitted work    wh explain --uncommitted      (cli only)
+cut to a path       wh explain <range> -- src/    any explain plus `in src/`
 raw payload         wh explain --dry-run          /show
 keys                env: ANTHROPIC_API_KEY, ...   pasted once, kept in browser
 providers           anthropic, openai, groq,      anthropic, openai, groq
@@ -455,8 +475,8 @@ Pick the terminal when the diff is local, uncommitted, or on a machine with
 no GitHub access, when you want a no-key model via Ollama, or when the job
 is worktrees. Pick the web when the repo lives on GitHub and you want to ask
 about a pr or a branch without cloning it, keep several repos open as tabs,
-or ask follow-up questions about the same diff. Keys never cross between the
-two.
+or want the log graph, the pr list, and the rebase plans to walk. Keys
+never cross between the two.
 
 ## layout
 

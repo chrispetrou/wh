@@ -12,7 +12,10 @@ implementations must produce the same payloads and the same output shape.
   The explain output contract is a `summary` section followed by a
   `watch out` section, as shown in the landing demo (`site/index.html`).
   `[followup]` is the system prompt for continuing the conversation about
-  the same diff (web today; a cli explain repl may use it later).
+  the same diff: plain words after an explain on the web, `wh explain
+  --chat` in the cli. The payload is already turn 0, so the follow-up
+  request carries the whole alternating conversation and this section as
+  its system prompt.
   `[changelog]` replaces `[system]` in changelog mode (`wh explain
   --changelog`, `changelog <range>` on the web): the output contract is up
   to four sections, `added`, `changed`, `fixed`, `removed`, empty ones

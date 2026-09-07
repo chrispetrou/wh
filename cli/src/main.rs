@@ -51,6 +51,9 @@ fn main() {
             dry_run,
             changelog,
             describe,
+            uncommitted,
+            chat,
+            paths,
         } => {
             let mode = if *describe {
                 llm::Mode::Describe
@@ -59,7 +62,7 @@ fn main() {
             } else {
                 llm::Mode::Explain
             };
-            commands::explain::run(range.as_deref(), *dry_run, mode)
+            commands::explain::run(range.as_deref(), *dry_run, mode, *uncommitted, *chat, paths)
         }
         cli::Cmd::Rm {
             name,

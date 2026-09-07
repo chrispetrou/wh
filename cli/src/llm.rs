@@ -157,6 +157,7 @@ pub enum Mode {
     Explain,
     Changelog,
     Describe,
+    Followup,
 }
 
 impl Mode {
@@ -165,6 +166,7 @@ impl Mode {
             Mode::Explain => "[system]",
             Mode::Changelog => "[changelog]",
             Mode::Describe => "[describe]",
+            Mode::Followup => "[followup]",
         }
     }
 }
@@ -205,6 +207,31 @@ struct Message<'a> {
     content: &'a str,
 }
 
+/// One turn of the conversation. A one-shot explain is a single user
+/// turn; a follow-up appends the answer and the next question, so the
+/// model keeps the same diff in view (shared/prompts/explain.md,
+/// [followup]).
+pub struct Turn {
+    pub role: &'static str,
+    pub content: String,
+}
+
+impl Turn {
+    pub fn user(content: String) -> Self {
+        Turn {
+            role: "user",
+            content,
+        }
+    }
+
+    pub fn assistant(content: String) -> Self {
+        Turn {
+            role: "assistant",
+            content,
+        }
+    }
+}
+
 #[derive(Serialize)]
 struct StreamOptions {
     include_usage: bool,
@@ -218,7 +245,7 @@ struct ChatRequest<'a> {
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
-    messages: [Message<'a>; 2],
+    messages: Vec<Message<'a>>,
 }
 
 #[derive(Serialize)]
@@ -227,7 +254,7 @@ struct AnthropicRequest<'a> {
     max_tokens: u32,
     stream: bool,
     system: &'a str,
-    messages: [Message<'a>; 1],
+    messages: Vec<Message<'a>>,
 }
 
 /// The request body for a provider; field order is the struct order.
@@ -235,11 +262,16 @@ fn request_body(
     provider: &Provider,
     model: &str,
     system: &str,
-    user: &str,
+    turns: &[Turn],
 ) -> Result<String, WhError> {
-    let user_msg = Message {
-        role: "user",
-        content: user,
+    let msgs = || -> Vec<Message<'_>> {
+        turns
+            .iter()
+            .map(|t| Message {
+                role: t.role,
+                content: &t.content,
+            })
+            .collect()
     };
     let encoded = match provider {
         Provider::Anthropic { .. } => serde_json::to_string(&AnthropicRequest {
@@ -247,7 +279,7 @@ fn request_body(
             max_tokens: 4096,
             stream: true,
             system,
-            messages: [user_msg],
+            messages: msgs(),
         }),
         Provider::OpenAi { .. } | Provider::Groq { .. } | Provider::Ollama { .. } => {
             let stream_options = match provider {
@@ -256,17 +288,17 @@ fn request_body(
                     include_usage: true,
                 }),
             };
+            let mut messages = Vec::with_capacity(turns.len() + 1);
+            messages.push(Message {
+                role: "system",
+                content: system,
+            });
+            messages.extend(msgs());
             serde_json::to_string(&ChatRequest {
                 model,
                 stream: true,
                 stream_options,
-                messages: [
-                    Message {
-                        role: "system",
-                        content: system,
-                    },
-                    user_msg,
-                ],
+                messages,
             })
         }
     };
@@ -415,7 +447,7 @@ pub fn stream(
     provider: &Provider,
     model: &str,
     system: &str,
-    user: &str,
+    turns: &[Turn],
     on_text: &mut dyn FnMut(&str),
 ) -> Result<Reply, WhError> {
     let base = provider.base_url().trim_end_matches('/');
@@ -433,7 +465,7 @@ pub fn stream(
         ),
         Provider::Ollama { .. } => (format!("{base}/api/chat"), vec![]),
     };
-    let body = request_body(provider, model, system, user)?;
+    let body = request_body(provider, model, system, turns)?;
 
     if !valid_url(&url) {
         return Err(WhError::Msg("invalid provider url".into()));
@@ -927,20 +959,44 @@ mod tests {
     fn request_bodies_match_the_wire_shape() {
         let system = "say \"hi\"\nnow\u{1} héllo";
         assert_eq!(
-            request_body(&groq(), "m", system, "u").unwrap(),
+            request_body(&groq(), "m", system, &[Turn::user("u".into())]).unwrap(),
             r#"{"model":"m","stream":true,"stream_options":{"include_usage":true},"messages":[{"role":"system","content":"say \"hi\"\nnow\u0001 héllo"},{"role":"user","content":"u"}]}"#
         );
         let o = Provider::Ollama {
             url: "http://x".into(),
         };
         assert_eq!(
-            request_body(&o, "m", "s", "u").unwrap(),
+            request_body(&o, "m", "s", &[Turn::user("u".into())]).unwrap(),
             r#"{"model":"m","stream":true,"messages":[{"role":"system","content":"s"},{"role":"user","content":"u"}]}"#
         );
         assert_eq!(
-            request_body(&anthropic(), "m", "s", "u").unwrap(),
+            request_body(&anthropic(), "m", "s", &[Turn::user("u".into())]).unwrap(),
             r#"{"model":"m","max_tokens":4096,"stream":true,"system":"s","messages":[{"role":"user","content":"u"}]}"#
         );
+    }
+
+    #[test]
+    fn a_follow_up_sends_the_whole_conversation() {
+        let turns = vec![
+            Turn::user("u1".into()),
+            Turn::assistant("a1".into()),
+            Turn::user("u2".into()),
+        ];
+        assert_eq!(
+            request_body(&groq(), "m", "s", &turns).unwrap(),
+            r#"{"model":"m","stream":true,"stream_options":{"include_usage":true},"messages":[{"role":"system","content":"s"},{"role":"user","content":"u1"},{"role":"assistant","content":"a1"},{"role":"user","content":"u2"}]}"#
+        );
+        assert_eq!(
+            request_body(&anthropic(), "m", "s", &turns).unwrap(),
+            r#"{"model":"m","max_tokens":4096,"stream":true,"system":"s","messages":[{"role":"user","content":"u1"},{"role":"assistant","content":"a1"},{"role":"user","content":"u2"}]}"#
+        );
+    }
+
+    #[test]
+    fn the_followup_section_frames_a_question() {
+        let (system, _) = prompt("PAYLOAD", Mode::Followup);
+        assert!(system.contains("continuing a conversation"));
+        assert!(!system.contains("quiet code reviewer"));
     }
 
     #[test]
