@@ -12,3 +12,7 @@ web/out/
 
 # os
 .DS_Store
+
+# local roadmap and decisions log, never pushed. this is the distributed
+# guard: .git/info/exclude is per clone, so a fresh clone would not have it
+ROADMAP.md
