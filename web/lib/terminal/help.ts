@@ -38,7 +38,7 @@ export const HELP: HelpRow[] = [
   ["/repos", "switch repo"],
   ["/key <value>", "add an llm key (/key clear [provider] removes)"],
   ["/usage", "tokens on each key since it was saved (/usage reset)"],
-  ["/model <name>", "pick the model; another provider's switches to it"],
+  ["/model <name>", "pick the model; /model sync refreshes the list"],
   ["/effort <level>", "reasoning effort (model support varies)"],
   ["/theme <t>", "auto, light, or dark"],
   ["/account", "who is signed in"],

@@ -9,9 +9,9 @@ use serde::Serialize;
 use serde_json::Value;
 use std::env;
 use std::fs;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Lines, Read, Write};
 use std::path::PathBuf;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, ChildStdout, Command, Stdio};
 
 pub enum Provider {
     Anthropic { key: String, url: String },
@@ -444,35 +444,59 @@ pub struct Reply {
     pub head: Head,
 }
 
-/// Stream the model's text, invoking `on_text` per chunk.
-pub fn stream(
-    provider: &Provider,
-    model: &str,
-    system: &str,
-    turns: &[Turn],
-    on_text: &mut dyn FnMut(&str),
-) -> Result<Reply, WhError> {
+/// Which endpoint: the chat call or the model catalog. Both hang off the
+/// same configurable base url, so a gateway is followed either way.
+#[derive(Clone, Copy)]
+enum Route {
+    Chat,
+    Models,
+}
+
+/// The url and auth headers for one route, per provider
+/// (shared/prompts/provider.md).
+fn endpoint(provider: &Provider, route: Route) -> (String, Vec<String>) {
     let base = provider.base_url().trim_end_matches('/');
-    let (url, headers): (String, Vec<String>) = match provider {
+    let (path, headers): (&str, Vec<String>) = match provider {
         Provider::Anthropic { key, .. } => (
-            format!("{base}/v1/messages"),
+            match route {
+                Route::Chat => "/v1/messages",
+                Route::Models => "/v1/models",
+            },
             vec![
                 format!("x-api-key: {key}"),
                 "anthropic-version: 2023-06-01".to_string(),
             ],
         ),
         Provider::OpenAi { key, .. } | Provider::Groq { key, .. } => (
-            format!("{base}/v1/chat/completions"),
+            match route {
+                Route::Chat => "/v1/chat/completions",
+                Route::Models => "/v1/models",
+            },
             vec![format!("Authorization: Bearer {key}")],
         ),
-        Provider::Ollama { .. } => (format!("{base}/api/chat"), vec![]),
+        Provider::Ollama { .. } => (
+            match route {
+                Route::Chat => "/api/chat",
+                Route::Models => "/api/tags",
+            },
+            vec![],
+        ),
     };
-    let body = request_body(provider, model, system, turns)?;
+    (format!("{base}{path}"), headers)
+}
 
-    if !valid_url(&url) {
+/// Spawns curl and reads the status line and headers, leaving the body on
+/// the returned iterator. A body file makes it a POST (curl infers the
+/// method from `data`); without one this is a GET.
+fn curl(
+    provider: &Provider,
+    url: &str,
+    headers: &[String],
+    body: Option<&TempBody>,
+) -> Result<(Child, Lines<BufReader<ChildStdout>>, Head), WhError> {
+    if !valid_url(url) {
         return Err(WhError::Msg("invalid provider url".into()));
     }
-    let body_file = write_body(&body)?;
     // include: the status line and headers come first on stdout, which is
     // how a 401 is told from an answer. no Expect: no 100-continue block
     // to skip for large bodies; suppress-connect-headers: none for a
@@ -482,10 +506,12 @@ pub fn stream(
     );
     config.push_str(&format!("url = \"{url}\"\n"));
     config.push_str("header = \"content-type: application/json\"\n");
-    for h in &headers {
+    for h in headers {
         config.push_str(&format!("header = \"{h}\"\n"));
     }
-    config.push_str(&format!("data = \"@{}\"\n", body_file.0.display()));
+    if let Some(b) = body {
+        config.push_str(&format!("data = \"@{}\"\n", b.0.display()));
+    }
 
     let mut child = Command::new("curl")
         .arg("--config")
@@ -514,6 +540,116 @@ pub fn stream(
             return Err(e);
         }
     };
+    Ok((child, lines, head))
+}
+
+/// Ids a model listing drops: these endpoints also return embedding,
+/// speech, and image models, which are not answers to a diff. A
+/// heuristic, not a contract (shared/prompts/provider.md); the web
+/// applies the same one.
+const NOT_CHAT: [&str; 8] = [
+    "embed",
+    "whisper",
+    "tts",
+    "dall-e",
+    "moderation",
+    "guard",
+    "rerank",
+    "stable-diffusion",
+];
+
+/// A safety bound on a pathological response, not a curation device: the
+/// list must stay long enough that "is the model in use still here" is
+/// answered against everything the provider actually offers.
+const MODELS_CAP: usize = 200;
+
+pub fn is_chat_model(id: &str) -> bool {
+    let lower = id.to_lowercase();
+    !NOT_CHAT.iter().any(|p| lower.contains(p))
+}
+
+/// The array at a json pointer path.
+fn arr_at<'a>(v: &'a Value, path: &str) -> Option<&'a Vec<Value>> {
+    v.pointer(path).and_then(Value::as_array)
+}
+
+/// The ids in a models response, per provider
+/// (shared/prompts/provider.md).
+pub fn model_ids(provider: &Provider, body: &str) -> Vec<String> {
+    let Some(v) = frame(body) else {
+        return Vec::new();
+    };
+    let (path, field) = match provider {
+        Provider::Ollama { .. } => ("/models", "name"),
+        _ => ("/data", "id"),
+    };
+    let Some(items) = arr_at(&v, path) else {
+        return Vec::new();
+    };
+    items
+        .iter()
+        .filter_map(|m| m.get(field).and_then(Value::as_str))
+        .filter(|id| is_chat_model(id))
+        .map(str::to_string)
+        .take(MODELS_CAP)
+        .collect()
+}
+
+/// The models the provider offers, in its own order. A 404 here is a base
+/// url with no models endpoint (a gateway that only proxies chat), never
+/// an unknown model, so it does not go through provider_failure.
+pub fn list_models(provider: &Provider) -> Result<Vec<String>, WhError> {
+    let (url, headers) = endpoint(provider, Route::Models);
+    let (mut child, mut lines, head) = curl(provider, &url, &headers, None)?;
+
+    let mut body = String::new();
+    for line in lines.by_ref() {
+        body.push_str(&line?);
+        body.push('\n');
+        if body.len() > 200_000 {
+            break;
+        }
+    }
+    // a body cut short is a dropped connection, not an empty catalog
+    let status = child.wait()?;
+    if !status.success() {
+        return Err(curl_failure(
+            &mut child,
+            status.code(),
+            provider,
+            !body.is_empty(),
+        ));
+    }
+
+    if head.status == 404 {
+        return Err(WhError::Msg(format!(
+            "provider has no models endpoint\n{url}"
+        )));
+    }
+    if head.status >= 400 {
+        return Err(WhError::Msg(provider_failure(
+            Some(head.status),
+            Some(&head),
+            body.trim(),
+            "",
+            provider,
+        )));
+    }
+    Ok(model_ids(provider, body.trim()))
+}
+
+/// Stream the model's text, invoking `on_text` per chunk.
+pub fn stream(
+    provider: &Provider,
+    model: &str,
+    system: &str,
+    turns: &[Turn],
+    on_text: &mut dyn FnMut(&str),
+) -> Result<Reply, WhError> {
+    let (url, headers) = endpoint(provider, Route::Chat);
+    let body = request_body(provider, model, system, turns)?;
+    let body_file = write_body(&body)?;
+    let (mut child, mut lines, head) = curl(provider, &url, &headers, Some(&body_file))?;
 
     if head.status >= 400 {
         let mut body = String::new();
@@ -812,7 +948,13 @@ pub fn provider_failure(
         || lower.contains("does not exist")
         || (lower.contains("model") && (lower.contains("not found") || lower.contains("not exist")))
     {
-        return format!("provider has no model {model}");
+        // an empty model means the caller was not asking about one (a
+        // models listing); do not name a blank
+        return if model.is_empty() {
+            "provider has no such endpoint".to_string()
+        } else {
+            format!("provider has no model {model}\nwh models lists the ones the provider offers")
+        };
     }
     if status >= 500 || has_code("overloaded_error") || lower.contains("overloaded") {
         return "provider is overloaded, try again in a moment".to_string();
@@ -1009,6 +1151,89 @@ mod tests {
     }
 
     #[test]
+    fn model_ids_per_provider_shape() {
+        let openai = Provider::OpenAi {
+            key: "k".into(),
+            url: "http://x".into(),
+        };
+        let body = r#"{"object":"list","data":[{"id":"gpt-5.6-terra"},{"id":"gpt-5.6-sol"}]}"#;
+        assert_eq!(
+            model_ids(&openai, body),
+            vec!["gpt-5.6-terra", "gpt-5.6-sol"]
+        );
+
+        let body = r#"{"data":[{"id":"claude-opus-5","display_name":"Claude Opus 5"}]}"#;
+        assert_eq!(model_ids(&anthropic(), body), vec!["claude-opus-5"]);
+
+        let o = Provider::Ollama {
+            url: "http://x".into(),
+        };
+        let body = r#"{"models":[{"name":"llama3.2:latest"},{"name":"qwen3:8b"}]}"#;
+        assert_eq!(model_ids(&o, body), vec!["llama3.2:latest", "qwen3:8b"]);
+    }
+
+    #[test]
+    fn a_catalog_is_not_a_model_list() {
+        assert!(is_chat_model("gpt-5.6-terra"));
+        assert!(is_chat_model("claude-opus-5"));
+        for id in [
+            "text-embedding-3-small",
+            "whisper-large-v3",
+            "tts-1",
+            "dall-e-3",
+            "omni-moderation-latest",
+            "llama-guard-4-12b",
+            "rerank-v1",
+            "stable-diffusion-xl",
+        ] {
+            assert!(!is_chat_model(id), "{id} should be filtered");
+        }
+    }
+
+    #[test]
+    fn the_whole_catalog_survives_so_a_retirement_check_is_not_fooled() {
+        // more ids than the old 40-row cap, with the model in use last:
+        // truncating here reported a live model as retired
+        let mut items: Vec<String> = (0..60).map(|i| format!("{{\"id\":\"m-{i}\"}}")).collect();
+        items.push("{\"id\":\"gpt-5.6-terra\"}".to_string());
+        let body = format!("{{\"data\":[{}]}}", items.join(","));
+        let openai = Provider::OpenAi {
+            key: "k".into(),
+            url: "http://x".into(),
+        };
+        let ids = model_ids(&openai, &body);
+        assert_eq!(ids.len(), 61);
+        assert!(ids.iter().any(|i| i == "gpt-5.6-terra"));
+    }
+
+    #[test]
+    fn a_broken_models_body_is_an_empty_list_not_a_panic() {
+        let o = Provider::Ollama {
+            url: "http://x".into(),
+        };
+        assert!(model_ids(&o, "not json").is_empty());
+        assert!(model_ids(&o, "{}").is_empty());
+        assert!(model_ids(&anthropic(), r#"{"data":"nope"}"#).is_empty());
+    }
+
+    #[test]
+    fn the_models_route_hangs_off_the_same_base() {
+        let (url, headers) = endpoint(&anthropic(), Route::Models);
+        assert!(url.ends_with("/v1/models"), "{url}");
+        assert!(headers.iter().any(|h| h.starts_with("x-api-key:")));
+        let (url, _) = endpoint(&groq(), Route::Models);
+        assert!(url.ends_with("/v1/models"), "{url}");
+        let o = Provider::Ollama {
+            url: "http://x".into(),
+        };
+        assert_eq!(endpoint(&o, Route::Models).0, "http://x/api/tags");
+        // the chat route is unchanged
+        assert!(endpoint(&anthropic(), Route::Chat)
+            .0
+            .ends_with("/v1/messages"));
+    }
+
+    #[test]
     fn text_of_per_provider() {
         let a = anthropic();
         assert_eq!(
@@ -1129,7 +1354,7 @@ mod tests {
         .starts_with("the diff is too big for claude-opus-5: 213000 tokens, limit 200000"));
         assert_eq!(
             provider_failure(None, None, r#"{"error":"model not found"}"#, "m", &groq()),
-            "provider has no model m"
+            "provider has no model m\nwh models lists the ones the provider offers"
         );
         assert_eq!(
             provider_failure(Some(400), None, "something odd", "m", &groq()),

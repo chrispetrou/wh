@@ -126,6 +126,9 @@ export function createKeyStore(storage: StorageLike) {
       const a = active();
       return a ? (keys()[a] ?? "") : "";
     },
+    keyFor(p: ProviderName): string {
+      return keys()[p] ?? "";
+    },
     hasKey(p: ProviderName): boolean {
       return Boolean(keys()[p]);
     },

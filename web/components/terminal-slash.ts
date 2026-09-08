@@ -5,7 +5,14 @@
 
 import { isDiff, parseCommand } from "@/lib/commands";
 import { chatStore, type ChatLine } from "@/lib/chat-store";
-import { DEFAULT_MODELS, EFFORTS, MODEL_RE, modelFamily } from "@/lib/explain/providers";
+import { catalog } from "@/lib/catalog";
+import {
+  DEFAULT_MODELS,
+  EFFORTS,
+  MODEL_RE,
+  modelFamily,
+  type ProviderName,
+} from "@/lib/explain/providers";
 import { keyStore } from "@/lib/key-store";
 import type { Emit } from "@/lib/terminal/emit";
 import { HELP, helpLines, WH_HELP } from "@/lib/terminal/help";
@@ -38,6 +45,35 @@ export interface SlashContext {
   run(command: string, raw?: boolean): Promise<void>;
   changeInput(v: string): void;
   focusInput(): void;
+}
+
+// asks the provider what it offers, so the shipped suggestions never
+// have to be the whole truth (shared/prompts/provider.md). the browser
+// cannot call a provider directly, so this goes through /api/models.
+async function syncModels(provider: ProviderName, emit: Emit) {
+  let data: { models?: string[]; error?: string; hint?: string };
+  try {
+    const res = await fetch("/api/models", {
+      headers: { "x-wh-provider-key": keyStore.keyFor(provider) },
+    });
+    data = await res.json();
+    if (!res.ok) {
+      emit.err(data.error ?? "could not reach the provider");
+      if (data.hint) emit.muted([data.hint]);
+      return;
+    }
+  } catch {
+    emit.err("could not reach the provider");
+    return;
+  }
+  const models = data.models ?? [];
+  catalog.set(provider, models);
+  emit.ok("synced", `${models.length} ${models.length === 1 ? "model" : "models"} from ${provider}`);
+  // the default is pinned and never follows latest, but a retired one
+  // should not fail silently at request time
+  if (!models.includes(DEFAULT_MODELS[provider])) {
+    emit.muted([`${provider} no longer lists ${DEFAULT_MODELS[provider]}, /model picks another`]);
+  }
 }
 
 export function runSlash(ctx: SlashContext, raw: string) {
@@ -126,7 +162,7 @@ export function runSlash(ctx: SlashContext, raw: string) {
       if (!m) {
         muted([
           `model: ${providerInfo()}`,
-          "usage: /model <name> or /model default; another provider's model switches to it",
+          "usage: /model <name>, /model default, or /model sync (ask the provider what it offers)",
           ...modelSuggestionLines(),
           "any model id the provider accepts works too, suggestions are the current lineup",
         ]);
@@ -135,6 +171,18 @@ export function runSlash(ctx: SlashContext, raw: string) {
       } else if (m.toLowerCase() === "default") {
         keyStore.setModel(active, "");
         ok("model", `${modelName()} (${active} default)`);
+      } else if (m.toLowerCase() === "sync" || m.toLowerCase().startsWith("sync ")) {
+        // before the MODEL_RE gate: "sync" is a valid model id by the
+        // regex, so checking it after would make the command unreachable
+        const named = m.slice(4).trim().toLowerCase();
+        const target = named ? PROVIDERS.find((p) => p === named) : active;
+        if (!target) {
+          muted([`usage: /model sync [${PROVIDERS.join(" | ")}]`]);
+        } else if (!keyStore.hasKey(target)) {
+          muted([`no ${target} key stored.`]);
+        } else {
+          void syncModels(target, ctx.emit);
+        }
       } else if (!MODEL_RE.test(m)) {
         muted(["that does not look like a model id."]);
       } else {

@@ -36,9 +36,16 @@ export const SUGGESTED_MODELS: Record<ProviderName, string[]> = {
 // which provider a model id belongs to, when that can be told: exact
 // suggestion hits first (openai/gpt-oss-120b is groq's), then the
 // family prefix; null for ids like llama-* that several hosts serve
-export function modelFamily(id: string): ProviderName | null {
-  for (const p of Object.keys(SUGGESTED_MODELS) as ProviderName[]) {
+export function modelFamily(id: string, synced?: (p: ProviderName) => string[]): ProviderName | null {
+  const providers = Object.keys(SUGGESTED_MODELS) as ProviderName[];
+  for (const p of providers) {
     if (SUGGESTED_MODELS[p].includes(id)) return p;
+  }
+  // a synced catalog knows ids the shipped list never will
+  if (synced) {
+    for (const p of providers) {
+      if (synced(p).includes(id)) return p;
+    }
   }
   const lower = id.toLowerCase();
   if (lower.startsWith("claude")) return "anthropic";
@@ -72,13 +79,61 @@ function effortBody(provider: ProviderName, effort?: string) {
     : { reasoning_effort: effort };
 }
 
+// the configurable base url per provider; a gateway set here is followed
+// by every route, the chat call and the model catalog alike
+export function baseUrl(provider: ProviderName): string {
+  if (provider === "anthropic") return process.env.WH_ANTHROPIC_URL ?? "https://api.anthropic.com";
+  // groq's base already carries the /openai path segment
+  if (provider === "groq") return process.env.WH_GROQ_URL ?? "https://api.groq.com/openai";
+  return process.env.WH_OPENAI_URL ?? "https://api.openai.com";
+}
+
 // groq speaks the openai chat-completions dialect at its own host
 function chatCompletionsUrl(provider: "openai" | "groq"): string {
-  const base =
-    provider === "groq"
-      ? (process.env.WH_GROQ_URL ?? "https://api.groq.com/openai")
-      : (process.env.WH_OPENAI_URL ?? "https://api.openai.com");
-  return `${base}/v1/chat/completions`;
+  return `${baseUrl(provider)}/v1/chat/completions`;
+}
+
+// the model catalog per provider (shared/prompts/provider.md). the cli
+// twin is Route::Models in cli/src/llm.rs
+export function modelsUrl(provider: ProviderName): string {
+  return `${baseUrl(provider)}/v1/models`;
+}
+
+// ids a listing drops: these endpoints also return embedding, speech,
+// and image models, which are not answers to a diff. a heuristic, not a
+// contract; the cli applies the same one
+const NOT_CHAT = [
+  "embed",
+  "whisper",
+  "tts",
+  "dall-e",
+  "moderation",
+  "guard",
+  "rerank",
+  "stable-diffusion",
+];
+
+// a safety bound on a pathological response, not a curation device: the
+// list must stay long enough that "is the pinned default still here" is
+// answered against everything the provider actually offers
+export const MODELS_CAP = 200;
+
+export function isChatModel(id: string): boolean {
+  const lower = id.toLowerCase();
+  return !NOT_CHAT.some((p) => lower.includes(p));
+}
+
+// the ids in a models response. anthropic, openai and groq all answer
+// with data[].id; the shape check keeps a gateway's odd body from
+// throwing
+export function modelIds(body: unknown): string[] {
+  const data = (body as { data?: unknown })?.data;
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((m) => (m as { id?: unknown })?.id)
+    .filter((id): id is string => typeof id === "string" && MODEL_RE.test(id))
+    .filter(isChatModel)
+    .slice(0, MODELS_CAP);
 }
 
 export interface ProviderRequest {
@@ -275,7 +330,7 @@ export function buildRequest(
   const chosen = model || DEFAULT_MODELS[provider];
   if (provider === "anthropic") {
     return {
-      url: `${process.env.WH_ANTHROPIC_URL ?? "https://api.anthropic.com"}/v1/messages`,
+      url: `${baseUrl("anthropic")}/v1/messages`,
       headers: {
         "content-type": "application/json",
         "x-api-key": key,
@@ -345,7 +400,7 @@ export function buildFollowupRequest(
         : { role: m.role, content: m.content }
     );
     return {
-      url: `${process.env.WH_ANTHROPIC_URL ?? "https://api.anthropic.com"}/v1/messages`,
+      url: `${baseUrl("anthropic")}/v1/messages`,
       headers: {
         "content-type": "application/json",
         "x-api-key": key,

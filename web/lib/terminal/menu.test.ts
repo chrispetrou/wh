@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_MODELS, SUGGESTED_MODELS } from "../explain/providers";
 import { createKeyStore, type StorageLike } from "../key-store";
-import { argNotes, branchSlot, buildCommands, menuFor, prSlot, rowSlot, stageOf } from "./menu";
+import { createCatalog } from "../catalog";
+import {
+  argNotes,
+  branchSlot,
+  buildCommands,
+  menuFor,
+  modelArgs,
+  prSlot,
+  rowSlot,
+  stageOf,
+} from "./menu";
 
 function memory(): StorageLike {
   const data = new Map<string, string>();
@@ -78,5 +88,57 @@ describe("argNotes", () => {
     expect(argNotes(spec, DEFAULT_MODELS.groq, ks).map((n) => n.text)).toEqual(["groq", "free", "default"]);
     expect(argNotes(spec, "default", ks)).toEqual([{ text: "provider default" }]);
     expect(argNotes(undefined, "x", ks)).toEqual([]);
+  });
+});
+
+describe("model rows", () => {
+  it("offers the shipped seed until a provider is synced", () => {
+    const ks = createKeyStore(memory());
+    const cat = createCatalog(memory());
+    const rows = modelArgs(ks, cat);
+    expect(rows).toContain("claude-opus-5");
+    expect(rows).toContain("gpt-5.6-terra");
+    expect(rows).toContain("sync");
+  });
+
+  it("a synced catalog replaces that provider's seed, so a retired id goes away", () => {
+    const ks = createKeyStore(memory());
+    ks.addKey("gsk_x");
+    const cat = createCatalog(memory());
+    cat.set("groq", ["openai/gpt-oss-120b", "moonshotai/kimi-k3"]);
+    const rows = modelArgs(ks, cat);
+    expect(rows).toContain("moonshotai/kimi-k3");
+    // a groq seed id the provider no longer lists
+    expect(rows).not.toContain(SUGGESTED_MODELS.groq[2]);
+    // a provider nobody synced keeps its seed
+    expect(rows).toContain("claude-opus-5");
+  });
+
+  it("marks the sync rows as verbs, not models", () => {
+    const ks = createKeyStore(memory());
+    ks.addKey("gsk_x");
+    const spec = buildCommands(ks).find((c) => c.name === "/model");
+    expect(argNotes(spec, "sync", ks)).toEqual([{ text: "refresh from the provider" }]);
+    expect(argNotes(spec, "sync groq", ks)).toEqual([{ text: "refresh from the provider" }]);
+  });
+
+  it("offers a sync row per keyed provider", () => {
+    const ks = createKeyStore(memory());
+    const cat = createCatalog(memory());
+    expect(modelArgs(ks, cat)).not.toContain("sync groq");
+    ks.addKey("gsk_x");
+    const rows = modelArgs(ks, cat);
+    expect(rows).toContain("sync");
+    expect(rows).toContain("sync groq");
+  });
+
+  it("keeps the whole catalog, so a retirement check is not fooled by a cap", () => {
+    const ks = createKeyStore(memory());
+    ks.addKey("sk-openai");
+    const cat = createCatalog(memory());
+    // more ids than the old 40-row cap, with the default late in the list
+    const many = Array.from({ length: 60 }, (_, i) => `m-${i}`);
+    cat.set("openai", [...many, DEFAULT_MODELS.openai]);
+    expect(modelArgs(ks, cat)).toContain(DEFAULT_MODELS.openai);
   });
 });

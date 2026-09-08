@@ -77,6 +77,11 @@ WH_MODEL overrides the model.")]
         #[arg(long, conflicts_with = "dry_run")]
         chat: bool,
     },
+    /// list the models the provider offers
+    #[command(after_help = "\
+the same key and base url wh explain uses (WH_PROVIDER picks the provider,
+WH_MODEL the model). ids on stdout, so `wh models | grep` works.")]
+    Models,
     /// remove worktrees whose branches are merged
     Rm {
         /// branch or directory of a specific worktree to remove

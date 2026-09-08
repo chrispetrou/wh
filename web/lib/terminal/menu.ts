@@ -10,6 +10,7 @@ import {
   SUGGESTED_MODELS,
   type ProviderName,
 } from "../explain/providers";
+import { catalog, type Catalog } from "../catalog";
 import { keyStore, type KeyStore } from "../key-store";
 
 export const FONTS = ["default", "fira", "jetbrains", "plex"];
@@ -19,10 +20,21 @@ export const PROVIDERS = Object.keys(SUGGESTED_MODELS) as ProviderName[];
 // every provider's models, the active provider's first. no "default"
 // row: each provider's default is labeled, and picking it resets the
 // override (typing /model default still works)
-export function modelArgs(ks: KeyStore = keyStore): string[] {
+export function modelArgs(ks: KeyStore = keyStore, cat: Catalog = catalog): string[] {
   const a = ks.active();
   const order = a ? [a, ...PROVIDERS.filter((p) => p !== a)] : PROVIDERS;
-  return order.flatMap((p) => SUGGESTED_MODELS[p]);
+  // a synced catalog replaces the seed for that provider rather than
+  // adding to it: merging would keep a retired id in the menu forever,
+  // which is the whole thing this is meant to fix. the seed stays the
+  // answer for a provider nobody has synced
+  return [
+    ...order.flatMap((p) => {
+      const synced = cat.models(p);
+      return synced.length ? synced : SUGGESTED_MODELS[p];
+    }),
+    "sync",
+    ...ks.providers().map((p) => `sync ${p}`),
+  ];
 }
 
 export function effortArgs(ks: KeyStore = keyStore): string[] {
@@ -169,7 +181,10 @@ export interface Note {
 export function argNotes(spec: CmdSpec | undefined, row: string, ks: KeyStore = keyStore): Note[] {
   if (row === "default") return [{ text: "provider default" }];
   if (spec?.name !== "/model") return [];
-  const p = modelFamily(row);
+  if (row === "sync" || row.startsWith("sync ")) {
+    return [{ text: "refresh from the provider" }];
+  }
+  const p = modelFamily(row, (x) => catalog.models(x));
   if (!p) return [];
   const notes: Note[] = [{ text: p }];
   if (FREE_TIER.includes(p)) notes.push({ text: "free", cls: "text-wh-green" });

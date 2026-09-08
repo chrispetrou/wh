@@ -52,7 +52,7 @@ Detection order:
 | rate limit, daily | `provider daily limit reached, resets in 3h 12m` (`resets tomorrow` when no wait is known) | none |
 | rate limit | `provider rate limit, try again in 12s` when a wait is known, else `provider rate limit, try again in a moment` | none |
 | too large | `the diff is too big for <model>: 17842 tokens, limit 8000` (the counts when known) | web `try fewer commits, cut it to a path (add: in src/), or /model one with a larger context`; cli `try fewer commits, a narrower range, or WH_MODEL with a larger context` |
-| unknown model | `provider has no model <model>` | web `/model lists the ones it knows`; cli none |
+| unknown model | `provider has no model <model>` | web `/model lists the ones it knows`; cli `wh models lists the ones the provider offers` |
 | overloaded | `provider is overloaded, try again in a moment` | none |
 | generic | `provider error: <message>` | none |
 | network, nothing received | `could not reach <host>` | cli: curl's last stderr line, its `curl: (6) ` prefix stripped |
@@ -74,6 +74,42 @@ Urls, the one thing here that may drift:
 | anthropic | api.anthropic.com | platform.claude.com/settings/billing | platform.claude.com/settings/limits |
 | openai | api.openai.com | platform.openai.com/settings/organization/billing | platform.openai.com/settings/organization/limits |
 | groq | api.groq.com | console.groq.com/settings/billing | console.groq.com/settings/limits |
+
+### models
+
+Both surfaces can ask the provider which models it offers, so neither has
+to ship a list that rots: the web's `/model sync [provider]`, the cli's `wh models`.
+The endpoint hangs off the same configurable base url as the chat call,
+so a gateway is followed automatically.
+
+| provider | path | auth | ids at |
+|---|---|---|---|
+| anthropic | `/v1/models` | `x-api-key`, `anthropic-version` | `data[].id` |
+| openai | `/v1/models` | `Authorization: Bearer` | `data[].id` |
+| groq | `/v1/models` (its base already ends `/openai`) | `Authorization: Bearer` | `data[].id` |
+| ollama | `/api/tags` | none | `models[].name` |
+
+A catalog is not a model list: these endpoints also return embedding,
+speech, and image models. Both implementations drop ids matching
+`embed`, `whisper`, `tts`, `dall-e`, `moderation`, `guard`, `rerank`, or
+`stable-diffusion`, and keep the provider's own order. The 200-id cap is
+a safety bound on a pathological response, never a curation device: a
+truncated list would make "is the pinned default still offered" answer
+against a slice rather than the catalog, and report a live model as
+retired.
+The rule is a heuristic, not a contract, and the two sides must apply the
+same one.
+
+A 404 here means the base url has no models endpoint (a gateway that
+only proxies chat), never an unknown model: `provider has no models
+endpoint`, with the base url on the second line. Every other failure
+class is classified exactly as above.
+
+The shipped suggestions stay as a seed, for the moment before a key is
+pasted and for a gateway with no endpoint. The default model per provider
+is pinned and never follows "latest": a default that moves changes cost
+and behaviour for everyone. When a sync finds the pinned default missing
+from the catalog, both surfaces say so and change nothing.
 
 ### waits
 

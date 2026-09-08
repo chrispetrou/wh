@@ -78,6 +78,7 @@ wh rm                         # prune worktrees whose branches are merged
 | `wh rm [name] [--dry-run] [--yes] [--force]` | remove merged worktrees, or one by name |
 | `wh explain [range] [--uncommitted] [--changelog] [--describe] [--chat] [--dry-run] [-- <pathspec>]` | a plain-English review, release notes, or a pr draft for a diff |
 | `wh why <path>:<line> [--chat] [--dry-run]` | why a line exists: git blame, then the commit that last touched it |
+| `wh models` | the models the provider offers, asked of the provider itself |
 | `wh init <zsh\|bash\|fish>` | print the shell wrapper that makes `switch` a real `cd` |
 
 `--help` on any of them is short and lowercase. Colors only when the output
@@ -252,6 +253,27 @@ the answer is a `why` section then `watch out`. The status line names the
 blaming commit, and a span says how many other commits touch it. A line
 you have not committed yet says so instead of guessing.
 
+### wh models
+
+```
+wh models                  # what the active provider offers
+wh models | grep sonnet    # ids alone on stdout, so this works
+```
+
+Asks the provider, with the key `wh explain` already uses, so no list
+shipped in the binary has to be kept current. The muted line names the
+provider, the count, and the model in use; embedding, speech, and image
+models are left out. Nothing is cached: this is a live call.
+
+The default model per provider is pinned on purpose and never follows
+"latest": a default that moves changes cost and behaviour without asking.
+When the provider no longer lists the one in use, `wh models` says so and
+changes nothing. `WH_MODEL` picks another.
+
+A base url that has no models endpoint (a gateway that only proxies chat)
+says `provider has no models endpoint` rather than pretending the model is
+missing.
+
 ### wh init
 
 `wh init zsh` (or `bash`, `fish`) prints a small `wh()` function that
@@ -287,7 +309,8 @@ no-key option. The `WH_*_URL` variables point at any compatible gateway.
 
 Requests go through the system `curl`; the key travels in curl's config on
 stdin (never argv) and the request body sits in a `0600` temp file for the
-duration of the call. Nothing is sent anywhere unless you run `wh explain`.
+duration of the call. Nothing is sent anywhere unless you run `wh explain`
+or `wh models`.
 
 ### when a call fails
 
@@ -300,7 +323,7 @@ your groq key is out of credit                     top up at console.groq.com/se
 your openai key hit its spend limit                raise it at platform.openai.com/...
 provider rate limit, try again in 12s
 provider daily limit reached, resets in 3h 12m
-the diff is too big for gpt-5-mini: 17842 tokens, limit 8192
+the diff is too big for gpt-5.6-terra: 17842 tokens, limit 8192
 provider has no model gpt-6
 provider is overloaded, try again in a moment
 could not reach api.groq.com
@@ -444,7 +467,7 @@ Typing `/` opens a menu of all of them with their options.
 | `/help`, `/wh` | the web grammar; the cli commands |
 | `/repos` | back to the repo picker |
 | `/key [value \| clear [provider]]` | add or replace a key, list them, drop one or all |
-| `/model [id \| default]`, `/effort [level \| default]` | per provider |
+| `/model [id \| default \| sync]`, `/effort [level \| default]` | per provider; `sync` asks the provider for its current list |
 | `/usage [reset [provider]]` | tokens per key |
 | `/show` | the raw diff payload the model saw, pager-colored |
 | `/copy`, `/export` | last answer to the clipboard; save the transcript as `wh-<owner>-<repo>.txt` |
@@ -484,6 +507,7 @@ keys                env: ANTHROPIC_API_KEY, ...   pasted once, kept in browser
 providers           anthropic, openai, groq,      anthropic, openai, groq
                     ollama
 model / effort      WH_MODEL, WH_PROVIDER         /model, /effort, per provider
+the model list      wh models                     /model sync
 private repos       whatever git can reach        github oauth, repo scope
 ```
 

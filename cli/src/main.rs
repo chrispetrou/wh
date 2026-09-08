@@ -69,6 +69,7 @@ fn main() {
             dry_run,
             chat,
         } => commands::why::run(target, *dry_run, *chat),
+        cli::Cmd::Models => commands::models::run(),
         cli::Cmd::Rm {
             name,
             dry_run,

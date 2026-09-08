@@ -230,9 +230,18 @@ The provider whose key was pasted last is active.
 `/model` switches models (any id accepted; the menu marks each one's
 provider, `free`, and `no key`), and picking another provider's model
 makes that provider active. `/effort` sets the reasoning effort where the
-provider supports it. Both are remembered per provider. Follow-ups resend
-the conversation from your browser, with a prompt-cache breakpoint on the
-diff for anthropic keys so they stay cheap.
+provider supports it. Both are remembered per provider.
+
+The table above is the shipped seed, not a whitelist. `/model sync` asks
+the active provider (or `/model sync <provider>` a named one) for its list and keeps it in this browser, so
+a new model needs no redeploy and a self-hosted instance never falls
+behind. Embedding, speech, and image models are left out. The default
+stays pinned on purpose: a sync that no longer finds it says so and
+changes nothing. A base url with no models endpoint (a gateway that only
+proxies chat) says so, and every id still works by typing it.
+
+Follow-ups resend the conversation from your browser, with a prompt-cache
+breakpoint on the diff for anthropic keys so they stay cheap.
 
 `/usage` shows what each key has cost since it was saved (`anthropic  1.2m
 in · 84.3k out · 41 answers · since aug 12`) and the headroom the provider
