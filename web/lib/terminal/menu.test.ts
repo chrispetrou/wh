@@ -56,6 +56,8 @@ describe("menuFor", () => {
     expect(menuFor("/mo", commands)).toEqual({ stage: "cmd", rows: ["/model"] });
     expect(menuFor("/theme d", commands)?.rows).toEqual(["dark"]);
     expect(menuFor("/theme dark", commands)).toBeNull();
+    expect(menuFor("/theme v", commands)?.rows).toEqual(["vintage"]);
+    expect(menuFor("/theme a", commands)?.rows).toEqual(["auto", "amber"]);
     expect(menuFor("/help x", commands)).toBeNull();
     expect(menuFor("/nope", commands)).toBeNull();
     expect(menuFor("log", commands)).toBeNull();

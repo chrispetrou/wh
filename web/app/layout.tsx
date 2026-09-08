@@ -52,7 +52,7 @@ export default async function RootLayout({
           // apply stored preferences before paint so there is no flash
           dangerouslySetInnerHTML={{
             __html: `try{var d=document.documentElement,g=function(k){return localStorage.getItem(k)};
-var t=g("wh_theme");if(t==="dark"||t==="light")d.classList.add(t);
+var t=g("wh_theme");if(/^(light|dark|vintage|amber)$/.test(t||""))d.classList.add(t);
 var f=g("wh_font");if(f)d.setAttribute("data-font",f);
 var s=g("wh_fontsize");if(s)d.style.setProperty("--wh-font-size",s+"px");
 if(g("wh_lig")==="off")d.setAttribute("data-lig","off")}catch(e){}`,

@@ -160,9 +160,10 @@
   --wh-lane-5: #66d9e8;
 }
 
-/* follow the system like the landing page does, until a toggle exists */
+/* follow the system like the landing page does when the theme is auto.
+   the phosphor themes below are their own palette, so they opt out too */
 @media (prefers-color-scheme: dark) {
-  :root:not(.light) {
+  :root:not(.light):not(.vintage):not(.amber) {
     --background: #0d0d0d;
     --foreground: #e8e8e8;
     --card: #111111;
@@ -207,6 +208,99 @@
     --wh-lane-3: #ffa94d;
     --wh-lane-4: #b197fc;
     --wh-lane-5: #66d9e8;
+  }
+}
+
+/* the two opt-in phosphor themes (/theme vintage, /theme amber). one
+   monochrome palette built on a single hue, so each theme is one line.
+   lightness carries the meaning; hue moves only inside a narrow band,
+   because the ui still needs success, warning, command and error apart.
+   the sidebar and chart tokens are left out on purpose: no shadcn
+   component was ever generated, so they are unused in every palette.
+   these blocks must stay after the media query above: `:root.vintage`
+   and `:root:not(.light)` weigh the same, so source order decides. */
+:root.vintage {
+  --phos-h: 145; /* p1 green */
+}
+:root.amber {
+  --phos-h: 75; /* p3 amber */
+}
+
+:root.vintage,
+:root.amber {
+  --phos: var(--phos-h, 145);
+  color-scheme: dark;
+
+  --background: oklch(0.15 0.025 var(--phos));
+  --foreground: oklch(0.83 0.15 var(--phos));
+  --card: oklch(0.18 0.028 var(--phos));
+  --card-foreground: oklch(0.83 0.15 var(--phos));
+  --popover: oklch(0.15 0.025 var(--phos));
+  --popover-foreground: oklch(0.83 0.15 var(--phos));
+  --primary: oklch(0.83 0.15 var(--phos));
+  --primary-foreground: oklch(0.15 0.025 var(--phos));
+  --secondary: oklch(0.18 0.028 var(--phos));
+  --secondary-foreground: oklch(0.83 0.15 var(--phos));
+  --muted: oklch(0.18 0.028 var(--phos));
+  --muted-foreground: oklch(0.6 0.1 var(--phos));
+  --accent: oklch(0.28 0.07 var(--phos));
+  --accent-foreground: oklch(0.83 0.15 var(--phos));
+  --destructive: oklch(0.68 0.16 calc(var(--phos) - 70));
+  --border: oklch(0.3 0.05 var(--phos));
+  --input: oklch(0.3 0.05 var(--phos));
+  --ring: oklch(0.38 0.06 var(--phos));
+
+  --wh-green: oklch(0.9 0.19 var(--phos));
+  --wh-amber: oklch(0.82 0.16 calc(var(--phos) - 35));
+  --wh-faint: oklch(0.38 0.06 var(--phos));
+  --wh-sel: oklch(0.28 0.07 var(--phos));
+  --wh-accent: oklch(0.86 0.13 calc(var(--phos) + 40));
+
+  /* six lanes around the one hue: lightness alternates so neighbours
+     never collide, the hue spread only keeps them from reading as one
+     ramp. the hljs tokens ride on these too (see below) */
+  --wh-lane-0: oklch(0.86 0.17 var(--phos));
+  --wh-lane-1: oklch(0.74 0.15 calc(var(--phos) - 18));
+  --wh-lane-2: oklch(0.9 0.14 calc(var(--phos) + 18));
+  --wh-lane-3: oklch(0.7 0.13 calc(var(--phos) + 30));
+  --wh-lane-4: oklch(0.92 0.12 calc(var(--phos) - 30));
+  --wh-lane-5: oklch(0.66 0.11 calc(var(--phos) + 12));
+}
+
+/* the phosphor themes are the one sanctioned exception to the flat rule
+   (see CLAUDE.md): a tube glows and falls off at the edges. currentColor
+   means each span glows in its own color, not all of them in green */
+:root.vintage body,
+:root.amber body {
+  text-shadow: 0 0 5px color-mix(in oklab, currentColor 30%, transparent);
+}
+
+/* the vignette has to be a gradient on a pseudo-element: the base layer
+   at the bottom of this file kills box-shadow with !important */
+:root.vintage body::after,
+:root.amber body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  /* under the tooltip and the drag ghost (both 50): they sit in the
+     corners, where the falloff is darkest, and must stay legible */
+  z-index: 40;
+  background: radial-gradient(
+    ellipse 120% 100% at 50% 45%,
+    transparent 40%,
+    oklch(0.06 0.02 var(--phos) / 0.55) 100%
+  );
+}
+
+@media (prefers-contrast: more) {
+  :root.vintage body,
+  :root.amber body {
+    text-shadow: none;
+  }
+  :root.vintage body::after,
+  :root.amber body::after {
+    display: none;
   }
 }
 

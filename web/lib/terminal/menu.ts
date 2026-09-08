@@ -12,6 +12,7 @@ import {
 } from "../explain/providers";
 import { catalog, type Catalog } from "../catalog";
 import { keyStore, type KeyStore } from "../key-store";
+import { THEMES } from "./prefs";
 
 export const FONTS = ["default", "fira", "jetbrains", "plex"];
 
@@ -65,7 +66,7 @@ export function buildCommands(ks: KeyStore): CmdSpec[] {
     { name: "/usage", desc: "tokens per key", args: () => usageArgs(ks) },
     { name: "/model", desc: "pick the model", args: () => modelArgs(ks) },
     { name: "/effort", desc: "reasoning effort", args: () => effortArgs(ks) },
-    { name: "/theme", desc: "light or dark", args: ["auto", "light", "dark"] },
+    { name: "/theme", desc: "light, dark, or vintage", args: [...THEMES] },
     { name: "/font", desc: "terminal font", args: FONTS },
     {
       name: "/fontsize",
