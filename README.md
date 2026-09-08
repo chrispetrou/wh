@@ -98,10 +98,13 @@ cd cli && cargo build --release   # binary at target/release/wh
 cd web && npm test && npm run build
 ```
 
-CI runs fmt, clippy, tests, a 3.2MiB size gate on the binary, the web tests
-and build, and a brand check. The explain prompts and diff preprocessing are
-specified once in [`shared/prompts/`](shared/prompts) and implemented twice,
-so an answer reads the same in both surfaces; change the spec first.
+Bug fixes and docs are welcome now; features get an issue first, while the
+design settles. The explain prompts and diff preprocessing are specified
+once in [`shared/prompts/`](shared/prompts) and implemented twice, so an
+answer reads the same in both surfaces; change the spec first.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) has the rest: what wh has decided not to
+do and why, what CI will check, and the parts that catch people.
 [Layout →](https://wh-site.pages.dev/docs/reference/layout)
 
 GPL-3.0 license.
