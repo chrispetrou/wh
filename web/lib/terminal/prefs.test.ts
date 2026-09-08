@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { StorageLike } from "../key-store";
-import { applyFont, applyFontSize, applyLigatures, createPrefs, rememberRecent, type RootLike } from "./prefs";
+import {
+  applyFont,
+  applyFontSize,
+  applyLigatures,
+  createPrefs,
+  isTheme,
+  rememberRecent,
+  THEMES,
+  type RootLike,
+} from "./prefs";
 
 function memory(initial: Record<string, string> = {}): StorageLike & { data: Map<string, string> } {
   const data = new Map(Object.entries(initial));
@@ -79,6 +88,16 @@ describe("appliers", () => {
     applyLigatures(true, r, p);
     expect(r.attrs.has("data-lig")).toBe(false);
     expect(m.data.has("wh_lig")).toBe(false);
+  });
+});
+
+describe("isTheme", () => {
+  it("accepts every theme and nothing else", () => {
+    for (const t of THEMES) expect(isTheme(t)).toBe(true);
+    expect(THEMES).toEqual(["auto", "light", "dark", "vintage", "amber"]);
+    expect(isTheme("crt")).toBe(false);
+    expect(isTheme("")).toBe(false);
+    expect(isTheme("Dark")).toBe(false); // /theme lowercases before asking
   });
 });
 

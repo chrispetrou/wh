@@ -20,8 +20,15 @@ import {
 } from "@/lib/terminal/info";
 import { flat } from "@/lib/terminal/lines";
 import { effortArgs, FONTS, PROVIDERS } from "@/lib/terminal/menu";
-import { applyFont, applyFontSize, applyLigatures, prefs } from "@/lib/terminal/prefs";
-import { currentTheme, switchTheme, type Theme } from "./theme-toggle";
+import {
+  applyFont,
+  applyFontSize,
+  applyLigatures,
+  isTheme,
+  prefs,
+  THEMES,
+} from "@/lib/terminal/prefs";
+import { currentTheme, switchTheme } from "./theme-toggle";
 
 export interface SlashContext {
   owner: string;
@@ -195,11 +202,11 @@ export function runSlash(ctx: SlashContext, raw: string) {
     case "theme": {
       echo(raw);
       const t = arg.toLowerCase();
-      if (t === "auto" || t === "light" || t === "dark") {
-        switchTheme(t as Theme);
+      if (isTheme(t)) {
+        switchTheme(t);
         ok("theme", t);
       } else {
-        muted([`theme is ${currentTheme()}. usage: /theme auto|light|dark`]);
+        muted([`theme is ${currentTheme()}. usage: /theme ${THEMES.join("|")}`]);
       }
       break;
     }

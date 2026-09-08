@@ -77,6 +77,13 @@ Brand rules, all surfaces:
   font stack, 13px base, radius small, shadows neutralized.
 - The explain logic must mirror the CLI's: same prompt templates and diff
   preprocessing per `shared/prompts/`.
+- Two opt-in phosphor themes live alongside light and dark: `/theme vintage`
+  (green) and `/theme amber`. One monochrome palette in `globals.css` built
+  on a single hue variable (`--phos-h`), so each theme is one line. They are
+  the **only** sanctioned exception to "no shadows, no gradients": a text
+  glow and a radial vignette, both scoped to `:root.vintage` / `:root.amber`
+  so every default surface stays flat. Do not remove them in a brand pass,
+  and do not let the glow leak past those selectors.
 
 ## commands
 

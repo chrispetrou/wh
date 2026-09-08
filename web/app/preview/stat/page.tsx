@@ -3,6 +3,7 @@
 // served when WH_PREVIEW=1 is set.
 import { notFound } from "next/navigation";
 import { PreviewStat } from "./preview";
+import { previewTheme } from "../theme";
 
 // decided per request, never baked in at build time
 export const dynamic = "force-dynamic";
@@ -14,5 +15,5 @@ export default async function Page({
 }) {
   if (process.env.WH_PREVIEW !== "1") notFound();
   const { theme } = await searchParams;
-  return <PreviewStat dark={theme === "dark"} />;
+  return <PreviewStat theme={previewTheme(theme)} />;
 }

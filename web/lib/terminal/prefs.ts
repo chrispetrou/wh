@@ -3,6 +3,15 @@
 // storage and the document root are parameters so this runs in node.
 import type { StorageLike } from "../key-store";
 
+// the theme vocabulary. auto follows the system; light and dark are the
+// landing palette; vintage and amber are the two opt-in phosphor looks,
+// reachable only through /theme (the header cycles the first three).
+// it lives here, not in the toggle component, so node tests can reach it.
+export const THEMES = ["auto", "light", "dark", "vintage", "amber"] as const;
+export type Theme = (typeof THEMES)[number];
+export const isTheme = (v: string): v is Theme =>
+  (THEMES as readonly string[]).includes(v);
+
 export function createPrefs(storage: StorageLike) {
   return {
     get(key: string): string {

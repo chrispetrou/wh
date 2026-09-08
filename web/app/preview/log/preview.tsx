@@ -5,6 +5,8 @@ import type { CommitRow, ListBlock } from "@/lib/block";
 import { chatStore } from "@/lib/chat-store";
 import { layout, laneCount } from "@/lib/graph";
 import { LogBlock } from "@/components/log-block";
+import type { Theme } from "@/lib/terminal/prefs";
+import { applyPreviewTheme } from "../theme";
 
 const KEY = "preview/wh";
 const NOW = Date.now();
@@ -63,11 +65,10 @@ const prs: ListBlock = {
   ],
 };
 
-export function PreviewLog({ dark, open, loading }: { dark: boolean; open: boolean; loading: boolean }) {
+export function PreviewLog({ theme, open, loading }: { theme: Theme; open: boolean; loading: boolean }) {
   const block = build();
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", dark);
-    document.documentElement.classList.toggle("light", !dark);
+    applyPreviewTheme(theme);
     if (open && block.kind === "log") {
       const rows = block.rows;
       const sha = rows[5].sha;
@@ -97,7 +98,7 @@ export function PreviewLog({ dark, open, loading }: { dark: boolean; open: boole
       chatStore.setLive(KEY, { line: 0, selected: 5 });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dark, open, loading]);
+  }, [theme, open, loading]);
   return (
     <div className="app-main p-4">
       <div className="text-muted-foreground">chrispetrou/wh $ <span className="font-semibold text-foreground">log</span></div>

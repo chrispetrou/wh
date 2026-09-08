@@ -3,6 +3,7 @@
 // when WH_PREVIEW=1 is set.
 import { notFound } from "next/navigation";
 import { PreviewView } from "./preview";
+import { previewTheme } from "../theme";
 
 // decided per request, never baked in at build time
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ export default async function Page({
   const { theme, open, mark } = await searchParams;
   return (
     <PreviewView
-      dark={theme === "dark"}
+      theme={previewTheme(theme)}
       loading={open === "loading"}
       mark={mark ? parseInt(mark, 10) : undefined}
     />
