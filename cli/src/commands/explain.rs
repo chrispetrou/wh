@@ -1,34 +1,51 @@
-use crate::{git, llm, output, preprocess, usage, WhError};
+use crate::commands::answer::answer;
+use crate::{git, llm, output, preprocess, WhError};
 use std::env;
-use std::io::Write;
-use std::time::Instant;
 
-pub fn run(range: Option<&str>, dry_run: bool, mode: llm::Mode) -> Result<(), WhError> {
+pub fn run(
+    range: Option<&str>,
+    dry_run: bool,
+    mode: llm::Mode,
+    uncommitted: bool,
+    chat: bool,
+    paths: &[String],
+) -> Result<(), WhError> {
     let cwd = env::current_dir()?;
     let describe = mode == llm::Mode::Describe;
     // a pr draft with no explicit range is judged against the default
-    // branch; resolved only then, so every other call stays local to cwd
-    let base_default = if describe && range.is_none_or(|r| !r.contains("..")) {
+    // branch; resolved only then, so every other call stays local to cwd.
+    // uncommitted work has no base to speak of
+    let base_default = if !uncommitted && describe && range.is_none_or(|r| !r.contains("..")) {
         git::default_ref(&cwd).map_err(|_| {
             WhError::Msg("cannot determine default branch, pass a range like main..".into())
         })?
     } else {
         String::new()
     };
-    let ranges = normalize(range, &base_default, describe);
+    let ranges = normalize(range, &base_default, describe, uncommitted);
+    let what = label(&ranges.source, paths);
 
     let diff = git::run(
         &cwd,
-        &["diff", "-M", "--no-color", "--no-ext-diff", &ranges.diff],
+        &diff_args(&["--no-color", "--no-ext-diff"], &ranges, paths),
     )?;
     if diff.trim().is_empty() {
-        return Err(WhError::Msg(format!(
-            "nothing to explain in {}",
-            ranges.diff
-        )));
+        return Err(WhError::Msg(if uncommitted {
+            format!(
+                "nothing uncommitted to explain{}\nuntracked files are not in a diff until you git add them",
+                paths_suffix(paths)
+            )
+        } else {
+            format!("nothing to explain in {what}")
+        }));
     }
-    let numstat = git::run(&cwd, &["diff", "-M", "--numstat", &ranges.diff])?;
-    let commits = git::run(&cwd, &["log", "--format=%h %s", &ranges.log])?;
+    let numstat = git::run(&cwd, &diff_args(&["--numstat"], &ranges, paths))?;
+    // uncommitted work has no commits to list, so the payload carries no
+    // `commits:` block (shared/prompts/preprocess.md)
+    let commits = match &ranges.log {
+        Some(r) => git::run(&cwd, &log_args(r, paths))?,
+        None => String::new(),
+    };
 
     let rules = preprocess::default_rules();
     let payload = preprocess::preprocess(&diff, &commits, &numstat, &Default::default(), &rules);
@@ -41,53 +58,68 @@ pub fn run(range: Option<&str>, dry_run: bool, mode: llm::Mode) -> Result<(), Wh
     let n_commits = commits.lines().filter(|l| !l.trim().is_empty()).count();
     let (files, added, deleted) = preprocess::stats(&numstat);
     // the fancy minus and middle dot match the landing demo; ui only
+    let head = if ranges.log.is_none() {
+        what.clone()
+    } else {
+        format!(
+            "{n_commits} {}",
+            if n_commits == 1 { "commit" } else { "commits" }
+        )
+    };
     output::status(&format!(
-        "reading {n_commits} {} · {files} {} · +{added} \u{2212}{deleted}",
-        if n_commits == 1 { "commit" } else { "commits" },
+        "reading {head} · {files} {} · +{added} \u{2212}{deleted}",
         if files == 1 { "file" } else { "files" },
     ));
 
-    let getenv = |k: &str| env::var(k).ok();
-    let provider = llm::choose(&getenv)?;
-    let model = llm::model_for(&provider, &getenv);
-    let (system, mut user) = llm::prompt(&payload, mode);
+    let mut tail = String::new();
     if describe {
         // the branch and its base, after the payload (shared/prompts/README.md)
         let head = ranges.head.clone().or_else(|| git::current_branch(&cwd));
-        user.push_str("\n\ncontext:\n");
-        match head {
-            Some(h) => user.push_str(&format!("branch {h} into {}", ranges.base)),
-            None => user.push_str(&format!("into {}", ranges.base)),
+        tail.push_str("\n\ncontext:\n");
+        match (head, ranges.base.is_empty()) {
+            (Some(h), true) => tail.push_str(&format!("branch {h}")),
+            (Some(h), false) => tail.push_str(&format!("branch {h} into {}", ranges.base)),
+            (None, _) => tail.push_str(&format!("into {}", ranges.base)),
         }
     }
 
-    let mut printer = LinePrinter::new(output::color());
-    let started = Instant::now();
-    let res = llm::stream(&provider, &model, &system, &user, &mut |chunk| {
-        printer.push(chunk)
-    });
-    // whatever arrived is shown before an error is
-    printer.finish();
-    let reply = res?;
+    answer(&payload, mode, &tail, chat)
+}
 
-    // the closing line: elapsed, model, and the tokens when the provider
-    // said (shared/prompts/provider.md, "lines")
-    let mut closing = format!("· {:.1}s · {model}", started.elapsed().as_secs_f64());
-    if let Some(u) = reply.usage {
-        closing.push_str(&format!(
-            " · {} in · {} out",
-            usage::fmt_tokens(u.input),
-            usage::fmt_tokens(u.output)
-        ));
+/// The args for one `git diff` call: the fixed flags, then whatever names
+/// this diff (a range, or `HEAD` for uncommitted work), then the pathspec.
+fn diff_args<'a>(extra: &[&'a str], ranges: &'a Ranges, paths: &'a [String]) -> Vec<&'a str> {
+    let mut args = vec!["diff", "-M"];
+    args.extend_from_slice(extra);
+    args.push(&ranges.diff);
+    push_paths(&mut args, paths);
+    args
+}
+
+fn log_args<'a>(range: &'a str, paths: &'a [String]) -> Vec<&'a str> {
+    let mut args = vec!["log", "--format=%h %s", range];
+    push_paths(&mut args, paths);
+    args
+}
+
+fn push_paths<'a>(args: &mut Vec<&'a str>, paths: &'a [String]) {
+    if !paths.is_empty() {
+        args.push("--");
+        args.extend(paths.iter().map(String::as_str));
     }
-    output::status(&closing);
-    let anthropic = matches!(provider, llm::Provider::Anthropic { .. });
-    if let Some(h) = usage::headroom(&reply.head, anthropic) {
-        if let Some(line) = usage::low_line(provider.name(), &h) {
-            output::warn(&line);
-        }
+}
+
+fn paths_suffix(paths: &[String]) -> String {
+    if paths.is_empty() {
+        String::new()
+    } else {
+        format!(" under {}", paths.join(" "))
     }
-    Ok(())
+}
+
+/// What the status and error lines call this diff.
+fn label(source: &str, paths: &[String]) -> String {
+    format!("{source}{}", paths_suffix(paths))
 }
 
 /// The range as git diff and git log want it, plus its two sides for the
@@ -95,14 +127,27 @@ pub fn run(range: Option<&str>, dry_run: bool, mode: llm::Mode) -> Result<(), Wh
 /// the log gets `A..B`: three-dot log is the symmetric difference.
 struct Ranges {
     diff: String,
-    log: String,
+    /// None when there are no commits to list (uncommitted work)
+    log: Option<String>,
+    /// what the status and error lines call it
+    source: String,
     base: String,
     head: Option<String>,
 }
 
 /// Default HEAD~1..; a bare ref becomes <ref>..HEAD. In describe mode the
 /// default is <base_default>...HEAD and a bare ref becomes <ref>...HEAD.
-fn normalize(range: Option<&str>, base_default: &str, describe: bool) -> Ranges {
+/// Uncommitted work is `git diff HEAD`: staged and unstaged together.
+fn normalize(range: Option<&str>, base_default: &str, describe: bool, uncommitted: bool) -> Ranges {
+    if uncommitted {
+        return Ranges {
+            diff: "HEAD".to_string(),
+            log: None,
+            source: "uncommitted work".to_string(),
+            base: String::new(),
+            head: None,
+        };
+    }
     let (base, head) = match range {
         None if describe => (base_default.to_string(), "HEAD".to_string()),
         None => ("HEAD~1".to_string(), "HEAD".to_string()),
@@ -126,67 +171,11 @@ fn normalize(range: Option<&str>, base_default: &str, describe: bool) -> Ranges 
     };
     let head = Some(head).filter(|h| !h.is_empty() && h != "HEAD");
     Ranges {
+        source: diff.clone(),
         diff,
-        log,
+        log: Some(log),
         base,
         head,
-    }
-}
-
-/// The section labels of the three output contracts (review, changelog,
-/// describe).
-const LABELS: [&str; 9] = [
-    "summary",
-    "watch out",
-    "added",
-    "changed",
-    "fixed",
-    "removed",
-    "title",
-    "description",
-    "testing",
-];
-
-/// Streams chunks to stdout line by line, painting the contract's section
-/// labels amber like the landing demo.
-struct LinePrinter {
-    buf: String,
-    colored: bool,
-}
-
-impl LinePrinter {
-    fn new(colored: bool) -> Self {
-        LinePrinter {
-            buf: String::new(),
-            colored,
-        }
-    }
-
-    fn push(&mut self, chunk: &str) {
-        for c in chunk.chars() {
-            if c == '\n' {
-                let line = std::mem::take(&mut self.buf);
-                println!("{}", self.paint(&line));
-            } else {
-                self.buf.push(c);
-            }
-        }
-    }
-
-    fn paint(&self, line: &str) -> String {
-        if self.colored && LABELS.contains(&line.trim_end()) {
-            format!("\x1b[33m{line}\x1b[0m")
-        } else {
-            line.to_string()
-        }
-    }
-
-    fn finish(&mut self) {
-        if !self.buf.is_empty() {
-            let line = std::mem::take(&mut self.buf);
-            println!("{}", self.paint(&line));
-        }
-        let _ = std::io::stdout().flush();
     }
 }
 
@@ -195,8 +184,8 @@ mod tests {
     use super::*;
 
     fn n(range: Option<&str>, describe: bool) -> (String, String, String, Option<String>) {
-        let r = normalize(range, "main", describe);
-        (r.diff, r.log, r.base, r.head)
+        let r = normalize(range, "main", describe, false);
+        (r.diff, r.log.unwrap_or_default(), r.base, r.head)
     }
 
     #[test]
@@ -231,5 +220,53 @@ mod tests {
         assert_eq!(log, "dev..HEAD");
         // an explicit two-dot range is taken as written
         assert_eq!(n(Some("HEAD~3.."), true).0, "HEAD~3..");
+    }
+
+    #[test]
+    fn uncommitted_work_is_git_diff_head_and_lists_no_commits() {
+        let r = normalize(None, "main", false, true);
+        assert_eq!(r.diff, "HEAD");
+        assert_eq!(r.log, None);
+        assert_eq!(r.source, "uncommitted work");
+        assert_eq!(r.base, "");
+    }
+
+    #[test]
+    fn a_pathspec_follows_a_double_dash() {
+        let r = normalize(Some("main..dev"), "main", false, false);
+        let paths = vec!["src/".to_string(), "docs/".to_string()];
+        assert_eq!(
+            diff_args(&["--numstat"], &r, &paths),
+            vec![
+                "diff",
+                "-M",
+                "--numstat",
+                "main..dev",
+                "--",
+                "src/",
+                "docs/"
+            ]
+        );
+        assert_eq!(
+            diff_args(&["--numstat"], &r, &[]),
+            vec!["diff", "-M", "--numstat", "main..dev"]
+        );
+        assert_eq!(
+            log_args("main..dev", &paths),
+            vec!["log", "--format=%h %s", "main..dev", "--", "src/", "docs/"]
+        );
+    }
+
+    #[test]
+    fn the_label_names_the_pathspec() {
+        assert_eq!(label("main..dev", &[]), "main..dev");
+        assert_eq!(
+            label("main..dev", &["src/".to_string()]),
+            "main..dev under src/"
+        );
+        assert_eq!(
+            label("uncommitted work", &["a".to_string(), "b".to_string()]),
+            "uncommitted work under a b"
+        );
     }
 }

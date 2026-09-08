@@ -7,9 +7,14 @@ import {
   detectProvider,
   EFFORTS,
   extractText,
+  isChatModel,
   MODEL_RE,
   modelFamily,
+  modelIds,
+  MODELS_CAP,
+  modelsUrl,
   SUGGESTED_MODELS,
+  type ProviderName,
 } from "./providers";
 
 describe("modelFamily", () => {
@@ -372,5 +377,67 @@ describe("StreamDecoder", () => {
     expect(
       JSON.parse(buildFollowupRequest("groq", "gsk_x", "s", [], "q").body).stream_options
     ).toEqual({ include_usage: true });
+  });
+});
+
+describe("model catalog", () => {
+  it("reads ids from the shared data[].id shape", () => {
+    expect(modelIds({ data: [{ id: "gpt-5.6-terra" }, { id: "gpt-5.6-sol" }] })).toEqual([
+      "gpt-5.6-terra",
+      "gpt-5.6-sol",
+    ]);
+    expect(modelIds({ data: [{ id: "claude-opus-5", display_name: "Claude Opus 5" }] })).toEqual([
+      "claude-opus-5",
+    ]);
+  });
+
+  it("a catalog is not a model list", () => {
+    expect(isChatModel("claude-opus-5")).toBe(true);
+    for (const id of [
+      "text-embedding-3-small",
+      "whisper-large-v3",
+      "tts-1",
+      "dall-e-3",
+      "omni-moderation-latest",
+      "llama-guard-4-12b",
+      "rerank-v1",
+      "stable-diffusion-xl",
+    ]) {
+      expect(isChatModel(id), id).toBe(false);
+    }
+    expect(modelIds({ data: [{ id: "gpt-5.6-terra" }, { id: "whisper-1" }] })).toEqual([
+      "gpt-5.6-terra",
+    ]);
+  });
+
+  it("shrugs off a body that is not a catalog", () => {
+    for (const body of [null, undefined, {}, { data: "nope" }, { data: [{}, { id: 4 }] }]) {
+      expect(modelIds(body)).toEqual([]);
+    }
+  });
+
+  it("drops ids the request body would reject anyway", () => {
+    expect(modelIds({ data: [{ id: "a b c" }, { id: "ok-1" }] })).toEqual(["ok-1"]);
+  });
+
+  it("caps a very long catalog", () => {
+    const data = Array.from({ length: MODELS_CAP + 10 }, (_, i) => ({ id: `m-${i}` }));
+    expect(modelIds({ data })).toHaveLength(MODELS_CAP);
+  });
+
+  it("hangs the models route off the same base as the chat call", () => {
+    expect(modelsUrl("anthropic")).toBe("https://api.anthropic.com/v1/models");
+    expect(modelsUrl("openai")).toBe("https://api.openai.com/v1/models");
+    // groq's base already carries /openai
+    expect(modelsUrl("groq")).toBe("https://api.groq.com/openai/v1/models");
+  });
+
+  it("routes a synced id to its provider, which is what /model acts on", () => {
+    // unknown to the shipped list and to the prefix rule
+    expect(modelFamily("qwen/qwen3.8-27b-preview")).toBe(null);
+    const synced = (p: ProviderName) => (p === "groq" ? ["qwen/qwen3.8-27b-preview"] : []);
+    expect(modelFamily("qwen/qwen3.8-27b-preview", synced)).toBe("groq");
+    // the shipped list still wins
+    expect(modelFamily("claude-opus-5", () => [])).toBe("anthropic");
   });
 });

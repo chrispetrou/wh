@@ -69,10 +69,17 @@ wh rm                         # prune worktrees whose branches are merged
 </picture>
 
 `wh explain` reads a diff, drops what a reviewer would skip (lockfiles,
-vendored and minified files), and streams a `summary` and a `watch out`.
-`--changelog` turns the same diff into release notes, `--describe` into a
-pull request to paste. Keys and providers come from the environment:
-`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GROQ_API_KEY`, or none for Ollama.
+vendored and minified files), and streams a `summary` and a `watch out`. The
+diff can be a range, the work you have not committed yet (`--uncommitted`),
+or any of them cut to a pathspec after `--`. `--changelog` turns it into
+release notes, `--describe` into a pull request to paste, and `--chat` keeps
+the conversation open for follow-up questions about the same diff.
+
+`wh why src/git.rs:42` answers what `git blame` cannot: why the line is
+there. `wh models` lists what your provider offers, asked of the provider
+itself, so no list shipped in the binary has to be kept current. Keys and
+providers come from the environment: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+`GROQ_API_KEY`, or none for Ollama.
 
 Every command, flag, range form, environment variable, and error message is
 in the [cli docs](https://wh-site.pages.dev/docs/cli/commands).
@@ -87,7 +94,8 @@ Sign in with GitHub, pick a repo, and ask in plain words: `what changed in pr
 #42`, `log`, `history src/git.rs`, `why src/git.rs:42`, `rebase feat/auth`,
 `pick 3 5 onto release/1.x`. Keys are pasted once and stay in your browser.
 `/theme` has the everyday `auto`, `light`, and `dark`, plus two opt-in
-phosphor looks, `vintage` (green) and `amber`.
+phosphor looks, `vintage` (green) and `amber`. `/model sync` asks your
+provider for its current model list, so a new model needs no redeploy.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="readme/web-log-dark.svg">
@@ -129,5 +137,9 @@ CI runs fmt, clippy, tests, a 3.2MiB size gate on the binary, the web tests
 and build, and a brand check (no em dashes outside the landing mock). Tagged
 releases (`v*`) build the four binaries and open a draft GitHub release with
 checksums.
+
+Bug fixes and docs are welcome now; features get an issue first, while the
+design settles. [CONTRIBUTING.md](CONTRIBUTING.md) has what wh has decided
+not to do and why, what CI will check, and the parts that catch people.
 
 GPL-3.0 license.

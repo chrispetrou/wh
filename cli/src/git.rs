@@ -23,6 +23,23 @@ pub fn run(dir: &Path, args: &[&str]) -> Result<String, WhError> {
     }
 }
 
+/// Run git without trimming the output. Blame porcelain ends a blank
+/// source line as a bare tab, which `run`'s trim_end would swallow along
+/// with the newline before it.
+pub fn run_raw(dir: &Path, args: &[&str]) -> Result<String, WhError> {
+    let out = base(dir).args(args).output().map_err(WhError::Io)?;
+    if out.status.success() {
+        Ok(String::from_utf8_lossy(&out.stdout).to_string())
+    } else {
+        let stderr = String::from_utf8_lossy(&out.stderr).trim_end().to_string();
+        if stderr.contains("not a git repository") {
+            Err(WhError::NotARepo)
+        } else {
+            Err(WhError::Git { stderr })
+        }
+    }
+}
+
 /// Run git for its exit code only (rev-parse --verify, merge-base --is-ancestor).
 pub fn run_ok(dir: &Path, args: &[&str]) -> bool {
     base(dir)
@@ -186,6 +203,109 @@ pub fn status_of(wt: &Path) -> Result<WtStatus, WhError> {
     })
 }
 
+/// The commit a line was last changed in, and the source lines themselves.
+pub struct Blame {
+    pub sha: String,
+    pub lines: Vec<String>,
+    /// the path as it stood in the blaming commit: blame follows a
+    /// rename, `git show -- <path>` does not
+    pub path: String,
+    /// distinct further commits covering the span
+    pub others: usize,
+    /// any line in the span is not committed yet
+    pub uncommitted: bool,
+}
+
+/// One commit's human fields. git formats the date, so no civil-date
+/// arithmetic here.
+pub struct CommitMeta {
+    pub short: String,
+    pub author: String,
+    pub date: String,
+    pub subject: String,
+}
+
+/// `git blame -L <first>,<last> --porcelain -- <path>`.
+pub fn blame(dir: &Path, path: &str, first: u32, last: u32) -> Result<Blame, WhError> {
+    let range = format!("{first},{last}");
+    let out = run_raw(dir, &["blame", "-L", &range, "--porcelain", "--", path])?;
+    let mut b = parse_blame(&out);
+    if b.path.is_empty() {
+        b.path = path.to_string();
+    }
+    Ok(b)
+}
+
+/// Parses porcelain blame. A group opens on a line whose first token is a
+/// 40-hex sha; its header lines (author, summary, filename ...) are
+/// skipped, and the content line that follows starts with a tab.
+pub fn parse_blame(s: &str) -> Blame {
+    let mut sha = String::new();
+    let mut path = String::new();
+    let mut lines = Vec::new();
+    let mut seen: Vec<String> = Vec::new();
+    let mut uncommitted = false;
+    for line in s.lines() {
+        if let Some(rest) = line.strip_prefix('\t') {
+            lines.push(rest.to_string());
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("filename ") {
+            // the first group's filename is the one its diff carries
+            if path.is_empty() {
+                path = rest.to_string();
+            }
+            continue;
+        }
+        let tok = line.split(' ').next().unwrap_or("");
+        if tok.len() == 40 && tok.chars().all(|c| c.is_ascii_hexdigit()) {
+            // the all-zero sha is the working tree, not a commit
+            if tok == ZERO_SHA {
+                uncommitted = true;
+                continue;
+            }
+            if sha.is_empty() {
+                sha = tok.to_string();
+            }
+            if !seen.iter().any(|s| s == tok) {
+                seen.push(tok.to_string());
+            }
+        }
+    }
+    Blame {
+        sha,
+        path,
+        lines,
+        others: seen.len().saturating_sub(1),
+        uncommitted,
+    }
+}
+
+/// git's stand-in sha for a line that is not committed yet.
+pub const ZERO_SHA: &str = "0000000000000000000000000000000000000000";
+
+/// `git show -s` with a NUL-separated format, so a subject with spaces
+/// survives the split.
+pub fn commit_meta(dir: &Path, sha: &str) -> Result<CommitMeta, WhError> {
+    let out = run(
+        dir,
+        &[
+            "show",
+            "-s",
+            "--format=%h%x00%an%x00%ad%x00%s",
+            "--date=short",
+            sha,
+        ],
+    )?;
+    let mut it = out.splitn(4, '\0');
+    Ok(CommitMeta {
+        short: it.next().unwrap_or_default().to_string(),
+        author: it.next().unwrap_or_default().to_string(),
+        date: it.next().unwrap_or_default().to_string(),
+        subject: it.next().unwrap_or_default().to_string(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,6 +327,64 @@ mod tests {
         assert!(w[3].locked);
         assert_eq!(w[3].branch.as_deref(), Some("x"));
         assert!(w[4].prunable);
+    }
+
+    #[test]
+    fn parses_blame_porcelain() {
+        let one = "70cd65af1da710a1511088084dd6100ad20d696d 5 5 1\n\
+author Ada\n\
+summary a subject\n\
+filename a.txt\n\
+\tthe line\n";
+        let b = parse_blame(one);
+        assert_eq!(b.sha, "70cd65af1da710a1511088084dd6100ad20d696d");
+        assert_eq!(b.lines, vec!["the line".to_string()]);
+        assert_eq!(b.others, 0);
+    }
+
+    #[test]
+    fn blame_keeps_the_first_sha_and_counts_the_rest() {
+        let two = "1111111111111111111111111111111111111111 1 1 1\n\
+filename a.txt\n\
+\tone\n\
+2222222222222222222222222222222222222222 2 2 1\n\
+filename a.txt\n\
+\ttwo\n";
+        let b = parse_blame(two);
+        assert_eq!(b.sha, "1111111111111111111111111111111111111111");
+        assert_eq!(b.lines, vec!["one".to_string(), "two".to_string()]);
+        assert_eq!(b.others, 1);
+    }
+
+    #[test]
+    fn blame_keeps_a_blank_last_line_and_the_rename_path() {
+        // the last content line is blank: run()'s trim_end would eat it
+        let porcelain = "1111111111111111111111111111111111111111 2 2 2\n\
+filename old.rs\n\
+\t    x();\n\
+1111111111111111111111111111111111111111 3 3\n\
+filename old.rs\n\
+\t\n";
+        let b = parse_blame(porcelain);
+        assert_eq!(b.lines, vec!["    x();".to_string(), String::new()]);
+        // blame followed a rename; the diff must be asked for by that name
+        assert_eq!(b.path, "old.rs");
+        assert!(!b.uncommitted);
+    }
+
+    #[test]
+    fn blame_flags_an_uncommitted_line_anywhere_in_the_span() {
+        let porcelain = "1111111111111111111111111111111111111111 1 1 1\n\
+filename f.txt\n\
+\tcommitted\n\
+0000000000000000000000000000000000000000 2 2 1\n\
+filename f.txt\n\
+\tnot yet\n";
+        let b = parse_blame(porcelain);
+        assert!(b.uncommitted);
+        // the working-tree pseudo sha is not a commit that "touches it"
+        assert_eq!(b.others, 0);
+        assert_eq!(b.sha, "1111111111111111111111111111111111111111");
     }
 
     #[test]

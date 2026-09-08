@@ -55,7 +55,33 @@ WH_MODEL overrides the model.")]
         /// review
         #[arg(long, conflicts_with = "changelog")]
         describe: bool,
+        /// staged and unstaged work instead of a range (git diff HEAD)
+        #[arg(long, conflicts_with = "range")]
+        uncommitted: bool,
+        /// keep asking follow-up questions after the answer
+        #[arg(long, conflicts_with = "dry_run")]
+        chat: bool,
+        /// limit to these paths (a git pathspec, after --)
+        #[arg(last = true, value_name = "pathspec")]
+        paths: Vec<String>,
     },
+    /// explain why a line of code exists (git blame, then the commit
+    /// that last touched it)
+    Why {
+        /// path:line, or path:first-last
+        target: String,
+        /// print the preprocessed payload instead of querying the model
+        #[arg(long)]
+        dry_run: bool,
+        /// keep asking follow-up questions after the answer
+        #[arg(long, conflicts_with = "dry_run")]
+        chat: bool,
+    },
+    /// list the models the provider offers
+    #[command(after_help = "\
+the same key and base url wh explain uses (WH_PROVIDER picks the provider,
+WH_MODEL the model). ids on stdout, so `wh models | grep` works.")]
+    Models,
     /// remove worktrees whose branches are merged
     Rm {
         /// branch or directory of a specific worktree to remove

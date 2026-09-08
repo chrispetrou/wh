@@ -1,9 +1,7 @@
 mod common;
 
-use common::TestRepo;
+use common::{failing, fake_server, ok, two_commits, FakeReply, TestRepo, GROQ_ANSWER};
 use predicates::prelude::*;
-use std::io::{Read, Write};
-use std::net::TcpListener;
 
 #[test]
 fn dry_run_prints_payload() {
@@ -69,99 +67,6 @@ fn empty_range_errors() {
         .failure()
         .stderr(predicate::str::contains("nothing to explain in HEAD..HEAD"));
 }
-
-/// What the fake provider answers with: status line, extra headers, body
-/// type, and whether a `100 Continue` block goes first.
-struct FakeReply {
-    status: &'static str,
-    headers: &'static [(&'static str, &'static str)],
-    content_type: &'static str,
-    interim: bool,
-}
-
-fn ok(content_type: &'static str) -> FakeReply {
-    FakeReply {
-        status: "200 OK",
-        headers: &[],
-        content_type,
-        interim: false,
-    }
-}
-
-fn failing(status: &'static str, headers: &'static [(&'static str, &'static str)]) -> FakeReply {
-    FakeReply {
-        status,
-        headers,
-        content_type: "application/json",
-        interim: false,
-    }
-}
-
-/// One-shot fake provider: accepts a single request, replies with the
-/// given chunks (ndjson for ollama, sse for the openai-shaped ones).
-fn fake_server(reply: FakeReply, chunks: &[&str]) -> (String, std::thread::JoinHandle<String>) {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let url = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
-    let body: String = chunks.concat();
-    let handle = std::thread::spawn(move || {
-        let (mut sock, _) = listener.accept().unwrap();
-        let mut req = Vec::new();
-        let mut buf = [0u8; 4096];
-        let request = loop {
-            let n = sock.read(&mut buf).unwrap();
-            req.extend_from_slice(&buf[..n]);
-            let text = String::from_utf8_lossy(&req).into_owned();
-            if let Some(head_end) = text.find("\r\n\r\n") {
-                let content_length = text
-                    .lines()
-                    .find_map(|l| {
-                        l.to_lowercase()
-                            .strip_prefix("content-length:")
-                            .map(|v| v.trim().parse::<usize>().unwrap())
-                    })
-                    .unwrap_or(0);
-                if req.len() >= head_end + 4 + content_length {
-                    break text;
-                }
-            }
-            if n == 0 {
-                break text;
-            }
-        };
-        let mut out = String::new();
-        if reply.interim {
-            out.push_str("HTTP/1.1 100 Continue\r\n\r\n");
-        }
-        out.push_str(&format!("HTTP/1.1 {}\r\n", reply.status));
-        for (k, v) in reply.headers {
-            out.push_str(&format!("{k}: {v}\r\n"));
-        }
-        out.push_str(&format!(
-            "content-type: {}\r\nconnection: close\r\n\r\n{body}",
-            reply.content_type
-        ));
-        sock.write_all(out.as_bytes()).unwrap();
-        request
-    });
-    (url, handle)
-}
-
-fn two_commits() -> TestRepo {
-    let t = TestRepo::new();
-    t.write("a.txt", "one\n");
-    t.commit("first");
-    t.write("a.txt", "two\n");
-    t.commit("second");
-    t
-}
-
-const GROQ_ANSWER: &[&str] = &[
-    "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"\"}}]}\n\n",
-    "data: {\"choices\":[{\"delta\":{\"content\":\"summary\\nswapped one for two.\\n\"}}]}\n\n",
-    "data: {\"choices\":[{\"delta\":{\"content\":\"\\nwatch out\\nnothing notable.\\n\"}}]}\n\n",
-    "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"x_groq\":{\"usage\":{\"queue_time\":0.01,\"prompt_tokens\":9,\"completion_tokens\":4,\"total_tokens\":13}}}\n\n",
-    "data: [DONE]\n\n",
-];
 
 #[test]
 fn streams_from_fake_ollama() {
@@ -575,4 +480,124 @@ fn rejects_unknown_provider() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("unknown WH_PROVIDER 'nope'"));
+}
+
+#[test]
+fn uncommitted_work_has_no_commits_block() {
+    let t = two_commits();
+    t.write("a.txt", "three\n");
+    t.wh()
+        .args(["explain", "--uncommitted", "--dry-run"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("files: 1 (+1 -1)"))
+        .stdout(predicate::str::contains("diff --git a/a.txt"))
+        .stdout(predicate::str::contains("commits:").not());
+}
+
+#[test]
+fn uncommitted_sees_staged_work_too() {
+    let t = two_commits();
+    t.write("b.txt", "new\n");
+    t.git(&["add", "b.txt"]);
+    t.wh()
+        .args(["explain", "--uncommitted", "--dry-run"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("diff --git a/b.txt"));
+}
+
+#[test]
+fn a_clean_tree_has_nothing_uncommitted() {
+    let t = two_commits();
+    t.wh()
+        .args(["explain", "--uncommitted", "--dry-run"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("nothing uncommitted to explain"))
+        .stderr(predicate::str::contains(
+            "untracked files are not in a diff",
+        ));
+}
+
+#[test]
+fn uncommitted_names_itself_in_the_status_line() {
+    let t = two_commits();
+    t.write("a.txt", "three\n");
+    let (url, server) = fake_server(ok("text/event-stream"), GROQ_ANSWER);
+    t.wh()
+        .args(["explain", "--uncommitted"])
+        .env("WH_PROVIDER", "groq")
+        .env("GROQ_API_KEY", "gsk_test")
+        .env("WH_GROQ_URL", &url)
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("reading uncommitted work"));
+    server.join().unwrap();
+}
+
+#[test]
+fn uncommitted_conflicts_with_a_range() {
+    let t = two_commits();
+    t.wh()
+        .args(["explain", "--uncommitted", "HEAD~1.."])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("cannot be used with"));
+}
+
+#[test]
+fn a_pathspec_cuts_the_diff_and_the_log() {
+    let t = TestRepo::new();
+    t.write("seed.txt", "seed\n");
+    t.commit("seed");
+    t.write("src/a.txt", "one\n");
+    t.commit("src first");
+    t.write("docs/b.txt", "doc\n");
+    t.commit("docs only");
+    t.wh()
+        .args(["explain", "HEAD~2..", "--dry-run", "--", "src/"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("commits: 1"))
+        .stdout(predicate::str::contains("src first"))
+        .stdout(predicate::str::contains("docs/b.txt").not());
+}
+
+#[test]
+fn a_pathspec_that_matches_nothing_says_so() {
+    let t = two_commits();
+    t.wh()
+        .args(["explain", "HEAD~1..", "--dry-run", "--", "nope/"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "nothing to explain in HEAD~1.. under nope/",
+        ));
+}
+
+#[test]
+fn chat_and_dry_run_conflict() {
+    let t = two_commits();
+    t.wh()
+        .args(["explain", "--chat", "--dry-run"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("cannot be used with"));
+}
+
+#[test]
+fn chat_degrades_to_one_shot_without_a_tty() {
+    let t = two_commits();
+    let (url, server) = fake_server(ok("text/event-stream"), GROQ_ANSWER);
+    t.wh()
+        .args(["explain", "--chat"])
+        .env("WH_PROVIDER", "groq")
+        .env("GROQ_API_KEY", "gsk_test")
+        .env("WH_GROQ_URL", &url)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("swapped one for two."))
+        .stdout(predicate::str::contains("?").not());
+    server.join().unwrap();
 }
