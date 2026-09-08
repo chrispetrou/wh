@@ -2,20 +2,20 @@ use crate::commands::answer::answer;
 use crate::{git, llm, output, preprocess, WhError};
 use std::env;
 
-const ZERO: &str = "0000000000000000000000000000000000000000";
-
 pub fn run(target: &str, dry_run: bool, chat: bool) -> Result<(), WhError> {
     let cwd = env::current_dir()?;
     let (path, first, last) = parse_target(target)?;
     // git's own words carry the file's length and a missing path
     let b = git::blame(&cwd, path, first, last)?;
-    if b.sha.is_empty() {
-        return Err(WhError::Msg(format!("no blame for {path}")));
-    }
-    if b.sha == ZERO {
+    // any uncommitted line in the span, not just the first: the rest of
+    // the answer would be about a commit that never saw it
+    if b.uncommitted {
         return Err(WhError::Msg(format!(
             "{target} is not committed yet\ncommit or stash it first"
         )));
+    }
+    if b.sha.is_empty() {
+        return Err(WhError::Msg(format!("no blame for {path}")));
     }
     let meta = git::commit_meta(&cwd, &b.sha)?;
 
@@ -33,12 +33,20 @@ pub fn run(target: &str, dry_run: bool, chat: bool) -> Result<(), WhError> {
         a.extend(extra.iter().map(|s| s.to_string()));
         a.push(b.sha.clone());
         a.push("--".to_string());
-        a.push(path.to_string());
+        // blame follows renames, `git show -- <path>` does not, so ask
+        // for the name the file had in that commit
+        a.push(b.path.clone());
         a
     };
     let diff_args = show(&["--no-color", "--no-ext-diff"]);
     let numstat_args = show(&["--numstat"]);
     let diff = git::run(&cwd, &as_str(&diff_args))?;
+    if diff.trim().is_empty() {
+        return Err(WhError::Msg(format!(
+            "{} changed nothing in {}",
+            meta.short, b.path
+        )));
+    }
     let numstat = git::run(&cwd, &as_str(&numstat_args))?;
     let commits = format!("{} {}", meta.short, meta.subject);
 

@@ -27,14 +27,13 @@ export function modelArgs(ks: KeyStore = keyStore, cat: Catalog = catalog): stri
   // adding to it: merging would keep a retired id in the menu forever,
   // which is the whole thing this is meant to fix. the seed stays the
   // answer for a provider nobody has synced
-  return [
-    ...order.flatMap((p) => {
-      const synced = cat.models(p);
-      return synced.length ? synced : SUGGESTED_MODELS[p];
-    }),
-    "sync",
-    ...ks.providers().map((p) => `sync ${p}`),
-  ];
+  const models = order.flatMap((p) => {
+    const synced = cat.models(p);
+    return synced.length ? synced : SUGGESTED_MODELS[p];
+  });
+  // two providers pointed at the same gateway answer alike; the menu
+  // keys rows by their text, so one row per id
+  return [...new Set(models), "sync", ...ks.providers().map((p) => `sync ${p}`)];
 }
 
 export function effortArgs(ks: KeyStore = keyStore): string[] {

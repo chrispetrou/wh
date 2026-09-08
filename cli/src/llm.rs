@@ -568,6 +568,22 @@ pub fn is_chat_model(id: &str) -> bool {
     !NOT_CHAT.iter().any(|p| lower.contains(p))
 }
 
+/// The web's MODEL_RE, in rust: an id the request body would accept.
+/// Both sides must filter a catalog the same way, or the two surfaces
+/// answer "is the pinned default still offered" against different sets
+/// (shared/prompts/provider.md).
+pub fn valid_model_id(id: &str) -> bool {
+    let mut chars = id.chars();
+    let first = match chars.next() {
+        Some(c) => c,
+        None => return false,
+    };
+    if !first.is_ascii_alphanumeric() || id.len() > 64 {
+        return false;
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | ':' | '/' | '-'))
+}
+
 /// The array at a json pointer path.
 fn arr_at<'a>(v: &'a Value, path: &str) -> Option<&'a Vec<Value>> {
     v.pointer(path).and_then(Value::as_array)
@@ -589,7 +605,7 @@ pub fn model_ids(provider: &Provider, body: &str) -> Vec<String> {
     items
         .iter()
         .filter_map(|m| m.get(field).and_then(Value::as_str))
-        .filter(|id| is_chat_model(id))
+        .filter(|id| valid_model_id(id) && is_chat_model(id))
         .map(str::to_string)
         .take(MODELS_CAP)
         .collect()
@@ -609,6 +625,11 @@ pub fn list_models(provider: &Provider) -> Result<Vec<String>, WhError> {
         if body.len() > 200_000 {
             break;
         }
+    }
+    // drain whatever is left before waiting: curl blocked writing into a
+    // full pipe would never exit, and wait() would never return
+    for line in lines {
+        let _ = line;
     }
     // a body cut short is a dropped connection, not an empty catalog
     let status = child.wait()?;
@@ -1204,6 +1225,24 @@ mod tests {
         let ids = model_ids(&openai, &body);
         assert_eq!(ids.len(), 61);
         assert!(ids.iter().any(|i| i == "gpt-5.6-terra"));
+    }
+
+    #[test]
+    fn both_surfaces_filter_a_catalog_the_same_way() {
+        // the web drops these with MODEL_RE; so must the cli, or the two
+        // answer "is the default still offered" against different sets
+        assert!(valid_model_id("openai/gpt-oss-120b"));
+        assert!(valid_model_id("claude-opus-5"));
+        assert!(!valid_model_id("has a space"));
+        assert!(!valid_model_id("-leading-dash"));
+        assert!(!valid_model_id(""));
+        assert!(!valid_model_id(&"x".repeat(65)));
+        let openai = Provider::OpenAi {
+            key: "k".into(),
+            url: "http://x".into(),
+        };
+        let body = r#"{"data":[{"id":"gpt-5.6-terra"},{"id":"a b"},{"id":"-x"}]}"#;
+        assert_eq!(model_ids(&openai, body), vec!["gpt-5.6-terra"]);
     }
 
     #[test]

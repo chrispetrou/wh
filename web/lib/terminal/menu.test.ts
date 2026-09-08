@@ -132,6 +132,18 @@ describe("model rows", () => {
     expect(rows).toContain("sync groq");
   });
 
+  it("offers one row per id when two gateways answer alike", () => {
+    const ks = createKeyStore(memory());
+    ks.addKey("gsk_x");
+    ks.addKey("sk-openai");
+    const cat = createCatalog(memory());
+    // both providers pointed at the same gateway
+    cat.set("groq", ["shared-model-a", "shared-model-b"]);
+    cat.set("openai", ["shared-model-a", "shared-model-b"]);
+    const rows = modelArgs(ks, cat);
+    expect(rows.filter((r) => r === "shared-model-a")).toHaveLength(1);
+  });
+
   it("keeps the whole catalog, so a retirement check is not fooled by a cap", () => {
     const ks = createKeyStore(memory());
     ks.addKey("sk-openai");

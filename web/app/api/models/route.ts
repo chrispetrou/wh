@@ -50,7 +50,11 @@ export async function GET(req: NextRequest) {
   }
   if (!res.ok) {
     const f = providerFailure(res.status, body, "", { provider, headers: res.headers });
-    return NextResponse.json({ error: f.error, hint: f.hint }, { status: f.status });
+    // no model was asked about here, so never name a blank one
+    const error = f.error.startsWith("provider has no model")
+      ? "provider has no such endpoint"
+      : f.error;
+    return NextResponse.json({ error, hint: error === f.error ? f.hint : url }, { status: f.status });
   }
 
   let parsed: unknown;

@@ -432,7 +432,7 @@ describe("model catalog", () => {
     expect(modelsUrl("groq")).toBe("https://api.groq.com/openai/v1/models");
   });
 
-  it("routes a synced id to its provider", () => {
+  it("routes a synced id to its provider, which is what /model acts on", () => {
     // unknown to the shipped list and to the prefix rule
     expect(modelFamily("qwen/qwen3.8-27b-preview")).toBe(null);
     const synced = (p: ProviderName) => (p === "groq" ? ["qwen/qwen3.8-27b-preview"] : []);

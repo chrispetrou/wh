@@ -92,11 +92,12 @@ so a gateway is followed automatically.
 A catalog is not a model list: these endpoints also return embedding,
 speech, and image models. Both implementations drop ids matching
 `embed`, `whisper`, `tts`, `dall-e`, `moderation`, `guard`, `rerank`, or
-`stable-diffusion`, and keep the provider's own order. The 200-id cap is
-a safety bound on a pathological response, never a curation device: a
-truncated list would make "is the pinned default still offered" answer
-against a slice rather than the catalog, and report a live model as
-retired.
+`stable-diffusion`, drop any id the request body would reject anyway
+(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$`), and keep the provider's own
+order. The 200-id cap is a safety bound on a pathological response,
+never a curation device: a truncated list would make "is the pinned
+default still offered" answer against a slice rather than the catalog,
+and report a live model as retired.
 The rule is a heuristic, not a contract, and the two sides must apply the
 same one.
 

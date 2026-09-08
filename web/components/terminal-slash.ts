@@ -186,8 +186,10 @@ export function runSlash(ctx: SlashContext, raw: string) {
       } else if (!MODEL_RE.test(m)) {
         muted(["that does not look like a model id."]);
       } else {
-        // ids of unknown family (llama-*, mixtral-*) stay on the active provider
-        const target = modelFamily(m) ?? active;
+        // the catalog knows ids the shipped list never will, so the row
+        // the menu annotated `groq` also switches to groq. ids of unknown
+        // family (llama-*, mixtral-*) stay on the active provider
+        const target = modelFamily(m, (p) => catalog.models(p)) ?? active;
         if (!keyStore.hasKey(target)) {
           muted([`no ${target} key yet; /key <value> adds one.`]);
         } else {

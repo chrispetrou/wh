@@ -148,8 +148,15 @@ fn follow_up(
             }
             Step::Ask(q) => {
                 turns.push(llm::Turn::user(q));
-                let text = ask(provider, model, &system, turns)?;
-                turns.push(llm::Turn::assistant(text));
+                match ask(provider, model, &system, turns) {
+                    Ok(text) => turns.push(llm::Turn::assistant(text)),
+                    // a rate limit should cost the question, not the
+                    // conversation and the diff behind it
+                    Err(e) => {
+                        turns.pop();
+                        output::error(&e.to_string());
+                    }
+                }
             }
         }
     }
