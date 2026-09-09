@@ -1,0 +1,50 @@
+---
+title: rebase and cherry-pick
+description: An editable plan in the transcript, and under it the git commands to paste. Nothing here runs.
+---
+
+```
+rebase feat/auth                  # a branch
+rebase main..feat/auth            # a range
+rebase pr #42                     # a pull request
+rebase last 5 on feat/auth        # the last few commits
+rebase 2..5                       # a span of log rows
+pick 3 5 onto release/1.x         # a cherry-pick, from log rows or shas
+backport pr #42 to release/1.x    # the same, from a pr
+```
+
+## a rebase plan
+
+The commits are listed as an editable plan, newest first.
+
+- Reorder a row by dragging it or with shift+up/down
+- Set its action with `p` `r` `s` `f` `d` `e` (pick, reword, squash, fixup, drop, edit) or the buttons in its panel
+- Edit a message inline, or let the model draft one from the diff with `draft message`
+
+The paste rewrites a branch from its tip, so a span that stops short of a branch label takes the rows above it along as picks. When a merge sits in the way the plan is refused, and a cherry-pick (`pick 2 5 onto <branch>`) is the way to reorder.
+
+## a cherry-pick plan
+
+The same block, two actions: `p` to pick and `d` to drop. Reorder, done.
+
+## dragging rows
+
+- Press a row of a `log`, `prs`, or `history` block (it shows a grab cursor) and drop it on a branch in a `branches` listing to start a cherry-pick onto that branch
+- Drop it into an open plan to add it there; its files are checked against the target on the way in
+- esc abandons a drag
+
+## the block to paste
+
+- A rebase: the messages and the todo as heredocs under `/tmp/wh-*`, then one `git rebase -i` with `GIT_SEQUENCE_EDITOR` pointing at the todo, so no editor opens. A reword or squash with a drafted message becomes `pick` or `fixup` plus `exec git commit --amend -F`
+- A cherry-pick: `git switch` and `git cherry-pick -x`, every branch name shell-quoted
+- `copy` takes it; `reset` (once you have changed something) puts the rows back
+
+<Callout label="conflicts">
+  Before you paste, a row whose files also changed on the target is flagged in amber and a verdict line sums up the conflict risk from file overlap. git's own conflict handling takes over if the guess was wrong.
+</Callout>
+
+## limits
+
+- Plans stop at 30 commits
+- Merge commits are refused, since reordering needs a linear history
+- Nothing here runs: the commands run in your local clone, and you push

@@ -1,0 +1,41 @@
+---
+title: when a call fails
+description: One line under an amber error label, in plain words, never the provider's json, with the way out on the line below where there is one.
+---
+
+```
+provider rejected the key                          set GROQ_API_KEY to a valid key
+your groq key is out of credit                     top up at console.groq.com/settings/billing, or use another key
+your openai key hit its spend limit                raise it at platform.openai.com/..., or use another key
+provider rate limit, try again in 12s
+provider rate limit, try again in a moment
+provider daily limit reached, resets in 3h 12m
+provider daily limit reached, resets tomorrow
+the diff is too big for gpt-5.6-terra: 17842 tokens, limit 8192
+                                                   try fewer commits, a narrower range, or WH_MODEL with a larger context
+provider has no model gpt-6                        wh models lists the ones the provider offers
+provider has no models endpoint                    <the base url that has none>
+provider is overloaded, try again in a moment
+provider returned no text
+provider error: <the provider's message, cut short>
+could not reach api.groq.com                       <curl's own last line>
+lost the connection to api.groq.com
+```
+
+The `set <var> to a valid key` hint names the variable of the active provider; ollama has no key, so it has no hint. `try again in a moment` and `resets tomorrow` are the wording when the provider does not say how long. The `too big` line always carries its hint. `could not reach` is followed by curl's last stderr line with the `curl: (N)` prefix removed; `lost the connection` means the stream was cut after text had already arrived.
+
+`provider has no models endpoint` is its own line on purpose: a 404 on the models path means the base url is a gateway that only proxies chat, never that the model is missing.
+
+A few failures are not the provider's: `not a git repository` when you are outside one, `curl not found` when there is no curl on the path, and `provider sent no reply` or `provider sent no http status` when curl returned nothing usable.
+
+## headroom
+
+A key nearly out of headroom (under a tenth of its window left, as reported by the provider) gets an amber warning after the answer:
+
+```
+low on groq tokens: 8.2k of 100k left, resets in 42s
+```
+
+## the shared contract
+
+The wording is a shared contract in `shared/prompts/provider.md`: the web terminal says the same things under the same amber `error:` label, so a failure reads the same wherever you ask.

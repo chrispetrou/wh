@@ -1,0 +1,127 @@
+---
+title: commands
+description: Eight subcommands. Worktrees in, listed, switched, and pruned; a diff explained; a line traced back; a shell wrapper printed.
+---
+
+<Tbl kind="cli" head={false} pad9>
+
+| command | what it does |
+|---|---|
+| `wh new <branch> [--from <ref>]` | create a worktree in a sibling dir, copy `.env*` files into it |
+| `wh ls` | list worktrees with dirty count and ahead/behind |
+| `wh switch [query]` | pick a worktree (or match one) and cd into it |
+| `wh rm [name] [--dry-run] [--yes] [--force]` | remove merged worktrees, or one by name |
+| `wh explain [range] [--uncommitted] [--changelog] [--describe] [--chat] [--dry-run] [-- <pathspec>]` | a plain-english review, release notes, or a pr draft for a diff |
+| `wh why <path>:<line> [--chat] [--dry-run]` | why a line exists: git blame, then the commit that last touched it |
+| `wh models` | the models the provider offers, asked of the provider itself |
+| `wh init <zsh\|bash\|fish>` | print the shell wrapper that makes `switch` a real `cd` |
+
+</Tbl>
+
+`--help` on any of them is short and lowercase. Colors only when stdout is a terminal and `NO_COLOR` is unset.
+
+Exit codes:
+
+- `0` success, including a declined prompt
+- `1` any error, or a cancelled picker
+- `2` bad usage: a missing argument, `--force` without a name, `--changelog` together with `--describe`, `--uncommitted` together with a range, `--chat` together with `--dry-run`
+
+## wh new
+
+```
+wh new fix/nav-323                  # ../repo.fix-nav-323, from HEAD
+wh new hotfix/1.2 --from v1.2       # branch from a tag
+wh new feat/auth                    # existing branch: just checks it out
+```
+
+- The worktree lands next to the main one as `<repo>.<branch>`, anchored to the main worktree, never to where you stand
+- `/` and other unsafe characters become `-`; `.` and `_` stay; if nothing survives: `cannot derive a directory name from '<branch>'`
+- The branch is created from `HEAD` when missing; `--from <ref>` branches from elsewhere and is ignored when the branch exists
+- Top-level `.env` and `.env.*` files are copied from the worktree you stand in (not `.envrc`, nothing recursive), skipping any that exist; no `copied` line when there was nothing to copy
+- Refuses with a one-line reason when the directory exists or the branch is checked out elsewhere
+
+## wh ls
+
+```
+main          clean
+feat/auth     clean
+fix/nav-323   2 dirty · ahead 3
+spike/wasm    clean · behind 12
+```
+
+- main worktree first, then alphabetical
+- Status: `clean`, `N dirty`, or `stale` (a worktree git can no longer read, or one it would prune)
+- The muted column: `ahead N`, `behind N`, or both, against the upstream
+- A detached worktree shows as `<sha> detached`
+
+## wh switch
+
+```
+wh switch auth        # unique match: no picker, straight there
+wh switch fix         # 'fix' matches 2 worktrees: lists them, exit 1
+wh switch             # no terminal (a script, a pipe): asks for a query
+```
+
+- Type to filter, arrows or ctrl-p / ctrl-n to move, enter to select, esc or ctrl-c to cancel
+- An exact name wins over a substring match; an ambiguous query lists the matches and fails with `'<query>' matches N worktrees`
+- The picker draws on `/dev/tty` and prints only the chosen path to stdout, which the `wh init` wrapper turns into a `cd`; without the wrapper, `cd "$(wh switch)"` does the same
+- With no terminal and no query: `not a terminal; pass a query: wh switch <query>`
+
+## wh rm
+
+```
+wh rm --dry-run                   # preview only
+wh rm --yes                       # no prompt (required when not a terminal)
+wh rm feat/auth                   # one worktree, by branch or directory
+wh rm feat/auth --force           # even if dirty or unmerged
+```
+
+With no name, `wh rm` prunes worktrees whose branches are merged into the default branch and deletes those branches. Merged means one of:
+
+- The branch is an ancestor of the default branch
+- Every one of its commits has an equivalent patch there (a rebase merge)
+- Its whole tree landed as a single commit (a squash merge)
+
+It never touches dirty, locked, or detached worktrees, the main worktree, or the one you stand in. Dirty candidates are listed as `skipped <path> (<branch>): N dirty`; with nothing to do it says `nothing to prune`. A prune ends with `pruned N worktree(s)`; a named removal prints `removed <path> (<branch>)` and no summary line.
+
+<Callout label="--force">
+  `--force` removes a dirty or unmerged worktree and needs a name. Without it, a named removal refuses with `<path> is dirty (use --force)`, `<branch> is not merged (use --force)`, or `detached worktree (use --force)`. The main and the current worktree are always refused, and so is a locked one.
+</Callout>
+
+## wh why
+
+```
+wh why src/git.rs:42        # why that line exists
+wh why src/git.rs:13-17     # a span
+wh why src/git.rs:42 --chat # then keep asking
+```
+
+`git blame` says who and when. This says why.
+
+- The line is blamed locally, so this needs no network beyond the model call
+- The commit that last touched it becomes the payload, cut to that file; the answer is a `why` section then `watch out`
+- The status line names the blaming commit (`reading src/git.rs:42 · last changed in 68d394f by Ada on 2026-09-02`), and a span adds how many other commits touch it
+- A line you have not committed yet says so instead of guessing; a line past the end of the file gets git's own words
+- `--dry-run` prints the payload; the line itself is appended after it, never inside, so the payload stays byte for byte what the spec describes
+
+## wh models
+
+```
+wh models                  # what the active provider offers
+wh models | grep sonnet    # ids alone on stdout, so this works
+```
+
+Asks the provider, with the key `wh explain` already uses, so no list shipped in the binary has to be kept current. Embedding, speech, and image models are left out. Nothing is cached: this is a live call.
+
+<Callout label="pinned defaults">
+  The default model per provider never follows "latest": a default that moves changes cost and behaviour without asking. When the provider no longer lists the one in use, `wh models` says so and changes nothing, and `WH_MODEL` picks another. A base url with no models endpoint (a gateway that only proxies chat) says `provider has no models endpoint` rather than pretending the model is missing.
+</Callout>
+
+## wh init
+
+`wh init zsh` (or `bash`, `fish`) prints a small `wh()` function that forwards every command and turns `wh switch` into a `cd`. Nothing is written; you `eval` it from your rc file. See [install](/docs/install#shell-wrapper).
+
+## related
+
+- [wh explain](/docs/cli/explain): ranges, uncommitted work, modes, follow-ups
+- [Configuration](/docs/cli/configuration): keys, providers, gateways

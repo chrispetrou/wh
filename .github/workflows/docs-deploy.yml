@@ -1,0 +1,30 @@
+# docs live here, but the site that renders them is a separate private repo on
+# cloudflare pages. pages only rebuilds when *it* is pushed to, so a docs change
+# merged here would sit unpublished. this pings its deploy hook instead.
+name: publish docs
+
+on:
+  push:
+    branches: [main]
+    paths: ["docs/**"]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    # never fire from a fork, and never without the hook configured
+    if: github.repository == 'chrispetrou/wh'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: trigger a cloudflare pages rebuild
+        env:
+          HOOK: ${{ secrets.CF_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "CF_DEPLOY_HOOK is not set: skipping the rebuild"
+            exit 0
+          fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$HOOK")
+          echo "deploy hook returned $code"
+          test "$code" -ge 200 && test "$code" -lt 300

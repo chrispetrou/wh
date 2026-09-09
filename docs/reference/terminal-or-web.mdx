@@ -1,0 +1,35 @@
+---
+title: terminal or web
+description: Same tool, two surfaces, one explain spec, so an answer reads the same wherever you ask.
+---
+
+<Tbl kind="compare" pad9>
+
+| | terminal (wh) | web |
+|---|---|---|
+| worktrees | `new`, `ls`, `switch`, `rm` | (cli only) |
+| explain a range | `wh explain main..dev` | `diff main..dev` |
+| last n commits | `wh explain HEAD~3..` | `explain the last 3 commits [on <branch>]` |
+| a pull request | fetch the branch, then a range | `what changed in pr #42` |
+| one commit | `wh explain <sha>~1..<sha>` | `explain <sha>` |
+| the graph | `git log --graph` | `log`, then `explain 3` |
+| time and people | `git log --since`, `--author` | `since yesterday by me`, `standup` |
+| release notes | `wh explain --changelog v1..` | `changelog v1.1..v1.2` |
+| a pr description | `wh explain --describe` | `describe pr #42`, `describe <branch>` |
+| a file's story | `git log -p -- <path>` | `history <path>` |
+| why a line exists | `wh why <path>:<line>` | `why <path>:<line>` |
+| rebase, cherry-pick | `git rebase -i`, `git cherry-pick` | `rebase <branch>`, `pick 3 5 onto <branch>` |
+| branches | `wh ls` (worktrees, dirty) | `branches` (ahead/behind), `tags` |
+| follow-ups | `wh explain --chat` | plain words after an explain |
+| uncommitted work | `wh explain --uncommitted` | (cli only) |
+| cut to a path | `wh explain <range> -- src/` | any explain plus `in src/` |
+| raw payload | `wh explain --dry-run` | `/show` |
+| keys | env: `ANTHROPIC_API_KEY`, ... | pasted once, kept in browser |
+| providers | anthropic, openai, groq, ollama | anthropic, openai, groq |
+| model / effort | `WH_MODEL`, `WH_PROVIDER` | `/model`, `/effort`, per provider |
+| the model list | `wh models` | `/model sync` |
+| private repos | whatever git can reach | github oauth, `repo` scope |
+
+</Tbl>
+
+Pick the terminal when the diff is local, uncommitted, or on a machine with no github access, when you want a no-key model via ollama, or when the job is worktrees. Pick the web when the repo lives on github and you want to ask about a pr or a branch without cloning it, keep several repos open as tabs, or want the log graph, the pr list, and the rebase plans to walk. Keys never cross between the two.

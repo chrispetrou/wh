@@ -1,7 +1,8 @@
 # contributing to wh
 
-Thanks for looking. This file covers the app: the cli in `cli/` and the web
-app in `web/`. The landing page and docs live in a separate repository.
+Thanks for looking. This file covers the app: the cli in `cli/`, the web
+app in `web/`, and the documentation in `docs/`. The landing page that
+renders those docs lives in a separate repository.
 
 ## where things stand
 
@@ -98,12 +99,13 @@ repository root, because the image needs `../shared/prompts`.
 
 ## the checks your pr must pass
 
-CI runs three jobs, and all of them are easy to trip.
+CI runs four jobs, and all of them are easy to trip.
 
 | job | what it runs |
 |---|---|
 | `cli` | `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, `cargo build --release`, then a size gate: the release binary must be under 3355443 bytes |
 | `web` | `npm ci`, `npm test`, `npm run build` on node 22 |
+| `docs` | `node scripts/check-docs.mjs`: markup safety, frontmatter, and sidebar wiring for `docs/` |
 | `brand` | greps the tree for em dashes and fails on a single one |
 
 Run them before you push:
@@ -112,6 +114,7 @@ Run them before you push:
 cd cli && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 cd cli && cargo build --release && ls -l target/release/wh
 cd web && npm test && npm run build
+node scripts/check-docs.mjs
 ```
 
 Two things worth knowing:
@@ -193,6 +196,36 @@ copy from.
 **web.** Vitest, node environment, no DOM. Put the logic in `lib/` and test
 it there.
 
+## documentation
+
+The docs are in `docs/`, as mdx pages plus a `meta.json` per folder that
+sets the sidebar order. They are the same pages served on the docs site;
+that site is a separate private repository that pulls this folder at build
+time, so a merge here is what publishes them.
+
+To add or change a page:
+
+1. Edit the `.mdx`. Every page needs `title` and `description` in its
+   frontmatter. The description renders as the intro line under the
+   heading, so write it as a sentence.
+2. If you added a page, add its filename, without the extension, to the
+   `pages` array in that folder's `meta.json`. A page that is not listed
+   still builds, it is just invisible in the sidebar.
+3. Run `node scripts/check-docs.mjs`.
+
+Two rules the check enforces, both worth knowing the reason for:
+
+- **No raw html, inline event handlers, or `javascript:` urls.** These
+  pages are mdx, and mdx is jsx: raw html in a page becomes real dom on the
+  live docs origin, and the site mints its content-security-policy from its
+  own built output. Markdown and the components already used in `docs/` are
+  the whole vocabulary.
+- **No em or en dashes**, the same rule as the rest of the tree.
+
+You cannot preview the rendered site: it is not public. `check-docs.mjs`
+and review are the feedback loop, which is why the check reports the exact
+file, line, and reason rather than just failing.
+
 ## commits and pull requests
 
 Subjects name the surface, then say what changed in lowercase:
@@ -215,8 +248,8 @@ Branches are `<type>/<slug>` in kebab case: `fix/blame-blank-line`.
 Two standing rules:
 
 - **The README is updated in the same change as the feature**, not after.
-- **User-facing behaviour also needs the docs**, which live in the
-  `wh-site` repository.
+- **User-facing behaviour also needs the docs** in `docs/`, in the same
+  pull request as the change.
 
 ## design and copy
 

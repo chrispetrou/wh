@@ -1,0 +1,70 @@
+---
+title: log, prs, history
+description: The graph, the lists, and the lookups are drawn inside the transcript. Three of them you can walk with the arrows.
+---
+
+## log
+
+`log` draws the commit graph in the transcript: colored lanes with curves where branches fork and join, a dot per commit (a ring for merges), branch and tag chips, subject, author, age, sha, every row numbered.
+
+- All branches are walked, the default first, up to 12 heads; the footer says how many were left out
+- 40 rows by default, up to 200
+- A log filtered by `since` or `by` is drawn flat, without lanes, since its rows are no longer a contiguous walk; `explain 2..5` then asks for one row at a time
+
+## prs, history, branches, tags
+
+<Tbl kind="keys" head={false}>
+
+| command | shows |
+|---|---|
+| `prs` | open pull requests, most recently updated first (30): number, title, `head → base`, author, age, and `draft`, `merged`, or `closed` where it applies |
+| `history <path>` | the commits touching a file or directory (30 rows, no lanes) |
+| `branches` | branches numbered with ahead/behind against the default, the web cousin of `wh ls` |
+| `tags` | tags newest first, with sha and age |
+
+</Tbl>
+
+`branches` and `tags` are plain listings. `log`, `prs`, and `history` are blocks you can walk.
+
+## walking a block
+
+- Arrows move; `›` marks the row
+- enter opens a commit or pr in place: sha, parents, author, message, files with their +/−, and `explain`, `changelog`, `describe`, `github ↗` actions; hovering a file offers `explain`, `history`, and `copy`
+- esc steps back out
+- A command launched from an open panel leaves it open, so the answer still shows where it came from; `/clear` closes them all
+- Click a sha to copy it; hover an age for the absolute date
+- Drag a row onto a branch in a `branches` listing to start a cherry-pick, or into an open plan to add it; see [rebase and cherry-pick](/docs/web/plans)
+
+## who, churn, activity, stale
+
+Lookups, not model calls: no key needed. The first three render as stat blocks (bars in the accent color, section labels in amber, one screenful) and flatten to text for `/copy` and `/export`; there is nothing to walk.
+
+<Tbl kind="keys" head={false}>
+
+| command | shows |
+|---|---|
+| `who <path>` | the authors of a file or directory from its last 100 commits, recent work weighing more (half-life six months): commit counts, shares as bars, and when each person last touched it |
+| `churn`, `hotspots` | the files changing most, commit counts per path with their +/−, over a window (`since <period or ref>`, `on <branch>`, `in <path>`); the newest 50 commits, merges skipped |
+| `activity` | a year of weekly commits as a sparkline, then top authors and languages; `since <period>` cuts the window |
+| `stale` | branches with no commits in 8 weeks (`stale 12w`, `stale since 2026-06-01`), oldest first, with ahead/behind |
+
+</Tbl>
+
+<Callout label="cold repos">
+  github computes activity stats lazily. On a cold repo the answer is counted from the commit list instead (the latest 300, a footer says so) rather than making you wait.
+</Callout>
+
+## view and ls
+
+```
+view src/git.rs           # numbered lines, 24 rows visible, scrolls inside
+view src/git.rs:42        # scrolled to line 42, marked
+cat src/git.rs            # same thing
+ls                        # the root, dirs first with sizes
+ls src on dev             # a directory on a branch
+```
+
+- Syntax highlighting maps highlight.js tokens onto the palette (comments muted, strings green, keywords violet, numbers orange, names accent, types teal); the highlighter loads lazily and only for known extensions
+- Clicking a line number prefills `why <path>:<line>`; shift+click a second number to span (`why <path>:<from>-<to>`). A span blames every line and merges the commits behind it (the 5 newest when there are more)
+- Files are fetched lazily (the transcript stores only the address) and capped at 500k or 5000 lines with a note; binaries and directories are refused with a pointer to the right command
+- `on <branch>` works on both

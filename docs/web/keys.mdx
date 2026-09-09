@@ -1,0 +1,55 @@
+---
+title: keys, models, effort
+description: Everything that only reads the repo runs with no key. Explanations run on your own key, kept in your browser.
+---
+
+Lookups (log, branches, prs, history, who, view, ls, the rebase and cherry-pick plans) need no key. The first explain without one asks for a key: paste it as a message.
+
+## keys
+
+- Keys live in your browser only, one per provider; the prefix decides which: `sk-ant-` anthropic, `gsk_` groq, anything else openai
+- They travel per request in a header (`x-wh-provider-key`, next to `x-wh-model`, `x-wh-effort`, and `x-wh-tz`) and are never stored, logged, or echoed back by the server
+- The provider whose key was pasted last is active
+
+## providers
+
+<Tbl kind="providers">
+
+| provider | default model | effort | free tier |
+|---|---|---|---|
+| anthropic | `claude-opus-5` | low, medium, high, xhigh, max | |
+| openai | `gpt-5.6-terra` | none, minimal, low, medium, high, xhigh, max | |
+| groq | `openai/gpt-oss-120b` | low, medium, high | console.groq.com |
+
+</Tbl>
+
+The `/model` menu also suggests `claude-fable-5-1`, `claude-sonnet-5`, `claude-haiku-4-5`, `gpt-5.6-sol`, `gpt-5.6-luna`, `openai/gpt-oss-20b`, and `qwen/qwen3.8-27b`. Any id is accepted: the list gates nothing.
+
+## keeping the list current
+
+Providers ship new models constantly, so the table above is a shipped seed, not a whitelist. `/model sync` (or `/model sync <provider>`) asks the provider for its current list, with the key you already pasted, and keeps the answer in this browser. A new model needs no redeploy, which matters most on a self-hosted instance whose image would otherwise freeze the list.
+
+- The seed is what you get before a key exists, and for a gateway with no models endpoint
+- A synced list replaces that provider's seed rather than adding to it, so a retired model stops being offered
+- Embedding, speech, and image models are left out: a catalog is not a model list
+- Nothing refreshes on its own; the call happens only when you ask
+
+<Callout label="pinned defaults">
+  The default model per provider never follows "latest": a default that moves changes cost and behaviour without asking, and newest is often a preview or a pricier tier. When a sync can no longer find the pinned default, it says so and changes nothing. The cli answers the same question with [wh models](/docs/cli/commands#wh-models).
+</Callout>
+
+## model and effort
+
+- `/model` switches models; the menu marks each one's provider, `free`, `default`, and `no key`. Picking another provider's model makes that provider active
+- `/effort` sets the reasoning effort where the provider supports it
+- Both are remembered per provider
+- Follow-ups resend the conversation from your browser, with a prompt-cache breakpoint on the diff for anthropic keys so they stay cheap
+
+## usage
+
+```
+/usage
+anthropic  1.2m in · 84.3k out · 41 answers · since aug 12
+```
+
+`/usage` shows what each key has cost since it was saved and the headroom the provider last reported; `/usage reset [provider]` starts over. Tokens only, never money: the provider's dashboard is the bill. A key nearly out of headroom gets an amber warning after the answer, the same one the cli prints.

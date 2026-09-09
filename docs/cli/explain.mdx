@@ -1,0 +1,79 @@
+---
+title: wh explain
+description: Reads a diff, trims it, and streams a plain-english answer. One command, three modes, the same spec as the web.
+---
+
+```
+wh explain HEAD~3..
+reading 3 commits · 14 files · +212 −87
+summary
+...
+watch out
+...
+· 8.4s · claude-opus-5 · 1.2k in · 340 out
+```
+
+- The diff is preprocessed per `shared/prompts/`: lockfiles, vendored paths, minified files, generated files (source maps), and binaries are dropped; big diffs are capped at 400 lines per file and 4000 in total
+- The answer streams; section labels are amber
+- The closing line is elapsed time and model, plus `N in · N out` when the provider reports token usage
+
+## modes
+
+<Tbl kind="modes" pad9>
+
+| mode | asks for | sections |
+|---|---|---|
+| (default) | a review | `summary`, `watch out` |
+| `--changelog` | release notes, one line per user-visible change | `added`, `changed`, `fixed`, `removed` (empty ones left out) |
+| `--describe` | a pull request to paste | `title` (in the repo's own subject style), `description`, `testing` when the diff shows how to verify |
+
+</Tbl>
+
+`--changelog` and `--describe` exclude each other (exit 2).
+
+## ranges
+
+```
+wh explain                          # HEAD~1.. (the last commit)
+wh explain HEAD~3..                 # the last three
+wh explain main..dev                # two-dot: exactly what git diff gets
+wh explain main...dev               # three-dot: from the merge base, log walks dev only
+wh explain v1.2                     # a bare ref means v1.2..HEAD
+wh explain abc123~1..abc123         # one commit
+wh explain --changelog v1.1..v1.2   # notes for a tag
+wh explain --changelog v1.2.. > notes.md
+wh explain --describe               # current branch vs the default branch, main...HEAD
+wh explain --describe > body.md
+wh explain --dry-run HEAD~3..       # the payload the model would see, no call
+wh explain --uncommitted            # work you have not committed yet
+wh explain HEAD~5.. -- src/         # cut any of them to a pathspec
+```
+
+A typed range goes to `git diff` verbatim; only the commit log drops the third dot.
+
+`--uncommitted` is `git diff HEAD`: staged and unstaged together, the change you are about to commit. It takes no range, and the payload carries no `commits:` block because there are no commits yet. Untracked files are not in a diff until you `git add` them. Anything after `--` is a git pathspec, passed to the diff and to the commit list alike.
+
+<Callout label="--describe">
+  With no range, `--describe` compares against the default branch from their merge base (`<default>...HEAD`), so a base that moved on never leaks into the draft, and tells the model the branch names in a `context: branch feat/auth into main` block. A bare ref there means `<ref>...HEAD`. Nothing is written to github.
+</Callout>
+
+## follow-ups
+
+`--chat` keeps the conversation open after the answer: a `?` prompt takes further questions about the same diff, grounded in what the model has already seen, so a second question costs no second diff.
+
+- An empty line or ctrl-d ends it
+- There is no history beyond what the terminal gives a line of input
+- It needs a terminal on both ends and quietly stays a one-shot when either is a pipe
+- It cannot be combined with `--dry-run` (exit 2)
+
+The same flag works on [wh why](/docs/cli/commands#wh-why).
+
+## output
+
+- When stdout is not a terminal, the two muted status lines go to stderr, so `> body.md` holds only the answer
+- `--dry-run` prints the exact payload and makes no call
+- An empty range: `nothing to explain in <range>`, or `nothing uncommitted to explain` with `--uncommitted`
+- A pathspec that matches nothing names it: `nothing to explain in HEAD~5.. under src/`
+- No default branch to compare against: `cannot determine default branch, pass a range like main..`
+
+Provider and network failures have their own page: [when a call fails](/docs/cli/errors).

@@ -1,0 +1,36 @@
+---
+title: install
+description: One cargo command puts the binary in ~/.cargo/bin. A shell wrapper makes wh switch a real cd.
+---
+
+## cargo
+
+```
+cargo install --path cli                                   # from a clone
+cargo install --git https://github.com/chrispetrou/wh wh   # or straight from git
+```
+
+That puts `wh` in `~/.cargo/bin`.
+
+## shell wrapper
+
+Add the shell wrapper so `wh switch` can actually change directory. It prints a small `wh()` function that forwards every command and turns `wh switch` into a `cd`; nothing is written, you `eval` it from your rc file.
+
+```
+echo 'eval "$(wh init zsh)"' >> ~/.zshrc     # bash: ~/.bashrc
+wh init fish | source                        # fish: add to config.fish
+```
+
+`wh init` knows `zsh`, `bash`, and `fish`. Any other name fails with `unsupported shell '<name>' (zsh, bash, fish)`.
+
+## requirements
+
+- `git`, always. Every git call shells out to the system binary; nothing is linked in.
+- `curl`, for `wh explain`. The model is called through the system curl.
+- A terminal with `stty` and `/dev/tty`, for the `wh switch` picker. Without one, pass a query: `wh switch <name>`.
+
+All of these ship with macos and virtually every linux.
+
+## releases
+
+Tagged releases (`v*`) build four binaries: `aarch64-apple-darwin`, `x86_64-apple-darwin`, and two static musl builds, `x86_64-unknown-linux-musl` and `aarch64-unknown-linux-musl`. Each lands as `wh-<tag>-<target>.tar.gz` next to a `checksums.txt` with sha256 sums, in a draft github release. A `curl | bash` installer comes with the first release; until there is a tag, install from git as above.
