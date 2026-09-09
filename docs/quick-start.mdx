@@ -1,0 +1,17 @@
+---
+title: quick start
+description: A handful of commands, start to finish.
+---
+
+```
+wh new feat/auth              # a sibling worktree, branch created if missing
+wh ls                         # every worktree, dirty count, ahead/behind
+wh switch                     # pick one, cd into it
+export GROQ_API_KEY=gsk_...   # free tier at console.groq.com
+wh explain HEAD~3..           # the last three commits, in plain english
+wh rm                         # prune worktrees whose branches are merged
+```
+
+`wh new` lands the worktree next to the main one, `wh ls` shows what is dirty and how far each branch is from its upstream, and `wh switch` opens a picker (with the shell wrapper from [install](/docs/install), it changes directory for real). A groq key is enough to try `wh explain`; anthropic and openai keys, or a local ollama, work the same way and are picked up from the environment. `wh rm` cleans up whatever has been merged.
+
+Every command is described in [commands](/docs/cli/commands); the explain modes, ranges, and configuration have their own pages.

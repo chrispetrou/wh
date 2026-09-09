@@ -16,8 +16,12 @@ plain-English diff explanations. Local-first, telemetry-free, BYO LLM key.
   (log graph, prs, history, blame, rebase and cherry-pick plans; paste-only,
   never writes to GitHub). Keep it minimal: no dashboards, no analytics, no
   settings sprawl.
-- `site/`: the landing page. **Complete. Do not modify** except to
-  eventually add real links.
+- `docs/`: the documentation, as mdx pages plus a `meta.json` per folder
+  for sidebar order. A separate private repository renders these on the
+  docs site and pulls this folder at build time, so merging here is what
+  publishes. Guarded by `scripts/check-docs.mjs`: no raw html (mdx is jsx,
+  and it becomes real dom on the live origin), frontmatter required, every
+  page listed in a `meta.json`.
 - `shared/prompts/`: explain prompt templates and diff-preprocessing
   conventions. Spec'd once here; implemented twice (Rust in cli/, TS in web/).
   Change the spec first, then both implementations.
@@ -27,10 +31,11 @@ independently.
 
 ## design source of truth
 
-`site/index.html` **is** the design system. Every surface must look like it
-belongs to that page. Never change its logo glyph (the CSS `clip-path`
-square), monospace typography, spacing, or light/dark palette. Reuse its
-values verbatim:
+The landing page in the site repository **is** the design system, and its
+values are mirrored into `web/app/globals.css`, which is the copy to read
+here. Every surface must look like it belongs to that page. Never change the
+logo glyph (the CSS `clip-path` square), monospace typography, spacing, or
+light/dark palette. Reuse these values verbatim:
 
 - Font: `ui-monospace,"SF Mono","Cascadia Mono","JetBrains Mono",Menlo,Consolas,monospace`,
   13px base, line-height 1.7. Monospace everywhere: headings, body, buttons.
@@ -46,8 +51,7 @@ Brand rules, all surfaces:
 
 - lowercase, quiet copy; no emoji, no spinners, no exclamation marks
 - no em dashes anywhere (code, docs, ui copy, commit messages); use commas,
-  colons, parentheses, or the `·` separator instead. `site/index.html` is the
-  one exemption (locked mock)
+  colons, parentheses, or the `·` separator instead
 - hairline 1px borders (`--line`), flat surfaces, small border radii,
   **no shadows, no gradients**
 - green `→` for success lines only; muted gray for info; amber for

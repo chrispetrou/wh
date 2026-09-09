@@ -1,0 +1,53 @@
+---
+title: slash commands
+description: Typing / opens a menu of all of them with their options. The keys that move you around live here too.
+---
+
+<Tbl kind="slash" head={false}>
+
+| command | does |
+|---|---|
+| `/help`, `/wh` | the web grammar; the cli commands |
+| `/repos` | back to the repo picker |
+| `/key [value \| clear [provider]]` | add or replace a key, list them, drop one or all |
+| `/model [id \| default \| sync [provider]]`, `/effort [level \| default]` | per provider; `sync` asks the provider for its current model list |
+| `/usage [reset [provider]]` | tokens per key |
+| `/show` | the raw diff payload the model saw, pager-colored |
+| `/copy`, `/export` | last answer to the clipboard; save the transcript as `wh-<owner>-<repo>.txt` |
+| `/theme auto\|light\|dark\|vintage\|amber`, `/font default\|fira\|jetbrains\|plex`, `/fontsize 11..18`, `/ligatures on\|off` | looks |
+| `/account`, `/info` | who you are; repo, provider, keys, usage, prefs |
+| `/stop`, `/clear`, `/logout` | abort a running explain; new transcript; sign out |
+
+</Tbl>
+
+`/theme` defaults to `auto`. `vintage` (green) and `amber` are two opt-in phosphor looks: one monochrome palette on a hue, with the glow and the edge falloff of a tube. They are reached through `/theme` only; the header toggle keeps cycling auto, light, dark, and a click from either drops back into that cycle. `/ligatures` applies to the fira and jetbrains fonts only.
+
+## keyboard
+
+<Tbl kind="keyboard" head={false}>
+
+| keys | |
+|---|---|
+| enter, up/down, ctrl+r | send; recall history; search it |
+| right | take the gray suggestion (typed ahead from history) |
+| esc | stop a running explain; close a menu or panel |
+| tab, enter, esc (menu open) | complete; use; dismiss |
+| arrows, enter, esc (after a log, prs, or history) | walk rows; open one; step out |
+| arrows, esc (on a file view) | scroll; step out |
+| p r s f d e, shift+up/down (in a plan) | set a row's action; move it (drag works too) |
+| drag a log / prs row | onto a branch: cherry-pick; into a plan: add it |
+| click a sha | copy it |
+| cmd+k / ctrl+k | repo picker |
+| ctrl+t, ctrl+1..9, × | new repo tab; switch tabs; close |
+
+</Tbl>
+
+## tabs and the status line
+
+- Repos open as tabs, each with its own transcript; a streaming explain keeps going while you are on another tab (a dot after the tab name says so)
+- The status line under the prompt shows `<provider> · <model>`, then `· effort <level>` where the provider takes effort, then `· <n> tokens` used in this session
+- Hover any control for its purpose and shortcut; `/help` lists every key
+
+## how it reads
+
+Like the cli: your command in the accent color, section labels in amber, a green `→` line when something changed, an amber `error:` label with the same plain-words vocabulary as the cli, muted gray for status. Each answer closes with its elapsed time, model, and token cost (`· stopped after 2.1s` if you pressed esc). Motion is short and stops under `prefers-reduced-motion`.

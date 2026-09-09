@@ -1,0 +1,56 @@
+---
+title: what you can ask
+description: Plain words, cli syntax, or anything in between. A completion menu drops down wherever a branch, tag, pr number, or log row belongs.
+---
+
+`explain`, `summarize`, `show me`, and `what changed in` work as leading verbs. A trailing `?` is fine. cli-style input (`wh explain HEAD~3..`) works verbatim.
+
+<Tbl kind="asks" head={false}>
+
+| ask | examples |
+|---|---|
+| a diff range | `diff main..release` · `compare v1.1..v1.2` · `main..` (to the default tip) |
+| the last n commits | `explain the last 5 commits` · `last 3 on feat/auth` · `HEAD~3..` |
+| a pull request | `what changed in pr #42` · `pr 42` · `#42` |
+| a branch vs the default | `what changed in feat/auth` |
+| one commit | `explain <sha>` |
+| the graph | `log` · `log 100` · `log on feat/auth` · `log since monday by me` |
+| a row of the log | `explain 3` · `explain 2..5` (row 5's parent to row 2) |
+| time and people | `since yesterday` · `this week` · `since v1.2 by alice` · `what did i do this week` · `standup` |
+| release notes | `changelog v1.1..v1.2` · `changelog since v1.2` · `release notes for pr #42` · `changelog` (since the newest tag) |
+| a pr draft | `describe pr #42` · `describe feat/auth` · `draft a pr for feat/auth` · `describe main..dev` |
+| a rebase plan | `rebase feat/auth` · `rebase main..feat/auth` · `rebase pr #42` · `rebase last 5 on feat/auth` · `rebase 2..5` (log rows) |
+| a cherry-pick plan | `pick 3 5 onto release/1.x` · `backport pr #42 to release/1.x` |
+| a file's story | `history src/git.rs` · `history src/ on feat/auth` |
+| a line or a span | `why src/git.rs:42` · `why src/git.rs:13-17` · `why line 42 of src/git.rs on v1.2` |
+| who knows a file | `who src/git.rs` · `who knows src/ on dev` · `who touched src/` |
+| read a file | `view src/git.rs:42` · `cat` works too; click a line number to ask why |
+| a listing | `ls` · `ls src on dev` |
+| hotspots | `churn` · `churn since v1.2 in src/` · `hotspots on dev` |
+| the repo's pulse | `activity` · `activity since this week` |
+| cut to a path | any explain plus `in <path>`: `explain the last 5 commits in src/` · `changelog of pr 42 in docs/` |
+| lists | `branches` · `tags` · `prs` · `closed prs` · `my prs` · `stale` (quiet branches) · `stale 12w` |
+| follow-ups | plain words after an explain: `why is that risky?` · `which files touch auth?` |
+
+</Tbl>
+
+## periods and people
+
+- Periods are plain words: `today`, `yesterday`, `this week`, `last week`, `this month`, `last month`, `this year`, `last year`
+- `since` takes a weekday (`since monday`), a count (`since 3 days ago`, `since 12 weeks`, `since 12w`), a date (`since 2026-08-20`), or any ref (`since v1.2`)
+- `by <login>` keeps one person's commits, `by me` yours; `standup` is your commits since the last working day
+- Days follow your browser's clock; an empty window says `nothing since yesterday` and costs no model call
+
+## changelog and describe
+
+`changelog` and `describe` wrap any diff command and share the cli's output contracts: the same four sections, the same `title` / `description` / `testing` draft. `describe pr #42` sees the pr's current title and body and keeps their intent where the diff still supports it. `/copy` puts the draft on your clipboard.
+
+## limits
+
+- `log` draws 40 rows by default, up to 200; `last N` stops at 250
+- A `since` window covers the latest 100 commits; `by <login>` fetches up to 20 of that person's commits, past which the answer covers the whole span and says so
+- `stale` means no commits in 8 weeks unless you say otherwise
+- `base..head` uses github's three-dot compare: changes on head since it diverged from base
+- Ahead/behind counts cover the first 15 branches; tag dates the newest 15
+- Plans stop at 30 commits and refuse merge commits
+- A range needs a base: `main..` is fine, `..dev` is not

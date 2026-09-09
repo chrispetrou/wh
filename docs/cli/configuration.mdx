@@ -1,0 +1,41 @@
+---
+title: configuration
+description: Environment only, no config files. Paid keys win the auto-detect so nobody is silently downgraded.
+---
+
+<Tbl kind="env" head={false}>
+
+| variable | meaning |
+|---|---|
+| `ANTHROPIC_API_KEY` | used if set (model: `claude-opus-5`) |
+| `OPENAI_API_KEY` | used if no anthropic key (model: `gpt-5.6-terra`) |
+| `GROQ_API_KEY` | used if neither (model: `openai/gpt-oss-120b`); none set: local ollama (model: `llama3.2`) |
+| `WH_PROVIDER` | force one of: `anthropic`, `openai`, `groq`, `ollama` |
+| `WH_MODEL` | override the model for any provider (`wh models` lists what it offers) |
+| `WH_ANTHROPIC_URL` | default `https://api.anthropic.com` |
+| `WH_OPENAI_URL` | default `https://api.openai.com` |
+| `WH_GROQ_URL` | default `https://api.groq.com/openai` |
+| `WH_OLLAMA_URL` | default `http://localhost:11434` |
+| `NO_COLOR` | any value disables color |
+
+</Tbl>
+
+## which provider answers
+
+1. `ANTHROPIC_API_KEY`
+2. `OPENAI_API_KEY`
+3. `GROQ_API_KEY`
+4. None of them: ollama on localhost
+
+`WH_PROVIDER` overrides the order: `groq` opts into the free tier, `ollama` into the no-key option. A forced provider without its key fails with `<VAR> is not set`; an unknown name with `unknown WH_PROVIDER '<value>' (anthropic, openai, groq, ollama)`.
+
+## gateways
+
+The `WH_*_URL` variables point at any compatible gateway. A url that is not `http` or `https`, or that carries quotes or newlines, is rejected with `invalid provider url`.
+
+## how the request travels
+
+- Through the system `curl`
+- The key rides in curl's config on stdin, never in argv, so it is not in the process list
+- The request body sits in a `0600` temp file for the duration of the call and is deleted when it ends
+- Nothing is sent anywhere unless you run `wh explain`, `wh why`, or `wh models`

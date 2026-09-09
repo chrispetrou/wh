@@ -1,0 +1,92 @@
+---
+title: run it
+description: A terminal for any github repo, in the browser. Sign in with github, pick a repo, ask in plain words. Nothing is ever executed or written to github.
+---
+
+```
+cd web
+nvm use                  # node 22, see .nvmrc
+npm install
+npm run dev              # http://localhost:3000
+```
+
+`npm test` runs vitest (grammar, preprocessing, providers, usage); `npm run build` builds for production.
+
+## first run
+
+1. Open http://localhost:3000. On a localhost dev server the first visit shows a one-time setup screen.
+2. Follow its link to a prefilled github oauth-app form and paste the client id and secret back.
+3. The screen writes them, a random `SESSION_SECRET`, and `APP_URL` to `web/.env.local`.
+
+Sign-in asks for the `repo` scope so private repos appear in the picker; github has no read-only scope for private repos, and wh only ever reads.
+
+<Callout label="hosted instances">
+  The setup screen never appears in production or behind a proxy. A hosted instance without oauth configured says `github oauth is not configured on this server`; configure it through the environment below.
+</Callout>
+
+## environment
+
+`web/.env.example` has the same list.
+
+<Tbl kind="keys" head={false}>
+
+| variable | meaning |
+|---|---|
+| `GITHUB_CLIENT_ID` | oauth app; the callback must be `$APP_URL/api/auth/callback` |
+| `GITHUB_CLIENT_SECRET` | |
+| `SESSION_SECRET` | 32 or more random characters (`openssl rand -hex 32`) |
+| `APP_URL` | base url of this instance; `https` turns on secure cookies |
+| `WH_ALLOWED_LOGINS` | optional: github logins that may sign in, comma-separated |
+| `GITHUB_API_URL` | optional, for github enterprise (and `GITHUB_GRAPHQL_URL`) |
+| `WH_ANTHROPIC_URL`, `WH_OPENAI_URL`, `WH_GROQ_URL` | optional provider gateways, same names as the cli |
+
+</Tbl>
+
+## deploy
+
+The app is stateless: no database, no volume. Keys and transcripts stay in each visitor's browser. Hosting it is one node process, or one container, and the environment above.
+
+1. Create a github oauth app (settings, developer settings, oauth apps) with the callback url set to exactly `$APP_URL/api/auth/callback`.
+2. Set `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `SESSION_SECRET`, and `APP_URL`. Keep `SESSION_SECRET` stable across restarts, or every session cookie dies with it.
+3. Optionally set `WH_ALLOWED_LOGINS` (comma-separated, case-insensitive). Unset, anyone with a github account can use the instance. Removing a login signs that account out on its next request.
+
+<Callout label="behind a reverse proxy">
+  `APP_URL` must be the public origin: it drives the oauth redirect uri, the same-origin guards, and the cookie secure flag. An `https://` `APP_URL` sets secure cookies even though the node process speaks http; a mismatched scheme is the one way to break sign-in. Nothing trusts `x-forwarded-*` headers.
+</Callout>
+
+### docker
+
+Build from the repo root; the image needs `../shared/prompts`.
+
+```
+docker build -f web/Dockerfile -t wh-web .
+docker run -p 3000:3000 \
+  -e GITHUB_CLIENT_ID=... -e GITHUB_CLIENT_SECRET=... \
+  -e SESSION_SECRET=... -e APP_URL=https://wh.example.com \
+  wh-web
+```
+
+```
+services:
+  wh:
+    image: wh-web
+    ports: ["3000:3000"]
+    environment:
+      GITHUB_CLIENT_ID: "..."
+      GITHUB_CLIENT_SECRET: "..."
+      SESSION_SECRET: "..."
+      APP_URL: "https://wh.example.com"
+      WH_ALLOWED_LOGINS: "alice,bob"
+    restart: unless-stopped
+```
+
+## sessions
+
+- The session slides: every request renews it
+- It ends after a week of silence or 30 days after sign-in, whichever comes first
+- An ended session says so in the transcript; `sign in again →` brings you back to the same repo with the transcript intact and reruns what failed
+
+## related
+
+- [What you can ask](/docs/web/asks): the command grammar
+- [Keys, models, effort](/docs/web/keys): how explanations are paid for
