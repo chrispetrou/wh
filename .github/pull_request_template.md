@@ -20,8 +20,8 @@
 - [ ] **touched `shared/prompts/`**: the spec changed first, both
       implementations follow, the golden fixtures still reproduce byte for
       byte, and the regenerated `web/lib/explain/shared.gen.ts` is committed
-- [ ] **changed user-facing behaviour**: the docs in the `wh-site` repo are
-      updated too
+- [ ] **changed user-facing behaviour**: the pages under `docs/` are updated
+      in this pull request, and `node scripts/check-docs.mjs` passes
 - [ ] **added logic to `web/`**: it lives in `lib/` with a test, since
       `components/` and `app/` are not covered by vitest
 - [ ] **added a cli integration test**: it goes through the `TestRepo`

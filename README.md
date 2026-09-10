@@ -19,7 +19,7 @@
   <img alt="no telemetry" src="https://img.shields.io/badge/telemetry-none-8a8a8a?style=flat-square&labelColor=1a1a1a">
 </p>
 
-<p align="center"><a href="https://wh-site.pages.dev/docs">documentation</a> · <a href="https://wh-site.pages.dev">site</a></p>
+<p align="center"><a href="https://getwh.dev/docs">documentation</a> · <a href="https://getwh.dev">site</a></p>
 
 **wh** has two surfaces. The cli manages worktrees so branch-switching never
 touches your working state, and explains diffs in plain English. The web app
@@ -82,7 +82,7 @@ providers come from the environment: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
 `GROQ_API_KEY`, or none for Ollama.
 
 Every command, flag, range form, environment variable, and error message is
-in the [cli docs](https://wh-site.pages.dev/docs/cli/commands).
+in the [cli docs](https://getwh.dev/docs/cli/commands).
 
 ## web
 
@@ -104,7 +104,7 @@ provider for its current model list, so a new model needs no redeploy.
 
 The grammar, the blocks you can walk, the plans, keys and models, slash
 commands, and hosting your own instance are in the
-[web docs](https://wh-site.pages.dev/docs/web/run-it). The deploy reference
+[web docs](https://getwh.dev/docs/web/run-it). The deploy reference
 (environment, docker, sessions) is also in [web/README.md](web/README.md).
 
 ## what leaves your machine
@@ -133,9 +133,9 @@ cli/     rust cli: the wh binary
 web/     next.js app: the web terminal
 shared/  explain spec: prompt template, preprocessing rules, provider wording,
          and golden fixtures both implementations must reproduce
-site/    the original landing mock (the live site is chrispetrou/wh-site)
+docs/    the documentation, published at getwh.dev/docs
 readme/  the logo and the animated svgs embedded above
-scripts/ readme-anim.mjs, which writes those svgs
+scripts/ check-docs.mjs, the guard ci runs over docs/
 ```
 
 `shared/` is spec once, implement twice: change the spec first, then both
@@ -149,11 +149,10 @@ cd cli && cargo build --release   # binary at target/release/wh
 cd cli && cargo test              # unit + integration (isolated git config)
 cd web && npm test                # vitest: grammar, preprocessing, providers, usage
 cd web && npm run build
-node scripts/readme-anim.mjs      # regenerate the readme animations
 ```
 
 CI runs fmt, clippy, tests, a 3.2MiB size gate on the binary, the web tests
-and build, and a brand check (no em dashes outside the landing mock). Tagged
+and build, the docs check, and a brand check (no em dashes). Tagged
 releases (`v*`) build the four binaries and open a draft GitHub release with
 checksums.
 

@@ -14,7 +14,7 @@ export function ModelGlyph() {
   );
 }
 
-// the logo glyph: the clip-path square from site/index.html
+// the logo glyph: the clip-path square from the landing page (getwh.dev)
 export function Glyph() {
   return (
     <span

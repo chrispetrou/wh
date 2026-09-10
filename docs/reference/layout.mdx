@@ -6,10 +6,10 @@ description: One repo, two implementations of one spec, and the checks that keep
 ```
 cli/     rust cli: the wh binary
 web/     next.js app: the web terminal
-site/    landing page
 shared/  explain spec: prompt template, preprocessing rules, provider wording, and golden fixtures both implementations must reproduce
-readme/  the logo and the animated svgs embedded in the readme (see scripts/readme-anim.mjs)
-scripts/ readme-anim.mjs, the generator for those svgs
+docs/    these pages, as mdx; merging to main publishes them
+readme/  the logo and the animated svgs embedded in the readme
+scripts/ check-docs.mjs, the guard ci runs over docs/
 ```
 
 `shared/` is spec once, implement twice: change the spec first, then both implementations, and the golden fixtures under `shared/fixtures/` must be reproduced byte for byte by the rust and the typescript preprocessors.
@@ -21,11 +21,10 @@ cd cli && cargo build --release   # binary at target/release/wh
 cd cli && cargo test              # unit + integration (isolated git config)
 cd web && npm test                # vitest: grammar, preprocessing, providers, usage
 cd web && npm run build
-node scripts/readme-anim.mjs      # regenerate the readme animations
 ```
 
 ## ci and releases
 
-ci runs fmt, clippy, tests, a 3.2 MiB size gate on the binary (3355443 bytes), the web tests and build, and a style check (no em dashes outside the landing mock). Tagged releases (`v*`) build the four binaries listed in [install](/docs/install#releases) and open a draft github release with checksums. The readme animations are plain animated svgs (css keyframes, no gif, no javascript) written by `scripts/readme-anim.mjs`; wording and pacing live in that script, not in the svg files.
+ci runs fmt, clippy, tests, a 3.2 MiB size gate on the binary (3355443 bytes), the web tests and build, the docs check, and a style check (no em dashes). Tagged releases (`v*`) build the four binaries listed in [install](/docs/install#releases) and open a draft github release with checksums.
 
 gpl-3.0 license.

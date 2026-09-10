@@ -59,11 +59,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: no em dashes outside the locked landing mock
+      - name: no em dashes
         run: |
           if grep -rn $'—' --include='*.md' --include='*.rs' --include='*.ts' \
              --include='*.tsx' --include='*.css' --include='*.toml' --include='*.mjs' \
-             . | grep -v 'site/index.html' | grep -v node_modules; then
+             . | grep -v node_modules; then
             echo "em dashes found (brand rule: use commas, colons, or parens)"
             exit 1
           fi
