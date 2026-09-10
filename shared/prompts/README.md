@@ -10,7 +10,7 @@ implementations must produce the same payloads and the same output shape.
   (`[system]`, `[user]`, `[followup]`; parsers must skip unknown sections).
   `{{payload}}` in the user part is replaced with the preprocessed payload.
   The explain output contract is a `summary` section followed by a
-  `watch out` section, as shown in the landing demo (`site/index.html`).
+  `watch out` section, as shown in the landing demo at getwh.dev.
   `[followup]` is the system prompt for continuing the conversation about
   the same diff: plain words after an explain on the web, `wh explain
   --chat` in the cli. The payload is already turn 0, so the follow-up

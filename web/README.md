@@ -8,7 +8,7 @@ GitHub. Keys stay in the browser.
 
 This file is how to run and deploy it. What you can ask, the blocks, the
 slash commands, and the keyboard are documented at
-**[wh-site.pages.dev/docs/web](https://wh-site.pages.dev/docs/web/run-it)**.
+**[getwh.dev/docs/web](https://getwh.dev/docs/web/run-it)**.
 
 ```
 nvm use                  # node 22, see .nvmrc

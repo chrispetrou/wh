@@ -4,7 +4,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* wh theme: values from site/index.html, the design source of truth.
+/* wh theme: values from the landing page (getwh.dev), the design source of truth.
    monospace everything, hairline borders, flat, no shadows. */
 
 @theme inline {
