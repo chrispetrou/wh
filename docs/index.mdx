@@ -5,7 +5,7 @@ description: Tiny git companion. Worktrees, minus the ceremony. History, diffs, 
 
 wh is a git companion with two surfaces. The cli manages worktrees so branch-switching never touches your working state, and explains diffs in plain english so review starts with understanding, not archaeology. The web app is a terminal for any repo you can see on github, cloned or not: what changed, the commit graph, pull requests, a file's history, why a line exists, and rebase or cherry-pick plans written out as commands to paste. Nothing is ever written to the repo or to github.
 
-Local-first and telemetry-free. Explanations run on your own key (anthropic, openai, groq's free tier) or, in the cli, a local model via ollama. The cli needs nothing but git; the web needs a github sign-in and keys that stay in your browser.
+Local-first and telemetry-free. Explanations run on your own key (anthropic, openai, groq's free tier) or, in the cli, a local model via ollama, and an explanation sends the diff to that provider: see [how the cli request travels](/docs/cli/configuration#how-the-request-travels) and [what leaves your browser](/docs/web/keys#what-leaves-your-browser). The cli needs nothing but git; the web needs a github sign-in and keys kept in your browser, never stored on the server.
 
 Written in rust and typescript. The cli is one binary (0.6 MiB, budget 3.2 MiB), three small dependencies (clap, serde, serde_json), no runtime. The web app is a next.js app you run yourself. One explain spec (`shared/prompts/`) sits behind both, so an answer reads the same wherever you ask.
 

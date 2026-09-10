@@ -107,6 +107,25 @@ commands, and hosting your own instance are in the
 [web docs](https://wh-site.pages.dev/docs/web/run-it). The deploy reference
 (environment, docker, sessions) is also in [web/README.md](web/README.md).
 
+## what leaves your machine
+
+`wh explain` sends the diff and its commit subjects to the provider whose key
+you set, under that provider's terms (lockfiles, vendored, and minified files
+are dropped first; `--describe` adds the branch name). `wh why` sends the
+commit that blame points at, cut to that file, and the lines you asked about.
+Ollama on localhost keeps all of it on your machine. Nothing is sent anywhere
+unless you run `wh explain`, `wh why`, or `wh models`.
+
+The web app sends the same for any repo you explain, private ones included,
+plus a pull request's title and description for `describe pr #N`. Your key
+and your GitHub session pass through the server running it, so use an
+instance you trust or run your own. Lookups (`log`, `prs`, `history`, the
+plans) need no key and send nothing to a provider. There is no telemetry.
+
+Explanations are model output and can be wrong. Rebase and cherry-pick plans
+are computed, not generated, but they rewrite history once pasted: read one
+before you run it.
+
 ## layout
 
 ```

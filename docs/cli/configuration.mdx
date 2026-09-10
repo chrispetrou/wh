@@ -38,4 +38,6 @@ The `WH_*_URL` variables point at any compatible gateway. A url that is not `htt
 - Through the system `curl`
 - The key rides in curl's config on stdin, never in argv, so it is not in the process list
 - The request body sits in a `0600` temp file for the duration of the call and is deleted when it ends
+- `wh explain` carries the diff and its commit subjects (lockfiles, vendored, and minified files dropped), plus the branch name for `--describe`; `wh why` carries the commit blame points at, cut to that file, and the lines asked about; `wh models` carries only the key
+- The provider handles it under its own terms; ollama on localhost keeps it on your machine
 - Nothing is sent anywhere unless you run `wh explain`, `wh why`, or `wh models`

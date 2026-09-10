@@ -11,6 +11,13 @@ Lookups (log, branches, prs, history, who, view, ls, the rebase and cherry-pick 
 - They travel per request in a header (`x-wh-provider-key`, next to `x-wh-model`, `x-wh-effort`, and `x-wh-tz`) and are never stored, logged, or echoed back by the server
 - The provider whose key was pasted last is active
 
+## what leaves your browser
+
+- Lookups (log, branches, prs, history, who, view, ls, the plans) go to github and nowhere else
+- An explain, `changelog`, `describe`, `why`, or `draft message` sends the diff and its commit subjects to your provider, private repos included, under that provider's terms; `describe` adds the branch names and, for a pull request, its title and description (cut at 2000 characters)
+- The server running the app relays that request with your key and holds your github session, so use an instance you trust, or [run your own](/docs/web/run-it)
+- Answers are model output and can be wrong; plans are computed, not generated, but they rewrite history once pasted, so read one before you run it
+
 ## providers
 
 <Tbl kind="providers">
