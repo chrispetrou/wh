@@ -5,6 +5,9 @@ on:
     branches: [main, "feat/**"]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   cli:
     runs-on: ubuntu-latest
