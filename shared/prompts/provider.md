@@ -59,6 +59,15 @@ Detection order:
 | dropped mid-answer | `lost the connection to <host>` | none |
 | empty body | `provider returned no text` | none |
 
+The cli bounds every call, so a stalled provider never hangs a script or
+an agent's shell: curl gives up when it cannot connect within 15s, or when
+less than one byte a second arrives for 300s. Never a total time limit: a
+long answer streams to the end, and a silent reasoning pass or a cold
+ollama model load gets five minutes. A stall before any text is `could
+not reach <host>` with curl's `operation too slow` line as the hint; a
+stall after text is `lost the connection to <host>`. The web has no such
+bound yet.
+
 The web wraps these as `{"error", "hint"}` json with status 401 (key),
 402 (credit, spend limit), 429 (rate limits), 413 (too large), 404
 (unknown model), 503 (overloaded), 502 (generic, network). An error frame

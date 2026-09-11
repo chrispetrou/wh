@@ -24,6 +24,8 @@ lost the connection to api.groq.com
 
 The `set <var> to a valid key` hint names the variable of the active provider; ollama has no key, so it has no hint. `try again in a moment` and `resets tomorrow` are the wording when the provider does not say how long. The `too big` line always carries its hint. `could not reach` is followed by curl's last stderr line with the `curl: (N)` prefix removed; `lost the connection` means the stream was cut after text had already arrived.
 
+A call never hangs: curl gives up on a provider that cannot be reached within 15 seconds, or that sends nothing for 5 minutes. There is no limit on the whole answer, so a long one streams to the end. A stall before any text reads `could not reach`, one after text reads `lost the connection`.
+
 `provider has no models endpoint` is its own line on purpose: a 404 on the models path means the base url is a gateway that only proxies chat, never that the model is missing.
 
 A few failures are not the provider's: `not a git repository` when you are outside one, `curl not found` when there is no curl on the path, and `provider sent no reply` or `provider sent no http status` when curl returned nothing usable.

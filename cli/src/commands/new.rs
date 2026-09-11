@@ -49,11 +49,14 @@ pub fn run(branch: &str, from: Option<&str>) -> Result<(), WhError> {
 
     println!("created worktree {}", output::display_path(&dest, &cwd));
 
-    // env copy source is the worktree we're standing in (absent for bare repos)
+    // env copy source is the worktree we're standing in (absent for bare
+    // repos). a failed copy warns instead of failing: the worktree already
+    // exists, and a retry would only hit "already exists"
     if let Ok(top) = git::toplevel(&cwd) {
-        let copied = envfiles::copy_env_files(&top, &dest)?;
-        if !copied.is_empty() {
-            println!("copied {}", copied.join(" "));
+        match envfiles::copy_env_files(&top, &dest) {
+            Ok(copied) if !copied.is_empty() => println!("copied {}", copied.join(" ")),
+            Ok(_) => {}
+            Err(e) => output::warn(&format!("could not copy env files: {e}")),
         }
     }
 

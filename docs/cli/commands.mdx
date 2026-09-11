@@ -8,7 +8,7 @@ description: Eight subcommands. Worktrees in, listed, switched, and pruned; a di
 | command | what it does |
 |---|---|
 | `wh new <branch> [--from <ref>]` | create a worktree in a sibling dir, copy `.env*` files into it |
-| `wh ls` | list worktrees with dirty count and ahead/behind |
+| `wh ls [--json]` | list worktrees with dirty count and ahead/behind |
 | `wh switch [query]` | pick a worktree (or match one) and cd into it |
 | `wh rm [name] [--dry-run] [--yes] [--force]` | remove merged worktrees, or one by name |
 | `wh explain [range] [--uncommitted] [--changelog] [--describe] [--chat] [--dry-run] [-- <pathspec>]` | a plain-english review, release notes, or a pr draft for a diff |
@@ -43,16 +43,27 @@ wh new feat/auth                    # existing branch: just checks it out
 ## wh ls
 
 ```
-main          clean
-feat/auth     clean
-fix/nav-323   2 dirty · ahead 3
-spike/wasm    clean · behind 12
+main         clean
+feat/auth    clean
+fix/nav-323  2 dirty  ·  ahead 3
+spike/wasm   clean    ·  behind 12
 ```
 
 - main worktree first, then alphabetical
 - Status: `clean`, `N dirty`, or `stale` (a worktree git can no longer read, or one it would prune)
 - The muted column: `ahead N`, `behind N`, or both, against the upstream
 - A detached worktree shows as `<sha> detached`
+
+`--json` prints the same rows as one array on a single line, for scripts and agents:
+
+```
+wh ls --json
+[{"ahead":null,"behind":null,"branch":"main","dirty":0,"head":"68d394f...","locked":false,"main":true,"name":"main","path":"/home/ada/repo","stale":false}]
+```
+
+- `path` is absolute; `name` is what `wh switch <query>` matches
+- `branch` is `null` for a detached worktree, `head` is the full sha
+- `dirty` is `null` when `stale` is true; `ahead` and `behind` are `null` without an upstream, so `0` always means a real zero
 
 ## wh switch
 
