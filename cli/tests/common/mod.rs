@@ -88,6 +88,29 @@ impl TestRepo {
             .env("NO_COLOR", "1");
         c
     }
+
+    /// A non-interactive `sh -c <script>` in the main repo, with the wh
+    /// binary first on PATH and the same isolation as `wh()`: for testing
+    /// what `wh init` prints as it would run in a script or an agent.
+    pub fn sh(&self, script: &str) -> assert_cmd::Command {
+        let bin = Path::new(env!("CARGO_BIN_EXE_wh")).parent().unwrap();
+        let path = format!(
+            "{}:{}",
+            bin.display(),
+            std::env::var("PATH").unwrap_or_default()
+        );
+        let mut c = assert_cmd::Command::new("sh");
+        c.arg("-c")
+            .arg(script)
+            .current_dir(&self.repo)
+            .env("PATH", path)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_SYSTEM", "/dev/null")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("HOME", &self.root)
+            .env("NO_COLOR", "1");
+        c
+    }
 }
 
 use std::io::{Read, Write};

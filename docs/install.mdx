@@ -21,6 +21,8 @@ echo 'eval "$(wh init zsh)"' >> ~/.zshrc     # bash: ~/.bashrc
 wh init fish | source                        # fish: add to config.fish
 ```
 
+The `cd` only happens in an interactive shell. A script, or a coding agent's shell that loaded your rc file, gets the path on stdout like the bare binary, so `cd "$(wh switch <name>)"` works there too.
+
 `wh init` knows `zsh`, `bash`, and `fish`. Any other name fails with `unsupported shell '<name>' (zsh, bash, fish)`.
 
 ## requirements

@@ -87,6 +87,25 @@ without a connection, or 5 minutes without a byte.
 Every command, flag, range form, environment variable, and error message is
 in the [cli docs](https://getwh.dev/docs/cli/commands).
 
+## agents
+
+Coding agents (Claude Code, Codex, Cursor, anything with a shell) call wh the
+way you do. `wh new` is one call for a worktree with its env files copied,
+`wh ls --json` reads every worktree at once, `--dry-run` on `wh explain` and
+`wh why` prints the trimmed diff (lockfiles, vendored and minified files
+already gone) without calling a model, and `wh rm` only removes what is
+merged. A skill tells the agent all of that:
+
+```
+mkdir -p ~/.claude/skills/wh
+curl -fsSL https://raw.githubusercontent.com/chrispetrou/wh/main/skills/wh/SKILL.md \
+  -o ~/.claude/skills/wh/SKILL.md
+```
+
+It is a plain Agent Skills `SKILL.md`, so any agent that loads skills can use
+the same file. The rules it follows, and wh as the backend for Claude Code's
+own worktrees, are in the [agents docs](https://getwh.dev/docs/agents).
+
 ## web
 
 ```
@@ -132,6 +151,7 @@ web/     next.js app: the web terminal
 shared/  explain spec: prompt template, preprocessing rules, provider wording,
          and golden fixtures both implementations must reproduce
 docs/    the documentation, published at getwh.dev/docs
+skills/  the agent skill (SKILL.md), published at getwh.dev/.well-known/agent-skills
 readme/  the logo and the animated web tour embedded above
 scripts/ check-docs.mjs, the guard ci runs over docs/
 ```

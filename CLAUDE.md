@@ -25,6 +25,11 @@ plain-English diff explanations. Local-first, telemetry-free, BYO LLM key.
 - `shared/prompts/`: explain prompt templates and diff-preprocessing
   conventions. Spec'd once here; implemented twice (Rust in cli/, TS in web/).
   Change the spec first, then both implementations.
+- `skills/wh/SKILL.md`: the Agent Skills file coding agents load to use the
+  cli (worktrees, `wh ls --json`, `--dry-run` payloads, cleanup rules). The
+  site publishes it under `/.well-known/agent-skills/`. It quotes flags and
+  output strings, so a cli change that alters them updates it in the same
+  PR. Frontmatter stays `name` + `description` for portability.
 
 No root workspace or build orchestration: each directory builds
 independently.
