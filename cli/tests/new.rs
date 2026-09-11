@@ -143,3 +143,25 @@ fn works_from_linked_worktree() {
         .stdout(predicate::str::contains("created worktree ../repo.feat-b"));
     assert!(t.root.join("repo.feat-b").is_dir());
 }
+
+#[cfg(unix)]
+#[test]
+fn unreadable_env_warns_but_succeeds() {
+    use std::os::unix::fs::PermissionsExt;
+    let t = TestRepo::new();
+    t.commit("init");
+    t.write(".env", "A=1");
+    let env = t.repo.join(".env");
+    fs::set_permissions(&env, fs::Permissions::from_mode(0o000)).unwrap();
+    if fs::read(&env).is_ok() {
+        return; // root reads it anyway: nothing to test
+    }
+    t.wh()
+        .args(["new", "feat/a"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("→ ready feat/a checked out"))
+        .stderr(predicate::str::contains("could not copy env files"));
+    assert!(t.root.join("repo.feat-a").is_dir());
+    fs::set_permissions(&env, fs::Permissions::from_mode(0o644)).unwrap();
+}

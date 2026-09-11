@@ -24,7 +24,11 @@ pub enum Cmd {
         from: Option<String>,
     },
     /// list worktrees with status
-    Ls,
+    Ls {
+        /// one json array instead of the table, for scripts and agents
+        #[arg(long)]
+        json: bool,
+    },
     /// pick a worktree and print its path (cd via the shell wrapper)
     Switch {
         /// filter; a unique match prints straight away, no picker

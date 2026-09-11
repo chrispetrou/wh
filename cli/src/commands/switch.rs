@@ -317,6 +317,7 @@ mod tests {
                 status: "clean".into(),
                 extra: String::new(),
                 path: PathBuf::from(format!("/r/{n}")),
+                ..Default::default()
             })
             .collect()
     }

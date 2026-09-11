@@ -80,6 +80,10 @@ itself, so no list shipped in the binary has to be kept current. Keys and
 providers come from the environment: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
 `GROQ_API_KEY`, or none for Ollama.
 
+Scripts and agents get the same rows as one json array from `wh ls --json`,
+and a stalled provider never hangs them: a call gives up after 15 seconds
+without a connection, or 5 minutes without a byte.
+
 Every command, flag, range form, environment variable, and error message is
 in the [cli docs](https://getwh.dev/docs/cli/commands).
 

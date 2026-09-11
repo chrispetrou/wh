@@ -96,3 +96,43 @@ fn main_listed_first() {
         "expected main first, got: {first}"
     );
 }
+
+fn ls_json(t: &TestRepo) -> Vec<serde_json::Value> {
+    let out = t.wh().args(["ls", "--json"]).assert().success();
+    let v: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    v.as_array().unwrap().clone()
+}
+
+#[test]
+fn json_lists_paths_and_counts() {
+    let t = TestRepo::new();
+    t.write("a.txt", "1");
+    t.commit("init");
+    t.wh().args(["new", "feat/auth"]).assert().success();
+    t.write("a.txt", "changed");
+    let rows = ls_json(&t);
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0]["name"], "main");
+    assert_eq!(rows[0]["main"], true);
+    assert_eq!(rows[0]["dirty"], 1);
+    assert_eq!(rows[0]["path"], t.repo.to_str().unwrap());
+    assert!(rows[0]["ahead"].is_null());
+    assert_eq!(rows[1]["branch"], "feat/auth");
+    assert_eq!(rows[1]["dirty"], 0);
+    assert_eq!(
+        rows[1]["path"],
+        t.root.join("repo.feat-auth").to_str().unwrap()
+    );
+}
+
+#[test]
+fn json_detached_has_null_branch() {
+    let t = TestRepo::new();
+    t.commit("init");
+    t.git(&["worktree", "add", "--detach", "../repo.det"]);
+    let rows = ls_json(&t);
+    let det = &rows[1];
+    assert!(det["branch"].is_null());
+    assert!(det["name"].as_str().unwrap().ends_with(" detached"));
+    assert_eq!(det["head"].as_str().unwrap().len(), 40);
+}

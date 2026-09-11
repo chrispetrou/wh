@@ -485,6 +485,33 @@ fn endpoint(provider: &Provider, route: Route) -> (String, Vec<String>) {
     (format!("{base}{path}"), headers)
 }
 
+/// Stall guard: give up on a host that does not connect within 15s, or
+/// that sends less than a byte a second for 300s. Never a total limit: a
+/// long answer streams to the end, and a silent reasoning pass or a cold
+/// ollama model load gets five minutes (shared/prompts/provider.md).
+const CURL_LIMITS: &str = "connect-timeout = 15\nspeed-limit = 1\nspeed-time = 300\n";
+
+/// curl's config file, fed on stdin so the key never lands in argv.
+fn curl_config(url: &str, headers: &[String], body: Option<&TempBody>) -> String {
+    // include: the status line and headers come first on stdout, which is
+    // how a 401 is told from an answer. no Expect: no 100-continue block
+    // to skip for large bodies; suppress-connect-headers: none for a
+    // proxy's CONNECT either
+    let mut config = String::from(
+        "silent\nshow-error\nno-buffer\ninclude\nsuppress-connect-headers\nheader = \"Expect:\"\n",
+    );
+    config.push_str(CURL_LIMITS);
+    config.push_str(&format!("url = \"{url}\"\n"));
+    config.push_str("header = \"content-type: application/json\"\n");
+    for h in headers {
+        config.push_str(&format!("header = \"{h}\"\n"));
+    }
+    if let Some(b) = body {
+        config.push_str(&format!("data = \"@{}\"\n", b.0.display()));
+    }
+    config
+}
+
 /// Spawns curl and reads the status line and headers, leaving the body on
 /// the returned iterator. A body file makes it a POST (curl infers the
 /// method from `data`); without one this is a GET.
@@ -497,21 +524,7 @@ fn curl(
     if !valid_url(url) {
         return Err(WhError::Msg("invalid provider url".into()));
     }
-    // include: the status line and headers come first on stdout, which is
-    // how a 401 is told from an answer. no Expect: no 100-continue block
-    // to skip for large bodies; suppress-connect-headers: none for a
-    // proxy's CONNECT either
-    let mut config = String::from(
-        "silent\nshow-error\nno-buffer\ninclude\nsuppress-connect-headers\nheader = \"Expect:\"\n",
-    );
-    config.push_str(&format!("url = \"{url}\"\n"));
-    config.push_str("header = \"content-type: application/json\"\n");
-    for h in headers {
-        config.push_str(&format!("header = \"{h}\"\n"));
-    }
-    if let Some(b) = body {
-        config.push_str(&format!("data = \"@{}\"\n", b.0.display()));
-    }
+    let config = curl_config(url, headers, body);
 
     let mut child = Command::new("curl")
         .arg("--config")
@@ -832,13 +845,24 @@ fn curl_failure(
         .map(|(_, d)| d)
         .unwrap_or(last);
     let detail = lowercase_first(detail);
-    let host = provider.host();
+    WhError::Msg(curl_failure_message(
+        code,
+        got_text,
+        &provider.host(),
+        &detail,
+    ))
+}
+
+/// The words for a curl exit code. 28 is a timeout: before any text the
+/// host was never really reached, after text the stall guard cut the
+/// stream.
+fn curl_failure_message(code: Option<i32>, got_text: bool, host: &str, detail: &str) -> String {
     match code {
-        Some(18) | Some(56) if got_text => WhError::Msg(format!("lost the connection to {host}")),
+        Some(18) | Some(28) | Some(56) if got_text => format!("lost the connection to {host}"),
         Some(6) | Some(7) | Some(28) | Some(35) | Some(52) | Some(56) if !got_text => {
-            WhError::Msg(format!("could not reach {host}\n{detail}"))
+            format!("could not reach {host}\n{detail}")
         }
-        _ => WhError::Msg(format!("request failed: {detail}")),
+        _ => format!("request failed: {detail}"),
     }
 }
 
@@ -1114,6 +1138,32 @@ mod tests {
         assert!(!valid_url("http://x\r"));
         assert!(!valid_url("file:///etc/passwd"));
         assert!(!valid_url("api.groq.com"));
+    }
+
+    #[test]
+    fn curl_config_bounds_stalls_not_answers() {
+        let c = curl_config("http://127.0.0.1:1", &[], None);
+        assert!(c.contains("connect-timeout = 15\n"));
+        assert!(c.contains("speed-limit = 1\nspeed-time = 300\n"));
+        assert!(!c.contains("max-time"));
+    }
+
+    #[test]
+    fn a_timeout_reads_by_whether_text_arrived() {
+        let host = "api.groq.com";
+        let slow = "operation too slow. Less than 1 bytes/sec transferred the last 300 seconds";
+        assert_eq!(
+            curl_failure_message(Some(28), false, host, slow),
+            format!("could not reach api.groq.com\n{slow}")
+        );
+        assert_eq!(
+            curl_failure_message(Some(28), true, host, slow),
+            "lost the connection to api.groq.com"
+        );
+        assert_eq!(
+            curl_failure_message(Some(3), false, host, "url malformed"),
+            "request failed: url malformed"
+        );
     }
 
     fn v(s: &str) -> Value {
