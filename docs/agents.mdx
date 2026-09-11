@@ -1,0 +1,93 @@
+---
+title: agents
+description: Coding agents call wh the way you do. One call for a worktree, one for the state of every worktree, a trimmed diff with no model call, and a cleanup that only removes what is merged.
+---
+
+Any agent with a shell (claude code, codex, cursor, gemini cli) can run wh. Nothing agent-specific is built into the binary: these are the commands you type, used the non-interactive way.
+
+## why an agent would
+
+| task | by hand | with wh |
+|---|---|---|
+| a worktree to work in | pick a path, `git worktree add`, look for env files, copy them | `wh new feat/x` |
+| the state of every worktree | `git status` and `git rev-list` in each one | `wh ls --json` |
+| what a branch changed | `git diff main...`, lockfile bumps and all | `wh explain main... --dry-run` |
+| why a line exists | `git blame -L`, then `git show`, then `git log` | `wh why src/git.rs:42 --dry-run` |
+| clean up afterwards | `git worktree remove --force`, `git branch -D` | `wh rm --dry-run`, then `wh rm --yes` |
+
+Fewer calls means fewer turns. The trimmed diff keeps lockfiles, vendored and minified files, source maps, and binaries out of the agent's context entirely, and `--dry-run` never calls a model, so it costs nothing beyond what the agent reads. `wh rm` is a cleanup an agent can be allowed to run: it only removes worktrees whose branches are merged, and never a dirty one.
+
+## install the skill
+
+wh ships an Agent Skills `SKILL.md` that teaches an agent the commands and the rules below. Until a task needs it, only its one-line description is loaded.
+
+```
+mkdir -p ~/.claude/skills/wh
+curl -fsSL https://raw.githubusercontent.com/chrispetrou/wh/main/skills/wh/SKILL.md \
+  -o ~/.claude/skills/wh/SKILL.md
+```
+
+That is claude code's personal skills folder. A project's `.claude/skills/wh/` works too, and other agents read the same file from their own skills folder. For tools that discover skills by domain, the site lists it at `getwh.dev/.well-known/agent-skills/index.json`.
+
+wh itself has to be on the path: see [install](/docs/install).
+
+## rules for a shell with no one at it
+
+- Pass a query to `wh switch`: without one it opens a picker whenever a terminal is attached
+- Get a path with `command wh switch <query>`, or read `path` from `wh ls --json`: an agent's shell can load your rc file, and while the [shell wrapper](/docs/install#shell-wrapper) steps aside in a non-interactive shell, one from an older wh turns `wh switch` into a `cd` that prints nothing
+- Pass `--dry-run` or `--yes` to a bare `wh rm`, and `--force` only when the user asked for that worktree to go
+- Never `--chat`: it waits for the next question
+- `wh explain` and `wh why` without `--dry-run` send the diff to the user's provider on the user's key, so only when a written summary is what was asked for
+- Results are on stdout, everything else on stderr: `wh switch` prints only the path, and `wh explain` moves its status lines to stderr when piped
+- Exit codes are the [usual three](/docs/cli/commands): `0`, `1` with `error: <reason>` on stderr, `2` for bad usage
+- A provider that stops answering gives up on its own: 15 seconds to connect, 5 minutes without a byte (see [when a call fails](/docs/cli/errors))
+
+## the payload
+
+`wh explain <range> --dry-run` opens with `commits:`, `files: N (+A -D)`, and an `excluded:` list naming what was dropped, then `---` and the diff sorted by path. A file past 400 lines ends in `... truncated (<n> more lines)`; past 4000 lines in total, whole files become `... omitted <path> (size cap)`. When one of those matters to the task, the agent reads it with git directly.
+
+```
+wh explain main... --dry-run          # this branch since it left main
+wh explain --describe --dry-run       # the same against the default branch, whatever it is called
+wh explain --uncommitted --dry-run    # staged and unstaged work
+wh explain HEAD~3.. --dry-run -- src/ # cut to a pathspec
+wh why src/git.rs:13-17 --dry-run     # the commit behind a span, cut to that file
+```
+
+## wh as claude code's worktrees
+
+Claude code isolates `claude --worktree`, subagents with `isolation: "worktree"`, and background sessions in worktrees of its own under `.claude/worktrees/`. A `WorktreeCreate` hook replaces that with any command that prints a path, so wh can create them instead: next to the repo rather than inside it, named the way `wh ls` shows them, with the env files copied. With a hook set, claude code skips its own `.worktreeinclude`, so the copy has to happen in the hook, and `wh new` already does it.
+
+`.claude/hooks/wh-worktree.sh`, made executable:
+
+```
+#!/bin/sh
+# claude code reads the last line of stdout as the worktree path
+in=$(cat)
+cd "$(printf '%s' "$in" | jq -r .cwd)" || exit 1
+name=$(printf '%s' "$in" | jq -r .name)
+command wh new "$name" >&2 && command wh switch "$name"
+```
+
+`.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "WorktreeCreate": [
+      { "hooks": [{ "type": "command", "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/wh-worktree.sh" }] }
+    ]
+  }
+}
+```
+
+- The hook needs `jq`
+- `wh new` writes to stderr, so the only line on stdout is the absolute path `wh switch` prints
+- The worktree name becomes the branch: `claude --worktree feat-auth` lands in `../repo.feat-auth` on branch `feat-auth`, and an unnamed one gets claude code's generated slug, like `bold-oak-a3f2`
+- Any failure (the branch already checked out elsewhere, the directory taken) exits non-zero, and claude code does not start the isolated session
+- Whatever the sessions leave behind, `wh rm --dry-run` then `wh rm --yes` prunes once the branches are merged
+
+## related
+
+- [commands](/docs/cli/commands): every flag, including `wh ls --json`
+- [wh explain](/docs/cli/explain): ranges, pathspecs, and what the payload drops
