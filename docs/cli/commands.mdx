@@ -130,7 +130,7 @@ Asks the provider, with the key `wh explain` already uses, so no list shipped in
 
 ## wh init
 
-`wh init zsh` (or `bash`, `fish`) prints a small `wh()` function that forwards every command and turns `wh switch` into a `cd`. Nothing is written; you `eval` it from your rc file. See [install](/docs/install#shell-wrapper).
+`wh init zsh` (or `bash`, `fish`) prints a small `wh()` function that forwards every command and turns `wh switch` into a `cd`. Nothing is written; you `eval` it from your rc file. The `cd` only happens in an interactive shell: in a script, or an agent's shell that loaded your rc file, `wh switch` prints the path like the bare binary. See [install](/docs/install#shell-wrapper).
 
 ## related
 
