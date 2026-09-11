@@ -1,12 +1,14 @@
 # docs live here, but the site that renders them is a separate private repo on
 # cloudflare pages. pages only rebuilds when *it* is pushed to, so a docs change
-# merged here would sit unpublished. this pings its deploy hook instead.
+# merged here would sit unpublished. this pings its deploy hook instead. the
+# site also publishes skills/ under /.well-known/agent-skills/, so a skill
+# change needs the same rebuild.
 name: publish docs
 
 on:
   push:
     branches: [main]
-    paths: ["docs/**"]
+    paths: ["docs/**", "skills/**"]
   workflow_dispatch:
 
 jobs:
