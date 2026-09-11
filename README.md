@@ -21,6 +21,10 @@
 
 <p align="center"><a href="https://getwh.dev/docs">documentation</a> · <a href="https://getwh.dev">site</a></p>
 
+<p align="center">
+  <img alt="the wh web terminal on a repo: the command list, then log draws the commit graph and opens a commit's files and actions" src="readme/web-tour-dark.svg" width="720">
+</p>
+
 **wh** has two surfaces. The cli manages worktrees so branch-switching never
 touches your working state, and explains diffs in plain English. The web app
 is a terminal for any repo you can see on GitHub, cloned or not: what changed,
@@ -63,11 +67,6 @@ wh explain HEAD~3..           # the last three commits, in plain english
 wh rm                         # prune worktrees whose branches are merged
 ```
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme/explain-dark.svg">
-  <img alt="wh explain HEAD~3..: streams a summary and a watch out section" src="readme/explain-light.svg" width="720">
-</picture>
-
 `wh explain` reads a diff, drops what a reviewer would skip (lockfiles,
 vendored and minified files), and streams a `summary` and a `watch out`. The
 diff can be a range, the work you have not committed yet (`--uncommitted`),
@@ -96,11 +95,6 @@ Sign in with GitHub, pick a repo, and ask in plain words: `what changed in pr
 `/theme` has the everyday `auto`, `light`, and `dark`, plus two opt-in
 phosphor looks, `vintage` (green) and `amber`. `/model sync` asks your
 provider for its current model list, so a new model needs no redeploy.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="readme/web-log-dark.svg">
-  <img alt="log draws the commit graph in the transcript, then explain 3 explains that row" src="readme/web-log-light.svg" width="720">
-</picture>
 
 The grammar, the blocks you can walk, the plans, keys and models, slash
 commands, and hosting your own instance are in the
@@ -134,7 +128,7 @@ web/     next.js app: the web terminal
 shared/  explain spec: prompt template, preprocessing rules, provider wording,
          and golden fixtures both implementations must reproduce
 docs/    the documentation, published at getwh.dev/docs
-readme/  the logo and the animated svgs embedded above
+readme/  the logo and the animated web tour embedded above
 scripts/ check-docs.mjs, the guard ci runs over docs/
 ```
 
